@@ -1113,6 +1113,23 @@ mod tests {
     }
 
     #[test]
+    fn standalone_web_font_validation_rejects_truncated_magic_payloads() {
+        assert_eq!(
+            validate_web_font_bytes(b"wOF2garbage"),
+            Err(WebFontRegistrationError::DecodeFailed { format: "WOFF2" })
+        );
+        assert_eq!(
+            validate_web_font_bytes(b"wOFFgarbage"),
+            Err(WebFontRegistrationError::DecodeFailed { format: "WOFF" })
+        );
+        assert_eq!(
+            validate_web_font_bytes(b"garbage"),
+            Err(WebFontRegistrationError::UnsupportedPayload)
+        );
+        assert!(validate_web_font_bytes(TEST_WOFF2).is_ok());
+    }
+
+    #[test]
     fn repeated_font_family_resolution_reuses_the_document_plan() {
         let mut services =
             DocumentLayoutServices::with_system_font_policy(SystemFontPolicy::Disabled);

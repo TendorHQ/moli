@@ -353,7 +353,7 @@ fn parse_css_angle_degrees(value: &str) -> Option<f32> {
         .filter(|value| value.is_finite())
 }
 
-fn preferred_font_source_url(source: &str, base_url: &Url) -> Option<Url> {
+pub(crate) fn preferred_font_source_url(source: &str, base_url: &Url) -> Option<Url> {
     let input = source;
     let mut input = Parser::new(input);
     let mut candidate_url: Option<String> = None;
