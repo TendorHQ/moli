@@ -330,9 +330,27 @@ impl DocumentLayoutState {
         main_document: DomHandle,
         resource: StylesheetLoadBlockingResource,
     ) -> Option<StylesheetLoadBlockingResource> {
+        // Ready faces are revisited by read-only font projections.
         self.with_web_fonts_for_document(document, main_document, |fonts, services| {
             fonts.admit(resource, services)
         })
+    }
+
+    pub(super) fn observe_font(
+        &mut self,
+        document: DomHandle,
+        main_document: DomHandle,
+        font: &crate::css_resource_urls::StylesheetWebFont,
+    ) -> crate::font_loading::FontFaceLoad {
+        let fonts = if document == main_document {
+            &mut self.web_fonts
+        } else {
+            self.embedded_web_fonts
+                .get_or_insert_with(Default::default)
+                .entry(document)
+                .or_default()
+        };
+        fonts.observe(font)
     }
 
     pub(super) fn complete(

@@ -464,11 +464,11 @@ impl ScriptVm {
         else {
             return;
         };
-        match self
+        let completion = self
             ._context_host
             .borrow()
-            .complete_document_web_font(document, terminal)
-        {
+            .complete_document_web_font(document, terminal);
+        match completion {
             web_fonts::DocumentWebFontCompletion::Registered(outcome) => tracing::debug!(
                 ?outcome,
                 "registered current document web font for the next fresh layout refresh"
@@ -483,8 +483,18 @@ impl ScriptVm {
             web_fonts::DocumentWebFontCompletion::Stale => {
                 tracing::debug!("discarded superseded document web font response")
             }
+            web_fonts::DocumentWebFontCompletion::Retry(resource) => {
+                let binding = self
+                    ._context_host
+                    .borrow_mut()
+                    .accept_current_stylesheet_subresource_load_delay_for_document(document);
+                if let Some(binding) = binding {
+                    self.start_stylesheet_subresource_fetches(vec![(binding, *resource)]);
+                }
+            }
         }
         if let Err(error) = self.with_default_context_scope(|scope, host_ptr| {
+            crate::context_bootstrap::publish_font_face_load_changes(scope);
             crate::context_bootstrap::settle_document_font_face_set_ready(
                 scope, host_ptr, document,
             );

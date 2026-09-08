@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-from ..assertions import SmokeError, assert_equal, record_contract
+from ..assertions import assert_equal, record_contract
 from ..config import REPO_ROOT
 
 
@@ -103,11 +103,11 @@ async def run_font_face_payload_group(
             "error",
             "malformed FontFace BufferSource is synchronously invalid",
         )
-        if observed.get("invalidInitial", [None, None])[1] not in {"unloaded", "error"}:
-            raise SmokeError(
-                "malformed data-URL FontFace has an invalid initial status: "
-                f"{observed.get('invalidInitial')!r}"
-            )
+        assert_equal(
+            observed.get("invalidInitial", [None, None])[1],
+            "unloaded",
+            "data-URL FontFace remains unloaded until load is requested",
+        )
         assert_equal(
             observed.get("invalidSamePromise"),
             [True, True, True],
@@ -128,11 +128,11 @@ async def run_font_face_payload_group(
             "loaded",
             "valid offset BufferSource is parsed synchronously",
         )
-        if observed.get("validInitial", [None])[0] not in {"unloaded", "loaded"}:
-            raise SmokeError(
-                "valid data-URL FontFace has an invalid initial status: "
-                f"{observed.get('validInitial')!r}"
-            )
+        assert_equal(
+            observed.get("validInitial", [None])[0],
+            "unloaded",
+            "valid data-URL FontFace remains unloaded until load is requested",
+        )
         assert_equal(
             observed.get("validSamePromise"),
             [True, True],
