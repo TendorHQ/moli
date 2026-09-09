@@ -69,8 +69,9 @@ fn font_selection_capabilities(attributes: Attributes) -> WebFontCapabilities {
 
 #[derive(Clone, Debug)]
 struct SegmentedWebFontFace {
+    source_slot: String,
     internal_family_name: String,
-    source_order: usize,
+    source_priority: (bool, usize),
     unicode_ranges: Vec<WebFontUnicodeRange>,
 }
 
@@ -297,7 +298,10 @@ impl ParleyDocumentServices {
                 })
                 .flat_map(|group| &group.faces)
                 .collect::<Vec<_>>();
-            faces.sort_by_key(|face| face.source_order);
+            faces.sort_by(|first, second| {
+                (first.source_priority, first.source_slot.as_str())
+                    .cmp(&(second.source_priority, second.source_slot.as_str()))
+            });
             let default_uses_latin_metrics =
                 character.is_none() && faces.iter().any(|face| face.contains('x'));
             resolved.extend(
@@ -719,10 +723,10 @@ pub enum WebFontRegistrationError {
     UnsupportedPayload,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 struct RegisteredWebFont {
     face: WebFontFace,
-    sfnt_bytes: Arc<[u8]>,
+    sfnt_bytes: Blob<u8>,
     stylesheet: bool,
 }
 
@@ -845,6 +849,24 @@ impl DocumentLayoutServices {
             .map(|(slot, _)| slot.clone())
             .collect::<Vec<_>>();
         if current == previous {
+            // Unloaded members can shift indices without changing the current
+            // registered order. Future incremental arrivals use the new indices.
+            if let Some(parley) = self.parley.as_mut() {
+                for family in parley.web_font_families.values_mut() {
+                    for group in &mut family.groups {
+                        for face in &mut group.faces {
+                            face.source_priority = self
+                                .web_font_order
+                                .get(&face.source_slot)
+                                .copied()
+                                .unwrap_or((
+                                    !self.web_fonts[&face.source_slot].stylesheet,
+                                    usize::MAX,
+                                ));
+                        }
+                    }
+                }
+            }
             return false;
         }
         if self.parley.is_some() {
@@ -870,23 +892,44 @@ impl DocumentLayoutServices {
             return Err(WebFontRegistrationError::EmptySlot);
         }
         registration.face.validate()?;
-        let sfnt_bytes = decode_web_font_bytes(&registration.bytes)?;
-        validate_registered_font(&registration.face, Arc::clone(&sfnt_bytes))?;
+        let sfnt_bytes = decode_web_font_bytes(registration.bytes)?;
         let font = RegisteredWebFont {
             face: registration.face,
             sfnt_bytes,
             stylesheet: registration.stylesheet,
         };
         let outcome = match self.web_fonts.get(&registration.slot) {
-            Some(current) if current == &font => WebFontRegistrationOutcome::Unchanged,
+            Some(current)
+                if current.face == font.face
+                    && current.stylesheet == font.stylesheet
+                    && current.sfnt_bytes.as_ref() == font.sfnt_bytes.as_ref() =>
+            {
+                WebFontRegistrationOutcome::Unchanged
+            }
             Some(_) => WebFontRegistrationOutcome::Replaced,
             None => WebFontRegistrationOutcome::Added,
         };
         if outcome == WebFontRegistrationOutcome::Unchanged {
             return Ok(outcome);
         }
+        // Fontique's successful registration is the validation for an added
+        // face. Keep it in the live collection instead of trial-registering in
+        // a throwaway collection and then rebuilding every existing family.
+        if outcome == WebFontRegistrationOutcome::Added
+            && let Some(parley) = self.parley.as_mut()
+        {
+            validate_sfnt_table_bounds(font.sfnt_bytes.as_ref())?;
+            parley.register_web_font(&registration.slot, &font, &self.web_font_order)?;
+            self.web_fonts.insert(registration.slot, font);
+            parley.invalidate_font_selection();
+            return Ok(outcome);
+        }
+        validate_registered_font(&font.face, font.sfnt_bytes.clone())?;
         self.web_fonts.insert(registration.slot, font);
         if self.parley.is_some() {
+            // Replacement still needs a rebuild: Fontique can unregister by
+            // family/attributes, not by our exact source slot. Removing that
+            // match would also remove other unicode-range faces sharing it.
             self.parley = Some(Box::new(build_parley_services(
                 self.system_font_policy,
                 &self.web_fonts,
@@ -1011,18 +1054,39 @@ fn build_parley_services(
     let system_font_family_resolver = system_font_policy
         .is_enabled()
         .then(|| SystemFontFamilyResolver::new(&mut collection));
-    let mut font_context = FontContext {
+    let font_context = FontContext {
         collection,
         source_cache: Default::default(),
     };
-    let mut web_font_families = BTreeMap::<String, SegmentedWebFontFamily>::new();
-    for (source_order, (_, font)) in ordered_web_fonts(web_fonts, web_font_order)
-        .into_iter()
-        .enumerate()
-    {
-        let data: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(Arc::clone(&font.sfnt_bytes));
-        let blob = Blob::new(data);
-        let selector_fonts = font_context.collection.register_fonts(
+    let mut services = ParleyDocumentServices {
+        font_context,
+        layout_context: LayoutContext::new(),
+        system_font_family_resolver,
+        web_font_families: BTreeMap::new(),
+        font_family_resolution_plans: Vec::new(),
+        inline_font_metrics_cache: Vec::new(),
+        #[cfg(test)]
+        font_family_resolution_miss_count: 0,
+    };
+    for (slot, font) in ordered_web_fonts(web_fonts, web_font_order) {
+        services
+            .register_web_font(slot, font, web_font_order)
+            .expect("retained web fonts passed Fontique registration");
+    }
+    services
+}
+
+impl ParleyDocumentServices {
+    /// Initial population and incremental arrivals use the owner's selection
+    /// order. Stable resource identity never determines FontFaceSet priority.
+    fn register_web_font(
+        &mut self,
+        slot: &str,
+        font: &RegisteredWebFont,
+        web_font_order: &BTreeMap<String, (bool, usize)>,
+    ) -> Result<(), WebFontRegistrationError> {
+        let blob = font.sfnt_bytes.clone();
+        let selector_fonts = self.font_context.collection.register_fonts(
             blob.clone(),
             Some(
                 font.face
@@ -1030,25 +1094,30 @@ fn build_parley_services(
             ),
         );
         if selector_fonts.is_empty() {
-            continue;
+            return Err(WebFontRegistrationError::UnsupportedPayload);
         }
 
-        let internal_family_name = format!("\0moli-web-font:{source_order}");
-        if font_context
-            .collection
-            .register_fonts(
-                blob.clone(),
-                Some(
-                    font.face
-                        .fontique_override_for_family(&internal_family_name),
-                ),
-            )
-            .is_empty()
-        {
-            continue;
-        }
+        // Unlike an enumerated index, a stable slot never renames existing
+        // families when an earlier-sorting resource finishes later.
+        let internal_family_name = format!("\0moli-web-font:{slot}");
+        let internal_fonts = self.font_context.collection.register_fonts(
+            blob.clone(),
+            Some(
+                font.face
+                    .fontique_override_for_family(&internal_family_name),
+            ),
+        );
+        assert!(
+            !internal_fonts.is_empty(),
+            "the same font with a nonempty alias must register"
+        );
 
-        let family = web_font_families
+        let source_priority = web_font_order
+            .get(slot)
+            .copied()
+            .unwrap_or((!font.stylesheet, usize::MAX));
+        let family = self
+            .web_font_families
             .entry(normalized_web_font_family_name(font.face.family_name()))
             .or_default();
         for (_, fonts) in selector_fonts {
@@ -1073,58 +1142,45 @@ fn build_parley_services(
                         index
                     });
                 let group = &mut family.groups[group_index];
-                if !group
-                    .faces
-                    .iter()
-                    .any(|face| face.internal_family_name == internal_family_name)
-                {
-                    group.faces.push(SegmentedWebFontFace {
-                        internal_family_name: internal_family_name.clone(),
-                        source_order,
-                        unicode_ranges: font.face.unicode_ranges.clone(),
-                    });
+                if let Err(index) = group.faces.binary_search_by(|face| {
+                    (face.source_priority, face.source_slot.as_str()).cmp(&(source_priority, slot))
+                }) {
+                    group.faces.insert(
+                        index,
+                        SegmentedWebFontFace {
+                            source_slot: slot.to_owned(),
+                            source_priority,
+                            internal_family_name: internal_family_name.clone(),
+                            unicode_ranges: font.face.unicode_ranges.clone(),
+                        },
+                    );
                 }
             }
         }
+        Ok(())
     }
-    ParleyDocumentServices {
-        font_context,
-        layout_context: LayoutContext::new(),
-        system_font_family_resolver,
-        web_font_families,
-        font_family_resolution_plans: Vec::new(),
-        inline_font_metrics_cache: Vec::new(),
-        #[cfg(test)]
-        font_family_resolution_miss_count: 0,
-    }
-}
 
-fn register_font(font_context: &mut FontContext, font: &RegisteredWebFont) -> bool {
-    let data: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(Arc::clone(&font.sfnt_bytes));
-    !font_context
-        .collection
-        .register_fonts(
-            Blob::new(data),
-            Some(
-                font.face
-                    .fontique_override_for_family(font.face.family_name()),
-            ),
-        )
-        .is_empty()
+    fn invalidate_font_selection(&mut self) {
+        self.font_family_resolution_plans.clear();
+        self.inline_font_metrics_cache.clear();
+        // A family which previously needed a platform substitution may now
+        // have its own downloaded face. Keep the platform inventory, but do
+        // not let the old substitution bypass that face.
+        if let Some(resolver) = self.system_font_family_resolver.as_mut() {
+            resolver.invalidate_substitutions();
+        }
+    }
 }
 
 fn normalized_web_font_family_name(name: &str) -> String {
     name.chars().flat_map(char::to_lowercase).collect()
 }
 
-fn validate_registered_font(
-    face: &WebFontFace,
-    sfnt_bytes: Arc<[u8]>,
-) -> Result<(), WebFontRegistrationError> {
+fn validate_sfnt_table_bounds(sfnt_bytes: &[u8]) -> Result<(), WebFontRegistrationError> {
     // Fontique reads metadata lazily and can register a font whose unused
     // tables extend past the supplied bytes. Validate every directory entry
     // before accepting either a single SFNT font or a font collection.
-    let file = read_fonts::FileRef::new(&sfnt_bytes)
+    let file = read_fonts::FileRef::new(sfnt_bytes)
         .map_err(|_| WebFontRegistrationError::UnsupportedPayload)?;
     for font in file.fonts() {
         let font = font.map_err(|_| WebFontRegistrationError::UnsupportedPayload)?;
@@ -1138,39 +1194,44 @@ fn validate_registered_font(
             }
         }
     }
-    let mut font_context = FontContext {
-        collection: Collection::new(CollectionOptions {
-            shared: false,
-            system_fonts: false,
-        }),
-        source_cache: Default::default(),
-    };
-    let font = RegisteredWebFont {
-        face: face.clone(),
-        sfnt_bytes,
-        stylesheet: false,
-    };
-    register_font(&mut font_context, &font)
-        .then_some(())
-        .ok_or(WebFontRegistrationError::UnsupportedPayload)
+    Ok(())
 }
 
-/// Validate font bytes without registering them in a document's layout.
-pub fn validate_web_font_bytes(bytes: &[u8]) -> Result<(), WebFontRegistrationError> {
-    validate_registered_font(&WebFontFace::new("FontFace"), decode_web_font_bytes(bytes)?)
+fn validate_registered_font(
+    face: &WebFontFace,
+    sfnt_bytes: Blob<u8>,
+) -> Result<(), WebFontRegistrationError> {
+    validate_sfnt_table_bounds(sfnt_bytes.as_ref())?;
+    let mut collection = Collection::new(CollectionOptions {
+        shared: false,
+        system_fonts: false,
+    });
+    (!collection
+        .register_fonts(
+            sfnt_bytes,
+            Some(face.fontique_override_for_family(face.family_name())),
+        )
+        .is_empty())
+    .then_some(())
+    .ok_or(WebFontRegistrationError::UnsupportedPayload)
 }
 
-fn decode_web_font_bytes(bytes: &[u8]) -> Result<Arc<[u8]>, WebFontRegistrationError> {
+fn decode_web_font_bytes<'a>(
+    bytes: impl Into<Cow<'a, [u8]>>,
+) -> Result<Blob<u8>, WebFontRegistrationError> {
+    let bytes = bytes.into();
     let decoded = match bytes.get(..4) {
-        Some(b"wOFF") => wuff::decompress_woff1(bytes)
+        Some(b"wOFF") => wuff::decompress_woff1(&bytes)
             .map_err(|_| WebFontRegistrationError::DecodeFailed { format: "WOFF" })?,
         Some(b"wOF2") => {
-            wuff::decompress_woff2_with_custom_brotli(bytes, &mut decompress_woff2_brotli)
+            wuff::decompress_woff2_with_custom_brotli(&bytes, &mut decompress_woff2_brotli)
                 .map_err(|_| WebFontRegistrationError::DecodeFailed { format: "WOFF2" })?
         }
-        _ => bytes.to_vec(),
+        _ => bytes.into_owned(),
     };
-    Ok(Arc::from(decoded))
+    // Own the Vec, not an Arc<[u8]> made by copying it. An owned SFNT response
+    // moves here unchanged; WOFF decoders likewise donate their output buffer.
+    Ok(Blob::new(Arc::new(decoded)))
 }
 
 fn decompress_woff2_brotli(
@@ -1187,9 +1248,30 @@ fn decompress_woff2_brotli(
     Ok(output)
 }
 
+/// Validates a downloadable font payload without retaining it in a document.
+///
+/// `FontFace` BufferSource and data-URL inputs must use the same decoder and
+/// OpenType registration checks as stylesheet-backed fonts. A MIME or magic
+/// byte sniff alone accepts truncated WOFF/WOFF2 payloads that can never be
+/// shaped.
+/// Owned inputs transfer their buffer without a payload copy. Borrowed inputs
+/// remain supported for callers which need to retain the original bytes.
+pub fn validate_web_font_bytes<'a>(
+    bytes: impl Into<Cow<'a, [u8]>>,
+) -> Result<(), WebFontRegistrationError> {
+    let face = WebFontFace::new("__moli-font-validation__");
+    let sfnt_bytes = decode_web_font_bytes(bytes)?;
+    validate_registered_font(&face, sfnt_bytes)
+}
+
+#[cfg(test)]
+mod benchmarks;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod registration;
 
     const TEST_TTF: &[u8] = include_bytes!("../tests/fixtures/moli-ahem.ttf");
     const TEST_CJK_TTF: &[u8] = include_bytes!("../tests/fixtures/moli-cjk.ttf");
@@ -1299,14 +1381,12 @@ mod tests {
         parley.system_font_family_resolver = Some(SystemFontFamilyResolver::new(
             &mut parley.font_context.collection,
         ));
-        assert!(register_font(
-            &mut parley.font_context,
-            &RegisteredWebFont {
-                face: WebFontFace::new("Moli Ahem"),
-                sfnt_bytes: Arc::from(TEST_TTF),
-                stylesheet: false,
-            },
-        ));
+        let face = WebFontFace::new("Moli Ahem");
+        let registered = parley.font_context.collection.register_fonts(
+            decode_web_font_bytes(TEST_TTF).unwrap(),
+            Some(face.fontique_override_for_family(face.family_name())),
+        );
+        assert!(!registered.is_empty());
         let families = FontFamily::List(Cow::Owned(vec![
             FontFamilyName::Named(Cow::Borrowed("__moli_missing_css_family_order_3d16__")),
             FontFamilyName::Named(Cow::Borrowed("Moli Ahem")),
@@ -1323,9 +1403,10 @@ mod tests {
     }
 
     #[test]
-    fn font_collection_rebuild_discards_resolution_and_metrics_caches() {
+    fn font_registration_discards_selection_caches_without_rebuilding_context() {
         let mut services =
             DocumentLayoutServices::with_system_font_policy(SystemFontPolicy::Disabled);
+        let context_address = std::ptr::from_ref(&services.parley_mut().font_context);
         {
             let parley = services.parley_mut();
             let mut style = TextStyle::default();
@@ -1345,7 +1426,8 @@ mod tests {
         let parley = services.parley_mut();
         assert!(parley.font_family_resolution_plans.is_empty());
         assert!(parley.inline_font_metrics_cache.is_empty());
-        assert_eq!(parley.font_family_resolution_miss_count, 0);
+        assert_eq!(parley.font_family_resolution_miss_count, 1);
+        assert_eq!(context_address, std::ptr::from_ref(&parley.font_context));
     }
 
     #[test]
@@ -1695,7 +1777,10 @@ mod tests {
         for padding in 1..=3 {
             let mut padded_font = TEST_WOFF2.to_vec();
             padded_font[20..24].copy_from_slice(&(compressed_size + padding).to_be_bytes());
-            assert_eq!(decode_web_font_bytes(&padded_font).unwrap(), expected);
+            assert_eq!(
+                decode_web_font_bytes(&padded_font).unwrap().as_ref(),
+                expected.as_ref()
+            );
         }
     }
 
