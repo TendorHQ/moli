@@ -3172,6 +3172,7 @@ dependencies = [
  "euclid",
  "kurbo",
  "moli-image",
+ "moli-svg",
  "moli-system-fonts",
  "moli-trace",
  "parley",
