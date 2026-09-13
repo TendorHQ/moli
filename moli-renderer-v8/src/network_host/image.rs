@@ -21,7 +21,6 @@ pub(crate) enum ImageElementResourceFetchStart {
         descriptor: Option<crate::native_bridge::ImageResponseDescriptor>,
         encoded: moli_parkable_image::ParkableImage,
     },
-    Failed,
     PolicySkipped,
     Pending,
 }

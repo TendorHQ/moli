@@ -163,6 +163,32 @@ fn queue_image_load_event(
         let _ = runtime.process_image_decode_requests_for_element(scope, handle);
         return;
     };
+    let request_url = if invalid_empty_source {
+        Err("an empty image source cannot be fetched".to_owned())
+    } else {
+        url::Url::parse(&selected_source).map_err(|error| error.to_string())
+    };
+    // Cached pixels must pass the requesting element's current Document policy
+    // before they can satisfy its load or decode work.
+    if let Ok(request_url) = &request_url
+        && runtime
+            .check_element_subresource_csp(
+                scope,
+                handle,
+                request_url,
+                DocumentSubresourceCspKind::Image,
+            )
+            .blocks_request()
+    {
+        let followup = runtime.complete_pending_image_load_local_resource_if_matches(
+            handle,
+            pending.id(),
+            false,
+        );
+        queue_image_load_terminal_followup_if_ready(runtime_ptr, handle, pending.id(), followup);
+        let _ = runtime.process_image_decode_requests_for_element(scope, handle);
+        return;
+    }
     // Register the current request before reconsidering decode() promises. An
     // image may receive src and decode() while detached, then be inserted in
     // the same script job. Processing the promise before this registration
@@ -176,46 +202,17 @@ fn queue_image_load_event(
         queue_image_load_terminal_followup_if_ready(runtime_ptr, handle, pending.id(), followup);
         return;
     }
-    let start = if invalid_empty_source {
-        Err("an empty image source cannot be fetched".to_owned())
-    } else {
-        url::Url::parse(&selected_source)
-            .map_err(|error| error.to_string())
-            .and_then(|request_url| {
-                if runtime
-                    .check_top_document_subresource_csp(
-                        scope,
-                        &request_url,
-                        DocumentSubresourceCspKind::Image,
-                    )
-                    .blocks_request()
-                {
-                    return Ok(crate::network_host::ImageElementResourceFetchStart::Failed);
-                }
-                crate::network_host::start_image_element_resource_fetch(
-                    scope,
-                    runtime,
-                    handle,
-                    pending.id(),
-                    request_url,
-                )
-            })
-    };
+    let start = request_url.and_then(|request_url| {
+        crate::network_host::start_image_element_resource_fetch(
+            scope,
+            runtime,
+            handle,
+            pending.id(),
+            request_url,
+        )
+    });
     match start {
         Ok(crate::network_host::ImageElementResourceFetchStart::Pending) => {}
-        Ok(crate::network_host::ImageElementResourceFetchStart::Failed) => {
-            let followup = runtime.complete_pending_image_load_local_resource_if_matches(
-                handle,
-                pending.id(),
-                false,
-            );
-            queue_image_load_terminal_followup_if_ready(
-                runtime_ptr,
-                handle,
-                pending.id(),
-                followup,
-            );
-        }
         Ok(crate::network_host::ImageElementResourceFetchStart::PolicySkipped) => {
             let followup = runtime.complete_pending_image_load_local_resource_if_matches(
                 handle,
