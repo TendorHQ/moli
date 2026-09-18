@@ -2299,6 +2299,7 @@ mod readable_algorithm_arrays;
 mod remote_playback_interface;
 mod rendering_update;
 mod rtc_configuration;
+mod retained_child_window;
 mod script_terminal_completion;
 mod speech_events;
 mod storage_dense_name_arrays;
