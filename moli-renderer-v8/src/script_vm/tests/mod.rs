@@ -2371,3 +2371,4 @@ mod performance_user_timing;
 mod webtransport_stream_interface_exposure;
 mod window_restricted_accessors;
 mod window_scheduling_receivers;
+mod window_sync_method_receivers;
