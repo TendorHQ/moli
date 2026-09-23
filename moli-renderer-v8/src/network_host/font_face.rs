@@ -2,13 +2,8 @@ use super::subresource::{PreparedSubresourceFetch, SubresourceFetchOptions};
 use super::*;
 use crate::{
     native_bridge::JsContextHost,
-    types::{SubresourceRequestInitiatorType, SubresourceResourceType},
+    types::{AsyncSubresourceFetchCompletion, PendingFontFaceFetch, SubresourceResourceType},
 };
-
-pub(crate) enum FontFaceFetchStart {
-    Local(Vec<u8>),
-    Pending,
-}
 
 /// Resolve URL sources at construction, before a later base mutation or source
 /// fallback. Invalid URLs remain unavailable sources, not CSS syntax errors;
@@ -43,7 +38,7 @@ pub(crate) fn start_font_face_fetch(
     scope: &mut v8::PinScope<'_, '_>,
     face: v8::Local<'_, v8::Object>,
     source: &str,
-) -> Result<FontFaceFetchStart, String> {
+) -> Result<(), String> {
     let host_ptr = crate::util::context_host_ptr_from_global_bridge(scope)
         .ok_or_else(|| "FontFace URL loader is unavailable in this realm".to_owned())?;
     // SAFETY: the current live realm owns the bridge. No author callback runs
@@ -60,54 +55,83 @@ pub(crate) fn start_font_face_fetch(
         .base_url
         .join(source)
         .map_err(|e| e.to_string())?;
-    if !host.font_request_allowed_by_csp(
-        scope,
-        owner,
+    let policy = host
+        .document_connect_policy_snapshot_for_owner(owner)
+        .ok_or("FontFace policy owner is unavailable")?
+        .for_resource_kind(
+            crate::content_security_policy::ContentSecurityPolicyResourceKind::DocumentFont,
+        );
+    let report_context = capture_window_csp_report_request_context(scope, host, owner)
+        .ok_or("FontFace reporting owner is unavailable")?;
+    let (reports, enforced) = policy.check_url(
         &environment.document_url,
         &request_url,
         crate::content_security_policy::ContentSecurityPolicyRedirectStatus::NoRedirect,
-    ) {
-        return Err("Font request blocked by Content Security Policy".into());
-    }
-    if let Some(response) = local_url_response(&request_url) {
-        let response: crate::types::NavigationResponse = response.into();
-        let result = if (200..300).contains(&response.status) {
-            Ok(FontFaceFetchStart::Local(response.body_bytes().to_vec()))
-        } else {
-            Err("Font request failed".to_owned())
-        };
-        host.record_get_subresource_network_result_with_initiator(
-            environment.frame_id,
-            environment.document_url,
-            request_url,
-            SubresourceResourceType::Font,
-            SubresourceRequestInitiatorType::Script,
-            &Ok(response),
+    ).into_violations();
+    let blocked = !enforced.is_empty();
+    for violation in reports.into_iter().chain(enforced) {
+        send_content_security_policy_violation_report_from_window_context(host, &report_context, &violation);
+        host.dispatch_document_connect_csp_violation_event_for_exact_owner_without_report_best_effort(
+            scope, host_ptr, report_context.identity(), &violation,
         );
-        return result;
     }
+    if blocked {
+        return Err("FontFace request blocked by Content Security Policy".to_owned());
+    }
+    moli_fetch::FetchUrlList::new(&request_url, &[])
+        .validate_request_mode(moli_fetch::RequestMode::Cors, &environment.request_origin)?;
+    if matches!(request_url.scheme(), "http" | "https")
+        && !resource_loader.request_client().optional_resource_fetch_enabled(SubresourceResourceType::Font)
+    {
+        return Err("FontFace requests are disabled by the resource policy".to_owned());
+    }
+    let font = PendingFontFaceFetch {
+        face: v8::Global::new(scope, face),
+        redirect_state: FetchCspRedirectState::new(&policy),
+        policy,
+        report_context,
+    };
     let prepared = PreparedSubresourceFetch::prepare(
         scope,
         host,
         owner,
         &resource_loader,
         environment,
-        request_url,
+        request_url.clone(),
         SubresourceFetchOptions::FONT,
     )?;
     let internal_id = host.record_async_font_face_fetch(
         v8::Global::new(scope, scope.get_current_context()),
-        v8::Global::new(scope, face),
+        font,
         owner,
         prepared.cancel_handle.clone(),
         prepared.network_partition_key.clone(),
         prepared.network_context.policy_context,
         prepared.pending_info.clone(),
     );
+    // Local URL responses use the same resource completion task as network
+    // responses, preserving the observable loading state before settlement.
+    let blob = CapturedBlobUrl::capture(&request_url);
+    if let Some(response) = local_url_response_with_blob_entry(&request_url, "GET", &[], blob.as_ref()) {
+        let result = response.map(Into::into).map_err(|error| error.into_message());
+        let _ = host.resource_completion_sender().send_async_subresource(AsyncSubresourceFetchCompletion {
+            internal_id,
+            request_url,
+            request_method: "GET".to_owned(),
+            request_headers: Default::default(),
+            request_body: None,
+            response_status_text: None,
+            skip_fetch_security_validation: false,
+            response_filter: None,
+            network_error_text: None,
+            result: result.into(),
+        });
+        return Ok(());
+    }
     prepared.dispatch(
         host,
         internal_id,
         "service worker font request dispatch failed",
     );
-    Ok(FontFaceFetchStart::Pending)
+    Ok(())
 }
