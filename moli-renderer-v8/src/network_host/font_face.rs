@@ -14,11 +14,11 @@ pub(crate) fn resolve_font_face_sources(
 ) -> Vec<moli_css_parse::CssFontSource> {
     use moli_css_parse::CssFontSource;
 
-    let base = crate::util::context_host_ptr_from_global_bridge(scope).and_then(|host_ptr| {
+    let base = crate::worker::worker_current_script_url(scope).or_else(|| crate::util::context_host_ptr_from_global_bridge(scope).and_then(|host_ptr| {
         let host = unsafe { &*host_ptr };
         let owner = effective_subresource_request_owner(scope, host);
         subresource_api_base_url(scope, host, owner)
-    });
+    }));
     sources
         .into_iter()
         .filter_map(|source| match source {
@@ -39,6 +39,10 @@ pub(crate) fn start_font_face_fetch(
     face: v8::Local<'_, v8::Object>,
     source: &str,
 ) -> Result<(), String> {
+    if crate::worker::get_worker_state(scope).is_some() {
+        let url = url::Url::parse(source).map_err(|error| error.to_string())?;
+        return crate::worker::start_worker_font_face_fetch(scope, face, url);
+    }
     let host_ptr = crate::util::context_host_ptr_from_global_bridge(scope)
         .ok_or_else(|| "FontFace URL loader is unavailable in this realm".to_owned())?;
     // SAFETY: the current live realm owns the bridge. No author callback runs
