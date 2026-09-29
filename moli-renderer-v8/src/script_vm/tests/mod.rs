@@ -2316,6 +2316,7 @@ mod native_exception_stack_capture;
 mod navigation_timing_inheritance;
 mod no_cors_header_fill;
 mod node_event_worlds;
+mod node_normalization;
 mod observable;
 mod observer_callbacks;
 mod observer_documents;
