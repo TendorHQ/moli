@@ -2260,6 +2260,8 @@ mod convolver_interfaces;
 mod credential_interfaces;
 mod css_keyframes_mutations;
 mod css_keyframes_receivers;
+mod credential_json_options;
+mod credential_signals;
 mod cross_origin_symbol_fallback;
 mod cross_origin_window_indexes;
 mod cross_origin_window_names;
