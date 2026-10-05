@@ -2184,6 +2184,7 @@ mod svg_animation_interfaces;
 mod svg_computed_path_precision;
 mod svg_detached_lengths;
 mod svg_transform_sync_consolidation;
+mod video_color_space;
 
 mod audio_event_interfaces;
 mod audio_value_owner_interface_exposure_interfaces;
