@@ -2272,6 +2272,7 @@ mod cross_origin_window_indexes;
 mod cross_origin_window_names;
 mod device_events;
 mod document_svg_root;
+mod payment_events;
 
 mod gamepad_interfaces;
 
@@ -2373,7 +2374,6 @@ mod storage_dense_name_arrays;
 mod streams;
 mod string_timers;
 mod svg_animated_number;
-mod svg_computed_path_precision;
 mod svg_cors_attributes;
 mod svg_element_receivers;
 mod svg_filter_enumerations;
@@ -2423,7 +2423,6 @@ mod report_body_interface_exposure;
 
 mod resize_observer_entries;
 
-mod payment_events;
 
 mod file_value_receivers;
 
