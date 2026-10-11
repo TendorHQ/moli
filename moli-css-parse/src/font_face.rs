@@ -13,8 +13,7 @@ pub enum CssFontSource {
 /// Parse through Stylo first; the token walk only extracts validated sources.
 pub fn parse_font_face_sources(source: &str) -> Option<Vec<CssFontSource>> {
     let normalized = normalize_font_face_src(source)?;
-    let mut input = ParserInput::new(&normalized);
-    let mut parser = Parser::new(&mut input);
+    let mut parser = Parser::new(&normalized);
     parser
         .parse_comma_separated(|parser| {
             let name = parser.expect_function()?.clone();
@@ -28,7 +27,7 @@ pub fn parse_font_face_sources(source: &str) -> Option<Vec<CssFontSource>> {
                 } else if name.eq_ignore_ascii_case("url") {
                     Ok(CssFontSource::Url(nested.expect_string()?.to_string()))
                 } else {
-                    Err(nested.new_custom_error(()))
+                    Err(cssparser::ParseError::custom(()))
                 }
             })?;
             let mut supported = true;
@@ -49,7 +48,7 @@ pub fn parse_font_face_sources(source: &str) -> Option<Vec<CssFontSource>> {
                                 "woff" | "woff2" | "truetype" | "opentype" | "collection"
                             )
                         });
-                    Ok::<_, cssparser::ParseError<'_, ()>>(())
+                    Ok::<_, cssparser::ParseError<()>>(())
                 })?;
             }
             Ok(supported.then_some(source))
@@ -83,8 +82,7 @@ pub fn parse_font_shorthand(value: &str) -> Option<CssFontShorthand> {
     }
     crate::stylo_stylesheet::with_descriptor_declaration_context(CssRuleType::Style, |context| {
         let text = format!("font: {value}");
-        let mut input = ParserInput::new(&text);
-        let block = parse_property_declaration_list(context, &mut Parser::new(&mut input), &[]);
+        let block = parse_property_declaration_list(context, &mut Parser::new(&text), &[]);
         let property = |name: &str| -> Option<String> {
             let mut out = CssStringWriter::new();
             block
@@ -97,17 +95,15 @@ pub fn parse_font_shorthand(value: &str) -> Option<CssFontShorthand> {
         if is_css_wide_keyword(&size) || size.contains("var(") {
             return None;
         }
-        let mut input = ParserInput::new(&family_css);
-        let families = Parser::new(&mut input)
+        let families = Parser::new(&family_css)
             .parse_comma_separated(|p| {
                 let mut parts = Vec::new();
                 while !p.is_exhausted() {
                     parts.push(p.expect_ident_or_string()?.to_string());
                 }
-                Ok::<_, cssparser::ParseError<'_, ()>>(parts.join(" "))
+                Ok::<_, cssparser::ParseError<()>>(parts.join(" "))
             })
             .ok()?;
-        drop(input);
         Some(CssFontShorthand {
             family_css,
             families,
