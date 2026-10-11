@@ -26,6 +26,8 @@ mod url_helpers;
 mod xhr;
 
 pub(crate) use font_face::{resolve_font_face_sources, start_font_face_fetch};
+pub(crate) use headers::normalized_header_entry_or_throw;
+
 use moli_fetch::{Request, Response, observe_cookie_access_report_for_request};
 
 use crate::network::ResourceRequestClient;
