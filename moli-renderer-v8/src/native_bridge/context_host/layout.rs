@@ -684,9 +684,11 @@ impl JsContextHost {
         document: DomHandle,
         resource: StylesheetLoadBlockingResource,
     ) -> Option<StylesheetLoadBlockingResource> {
-        let (admitted, registration_removed) = self.document_layout_state
-            .borrow_mut()
-            .admit(document, self.document_handle(), resource);
+        let (admitted, registration_removed) = self.document_layout_state.borrow_mut().admit(
+            document,
+            self.document_handle(),
+            resource,
+        );
         if registration_removed {
             self.note_realtime_layout_input_change();
         }
