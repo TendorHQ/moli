@@ -625,11 +625,14 @@ impl JsContextHost {
         document: DomHandle,
         resources: impl IntoIterator<Item = &'a StylesheetLoadBlockingResource>,
     ) {
-        self.document_layout_state.borrow_mut().retain_active_slots(
+        let registration_removed = self.document_layout_state.borrow_mut().retain_active_slots(
             document,
             self.document_handle(),
             resources,
         );
+        if registration_removed {
+            self.note_realtime_layout_input_change();
+        }
     }
 
     pub(crate) fn admit_document_web_font(
@@ -637,9 +640,13 @@ impl JsContextHost {
         document: DomHandle,
         resource: StylesheetLoadBlockingResource,
     ) -> Option<StylesheetLoadBlockingResource> {
-        self.document_layout_state
+        let (admitted, registration_removed) = self.document_layout_state
             .borrow_mut()
-            .admit(document, self.document_handle(), resource)
+            .admit(document, self.document_handle(), resource);
+        if registration_removed {
+            self.note_realtime_layout_input_change();
+        }
+        admitted
     }
 
     pub(crate) fn complete_document_web_font(
@@ -652,12 +659,20 @@ impl JsContextHost {
             self.document_handle(),
             terminal,
         );
-        if matches!(&completion, DocumentWebFontCompletion::Registered(_)) {
+        if let DocumentWebFontCompletion::Registered(outcome) = &completion {
+            let changed = *outcome != moli_layout::WebFontRegistrationOutcome::Unchanged;
+            if changed {
+                self.note_realtime_layout_input_change();
+            }
             // Geometry sampled while the request was pending contains fallback
             // glyph advances. Retire that tree before fonts.ready observers run.
-            self.document_layout_state
-                .borrow_mut()
-                .clear_latest_layout();
+            // Preserve the legacy policy; identical Realtime registrations
+            // leave its valid sample reusable.
+            if changed || !self.layout_policy().is_realtime() {
+                self.document_layout_state
+                    .borrow_mut()
+                    .clear_latest_layout();
+            }
         }
         completion
     }
