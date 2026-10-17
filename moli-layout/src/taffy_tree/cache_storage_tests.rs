@@ -93,6 +93,11 @@ fn numeric_cache_growth_keeps_box_viewport_and_invalidation_owners_distinct() {
     world.cache_clear(viewport);
     assert_eq!(world.cache_get(viewport, &input), None);
     assert_eq!(world.cache_get(sibling, &input), Some(output(80.0)));
+
+    let allocated = world.box_caches.len();
+    world.cache_store(root, &input, output(90.0));
+    assert_eq!(world.cache_get(root, &input), Some(output(90.0)));
+    assert_eq!(world.box_caches.len(), allocated);
 }
 
 #[test]
@@ -115,8 +120,7 @@ fn numeric_cache_allocation_follows_actual_stores_in_a_large_flattened_tree() {
         world.cache_get(sibling.to_taffy(), &input),
         Some(output(80.0))
     );
-    let allocated_bytes = world.box_caches.capacity() * std::mem::size_of::<taffy::Cache>()
-        + world.box_cache_slots.capacity() * std::mem::size_of::<usize>();
+    let allocated_bytes = world.box_caches.capacity() * std::mem::size_of::<taffy::Cache>();
     assert!(
         allocated_bytes < 64 * 1024,
         "4098 construction boxes with two stores should not allocate dense caches: {allocated_bytes} bytes"
@@ -131,6 +135,44 @@ fn numeric_cache_allocation_follows_actual_stores_in_a_large_flattened_tree() {
 }
 
 #[test]
+fn numeric_cache_bindings_follow_boxes_through_compaction_and_growth() {
+    let mut world = LayoutWorld::new(block(0), false);
+    let root = world.root();
+    let discarded = world.allocate(block(1));
+    let kept = world.allocate(block(2));
+    world.replace_children(root, vec![kept]).unwrap();
+    world.map_source(2, kept);
+    let input = input();
+    world.cache_store(root.to_taffy(), &input, output(60.0));
+    world.cache_store(discarded.to_taffy(), &input, output(70.0));
+    world.cache_store(kept.to_taffy(), &input, output(80.0));
+
+    world.compact_reachable();
+    let kept = world.source_box(2).unwrap();
+    assert_eq!(kept.index(), 1);
+    assert_eq!(world.cache_get(kept.to_taffy(), &input), Some(output(80.0)));
+
+    // Grow both vectors past their initial allocations. A recycled box ID
+    // must not inherit a discarded box's cache or replace a surviving cache.
+    let mut appended = Vec::new();
+    for source in 3..35 {
+        let id = world.allocate(block(source));
+        assert_eq!(world.cache_get(id.to_taffy(), &input), None);
+        world.cache_store(id.to_taffy(), &input, output(source as f32));
+        appended.push((id, source));
+    }
+    for (id, source) in appended {
+        assert_eq!(
+            world.cache_get(id.to_taffy(), &input),
+            Some(output(source as f32))
+        );
+    }
+    world.cache_clear(kept.to_taffy());
+    assert_eq!(world.cache_get(kept.to_taffy(), &input), None);
+    assert_eq!(world.cache_get(root.to_taffy(), &input), Some(output(60.0)));
+}
+
+#[test]
 fn hidden_numeric_store_does_not_materialize_empty_cache_storage() {
     let mut world = LayoutWorld::new(block(0), false);
     let input = LayoutInput {
@@ -140,6 +182,5 @@ fn hidden_numeric_store_does_not_materialize_empty_cache_storage() {
     world.cache_store(world.root().to_taffy(), &input, output(60.0));
     world.cache_store(world.viewport_taffy_node(), &input, output(70.0));
     assert!(world.box_caches.is_empty());
-    assert!(world.box_cache_slots.is_empty());
     assert_eq!(world.cache_get(world.root().to_taffy(), &input), None);
 }
