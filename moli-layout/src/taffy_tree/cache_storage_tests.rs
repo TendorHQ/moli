@@ -101,37 +101,42 @@ fn numeric_cache_growth_keeps_box_viewport_and_invalidation_owners_distinct() {
 }
 
 #[test]
-fn numeric_cache_allocation_follows_actual_stores_in_a_large_flattened_tree() {
-    let mut world = LayoutWorld::new(block(0), false);
-    for source in 1..=4096 {
-        let mut text = block(source);
-        text.inline_flattened = true;
-        text.inline_context_owner = Some(world.root());
-        world.boxes.push(text);
+fn numeric_cache_allocation_follows_stores_in_large_flattened_and_block_trees() {
+    for flattened in [false, true] {
+        let mut world = LayoutWorld::new(block(0), false);
+        for source in 1..=4096 {
+            let mut child = block(source);
+            if flattened {
+                child.inline_flattened = true;
+                child.inline_context_owner = Some(world.root());
+            }
+            world.boxes.push(child);
+        }
+        let sibling = LayoutBoxId::from_index(world.len());
+        world.boxes.push(block(4097));
+        let input = input();
+        let root = world.root().to_taffy();
+        world.cache_store(root, &input, output(60.0));
+        world.cache_store(sibling.to_taffy(), &input, output(80.0));
+        assert_eq!(world.cache_get(root, &input), Some(output(60.0)));
+        assert_eq!(
+            world.cache_get(sibling.to_taffy(), &input),
+            Some(output(80.0))
+        );
+        let allocated_bytes = world.box_caches.capacity() * std::mem::size_of::<taffy::Cache>();
+        assert!(
+            allocated_bytes < 64 * 1024,
+            "4098 construction boxes with two stores should not allocate dense caches: {allocated_bytes} bytes"
+        );
+        assert_eq!(world.box_caches.len(), 2);
+        // Unvisited boxes, including flattened boxes, can still store later.
+        let previously_unvisited = LayoutBoxId::from_index(4096).to_taffy();
+        world.cache_store(previously_unvisited, &input, output(90.0));
+        assert_eq!(
+            world.cache_get(previously_unvisited, &input),
+            Some(output(90.0))
+        );
     }
-    let sibling = LayoutBoxId::from_index(world.len());
-    world.boxes.push(block(4097));
-    let input = input();
-    let root = world.root().to_taffy();
-    world.cache_store(root, &input, output(60.0));
-    world.cache_store(sibling.to_taffy(), &input, output(80.0));
-    assert_eq!(world.cache_get(root, &input), Some(output(60.0)));
-    assert_eq!(
-        world.cache_get(sibling.to_taffy(), &input),
-        Some(output(80.0))
-    );
-    let allocated_bytes = world.box_caches.capacity() * std::mem::size_of::<taffy::Cache>();
-    assert!(
-        allocated_bytes < 64 * 1024,
-        "4098 construction boxes with two stores should not allocate dense caches: {allocated_bytes} bytes"
-    );
-    // Admission hints must not prevent a later valid store on a flattened box.
-    let previously_unvisited = LayoutBoxId::from_index(4096).to_taffy();
-    world.cache_store(previously_unvisited, &input, output(90.0));
-    assert_eq!(
-        world.cache_get(previously_unvisited, &input),
-        Some(output(90.0))
-    );
 }
 
 #[test]

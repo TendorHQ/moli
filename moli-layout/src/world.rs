@@ -706,15 +706,9 @@ where
             slot
         } else {
             if self.box_caches.is_empty() {
-                // Reserve without initializing caches for unvisited boxes.
-                // This is a hint, not an eligibility restriction: a caller
-                // may subsequently store any valid construction/numeric box.
-                let candidates = self
-                    .boxes
-                    .iter()
-                    .filter(|layout_box| !layout_box.inline_flattened)
-                    .count();
-                self.box_caches.reserve_exact(candidates);
+                // Bound the first allocation without scanning construction
+                // boxes or reserving caches for boxes that may never store.
+                self.box_caches.reserve_exact(self.boxes.len().min(4));
             }
             let slot = u32::try_from(self.box_caches.len())
                 .ok()
