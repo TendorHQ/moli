@@ -184,6 +184,29 @@ impl JsContextHost {
         top.can_access(&child)
     }
 
+    pub(crate) fn frame_owner_can_access_content_document(&self, handle: DomHandle) -> bool {
+        let Some(document) = self.dom_host().owner_document_handle(handle) else {
+            return false;
+        };
+        let owner_scope = if document == self.document_handle() {
+            OwnerDispatchScope::Top
+        } else if let Some(parent) =
+            self.child_browsing_context_handle_for_stored_document(document)
+        {
+            OwnerDispatchScope::Child(parent)
+        } else if let Some(popup) = self.lightweight_popup_id_for_document_handle(document) {
+            OwnerDispatchScope::LightweightPopup(popup)
+        } else {
+            return false;
+        };
+        // HTML's content document algorithm compares the container's node
+        // Document with the active child Document, using same origin-domain.
+        // Neither the top-level Window nor the callback's realm is its owner.
+        self.window_access_origin_for_dispatch_scope(owner_scope)
+            .zip(self.child_window_access_origin(handle))
+            .is_some_and(|(owner, child)| owner.can_access(&child))
+    }
+
     pub(in crate::native_bridge::context_host) fn child_window_can_access_lightweight_popup(
         &self,
         handle: DomHandle,

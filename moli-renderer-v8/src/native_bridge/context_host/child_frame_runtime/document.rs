@@ -32,6 +32,27 @@ struct ChildDocumentStreamMethodsDeclaration<'scope> {
 }
 
 impl JsContextHost {
+    pub(crate) fn frame_owner_content_document_wrapper<'s>(
+        &mut self,
+        scope: &mut v8::PinScope<'s, '_>,
+        handle: DomHandle,
+    ) -> Option<v8::Local<'s, v8::Object>> {
+        self.refresh_child_browsing_context(scope, handle);
+        if !self.frame_owner_can_access_content_document(handle) {
+            return None;
+        }
+        // Materialize the authorized target directly. Public Window getters
+        // would check the native callback's realm instead of the node Document.
+        self.ensure_prebootstrapped_child_default_context(scope, handle)
+            .ok()?;
+        if let Some(window) = self.existing_child_browsing_context_window_wrapper(scope, handle) {
+            self.set_cached_detached_iframe_content_window(scope, handle, window);
+        }
+        let document = self.child_browsing_context_document_wrapper(scope, handle)?;
+        self.set_cached_detached_iframe_content_document(scope, handle, document);
+        Some(document)
+    }
+
     fn child_browsing_context_has_uncommitted_navigation_seed(&self, handle: DomHandle) -> bool {
         let Some(entry) = self.child_browsing_contexts.get(&handle) else {
             return false;
@@ -120,12 +141,10 @@ impl JsContextHost {
                     window,
                     !self.child_browsing_context_has_uncommitted_navigation_seed(handle),
                 );
-                crate::native_bridge::helpers::set_object_slot(
-                    scope,
-                    window,
-                    "document",
-                    document.into(),
-                );
+                // bind_current_child_window_document publishes through the
+                // private slot used by the unforgeable Window.document getter.
+                // Redefining that public property can run a different realm's
+                // access check and must not replace the native accessor.
             }
             ready_work.extend(
                 self.sync_child_browsing_context_subtree_into_ready_work(scope, document_handle),

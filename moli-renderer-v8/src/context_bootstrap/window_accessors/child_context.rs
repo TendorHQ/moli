@@ -1,5 +1,6 @@
 use super::helpers::{
-    window_child_context_handle, window_hidden_value, window_host_ptr, window_receiver,
+    window_child_context_handle, window_current_dispatch_scope, window_hidden_value,
+    window_host_ptr, window_receiver,
 };
 use super::*;
 
@@ -24,18 +25,24 @@ pub(in crate::context_bootstrap) fn window_frame_element_getter<'s>(
     let Some(receiver) = window_receiver(scope, &args) else {
         return;
     };
-    if let Some(value) = window_hidden_value(scope, receiver, WINDOW_FRAME_ELEMENT_SLOT) {
-        rv.set(value);
-        return;
-    }
-    let Some(handle) = window_child_context_handle(scope, receiver) else {
-        rv.set_null();
-        return;
-    };
     let Some(host_ptr) = window_host_ptr(scope, receiver) else {
         rv.set_null();
         return;
     };
+    let Some(handle) = window_current_dispatch_scope(scope, receiver, unsafe { &*host_ptr })
+        .and_then(|owner| owner.child_window())
+        .filter(|handle| unsafe { &*host_ptr }.frame_owner_can_access_content_document(*handle))
+    else {
+        rv.set_null();
+        return;
+    };
+    // A cached embedding element is a capability to its entire owner Document.
+    // Recheck same origin-domain before returning it, including after domain
+    // mutation or retirement of the receiver's original Realm.
+    if let Some(value) = window_hidden_value(scope, receiver, WINDOW_FRAME_ELEMENT_SLOT) {
+        rv.set(value);
+        return;
+    }
     match unsafe { &mut *host_ptr }
         .native_bridge_mut()
         .wrap_handle(scope, host_ptr, handle)

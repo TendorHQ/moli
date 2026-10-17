@@ -1357,24 +1357,7 @@ fn frame_owner_content_document<'s>(
             None
         };
     }
-    let runtime = unsafe { &mut *runtime_ptr };
-    runtime.refresh_child_browsing_context(scope, handle);
-    if !runtime.child_browsing_context_is_same_origin_with_top(handle) {
-        return None;
-    }
-    if let Some(window) = runtime.child_browsing_context_window_wrapper(scope, handle) {
-        runtime.set_cached_detached_iframe_content_window(scope, handle, window);
-        if let Some(document) = window
-            .get(scope, v8str(scope, "document").into())
-            .and_then(|value| v8::Local::<v8::Object>::try_from(value).ok())
-        {
-            runtime.set_cached_detached_iframe_content_document(scope, handle, document);
-            return Some(document);
-        }
-    }
-    let document = runtime.child_browsing_context_document_wrapper(scope, handle)?;
-    runtime.set_cached_detached_iframe_content_document(scope, handle, document);
-    Some(document)
+    unsafe { &mut *runtime_ptr }.frame_owner_content_document_wrapper(scope, handle)
 }
 
 pub(super) fn frame_owner_content_window_getter_function<'s>(
