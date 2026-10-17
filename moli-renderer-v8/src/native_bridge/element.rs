@@ -185,7 +185,6 @@ pub(crate) use styles::{
 
 use super::document::{
     clear_detached_iframe_cached_context, clear_detached_iframe_cached_context_for_handle,
-    detached_iframe_content_document, detached_iframe_content_window,
     detached_shadow_root_selection_value, node_shadow_root_element_from_point_callback,
     node_shadow_root_elements_from_point_callback,
 };
@@ -664,10 +663,10 @@ pub(super) use tree_mutation::{
 pub(in crate::native_bridge) use url_attributes::parse_url_with_document_query_encoding;
 pub(super) use url_attributes::update_iframe_snapshot_navigation;
 use url_attributes::{
-    disconnected_iframe_can_materialize_detached_content, iframe_has_inactive_child_context,
-    iframe_is_in_own_child_document, iframe_is_inside_its_own_child_context_document,
-    iframe_uses_detached_content_cache, parsed_url_like_attribute, resolve_url_like_attribute,
-    set_resolved_url_attribute, should_block_dangling_markup_subresource,
+    iframe_has_inactive_child_context, iframe_is_in_own_child_document,
+    iframe_is_inside_its_own_child_context_document, iframe_uses_detached_content_cache,
+    parsed_url_like_attribute, resolve_url_like_attribute, set_resolved_url_attribute,
+    should_block_dangling_markup_subresource,
 };
 
 pub(in crate::native_bridge) fn set_live_element_attribute_appending_to_current_reaction_queue(

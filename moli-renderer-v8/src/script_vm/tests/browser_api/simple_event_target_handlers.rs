@@ -117,18 +117,15 @@ fn simple_window_handlers_share_dispatch_and_mutation_semantics() {
     assert_eq!(
         vm.eval(
             r#"(() => {
-              const popup = open();
-              const doc = document.implementation.createHTMLDocument('');
-              const frame = doc.createElement('iframe');
-              doc.body.appendChild(frame);
+              const popups = [open(), open()];
               try {
-                for (const target of [popup, frame.contentWindow]) {
+                for (const target of popups) {
                   checkHandlerDispatch(target, 'message');
                   checkUnregisteredHandler(target);
                 }
-                checkListenerIsolation([popup, frame.contentWindow]);
+                checkListenerIsolation(popups);
                 return true;
-              } finally { popup.close(); }
+              } finally { for (const popup of popups) popup.close(); }
             })()"#,
         )
         .unwrap(),

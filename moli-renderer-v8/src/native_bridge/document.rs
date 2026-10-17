@@ -150,13 +150,11 @@ pub(in crate::native_bridge::document) use custom_element_options::{
     CreateElementOptions, DocumentCreateElementArgs, DocumentCreateElementNsArgs,
     parse_import_node_options,
 };
-pub(crate) use detached_install::detached_iframe_current_content_document_handle;
 pub(super) use detached_install::install_detached_bridge_methods;
 pub(in crate::native_bridge) use detached_install::{
     clear_detached_iframe_cached_context, clear_detached_iframe_cached_context_for_handle,
-    detached_form_owner_object, detached_iframe_content_document, detached_iframe_content_window,
-    detached_label_control_object, detached_shadow_root_for_host, set_detached_node_text_content,
-    set_detached_text_replacement_value,
+    detached_form_owner_object, detached_label_control_object, detached_shadow_root_for_host,
+    set_detached_node_text_content, set_detached_text_replacement_value,
 };
 use detached_install::{
     install_detached_character_data_instance_properties,

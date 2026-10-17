@@ -399,7 +399,6 @@ use self::range_live::{
     update_live_ranges_for_text_split,
 };
 pub(super) use self::runtime_state::finish_context_bootstrap;
-pub(crate) use self::runtime_state::install_child_window_eval_runtime_state;
 pub(crate) use self::runtime_state::install_webassembly_runtime_state;
 #[cfg(feature = "wpt-extensions")]
 pub(crate) use self::runtime_state::install_wpt_webdriver_runtime_state;
@@ -499,7 +498,6 @@ pub(crate) use self::window_lazy_surface::{
     rematerialize_window_lazy_surface_if_cached,
 };
 use self::window_runtime::global_caches_getter_callback;
-pub(crate) use self::window_runtime::install_child_window_own_methods;
 pub(crate) use self::window_template::install_window_own_template_bindings;
 pub(crate) use self::worker_host::{
     dispatch_worker_error_event_with_kind, dispatch_worker_event,

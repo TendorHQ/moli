@@ -127,15 +127,6 @@ fn style_object_forces_empty_computed<'s>(
                 cache_computed_viewport(scope, style, (!empty).then(|| context.viewport(runtime)));
                 empty
             }
-            ComputedStyleTargetKey::DetachedIframe(frame_handle) => {
-                !detached_iframe_target_document_is_current(
-                    scope,
-                    runtime_ptr,
-                    style,
-                    handle,
-                    frame_handle,
-                )
-            }
             ComputedStyleTargetKey::PopupDocument(document_handle) => {
                 !popup_document_target_is_current(unsafe { &*runtime_ptr }, handle, document_handle)
             }
@@ -165,28 +156,6 @@ fn popup_document_target_is_current(
         && runtime
             .lightweight_popup_id_for_document_handle(popup_document)
             .is_some_and(|popup_id| runtime.lightweight_popup_is_open(popup_id))
-}
-
-fn detached_iframe_target_document_is_current<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    runtime_ptr: *mut JsContextHost,
-    style: v8::Local<'s, v8::Object>,
-    target: DomHandle,
-    frame_handle: DomHandle,
-) -> bool {
-    let runtime = unsafe { &*runtime_ptr };
-    let read_document = style_object_read_document(scope, style);
-    let owner_document = runtime
-        .dom_host()
-        .node(target)
-        .and_then(crate::dom::native::Node::owner_document);
-    let target_document = read_document.or(owner_document);
-    crate::native_bridge::document::detached_iframe_current_content_document_handle(
-        scope,
-        runtime_ptr,
-        frame_handle,
-    )
-    .is_some_and(|document| Some(document) == target_document)
 }
 
 fn target_context_epoch_is_current<'s>(
@@ -373,9 +342,7 @@ fn live_computed_style_viewport<'s>(
             let document = runtime.dom_host().owner_document_handle(handle)?;
             Some(style_viewport_for_document(runtime, document))
         }
-        ComputedStyleTargetKey::DetachedIframe(_) | ComputedStyleTargetKey::PopupDocument(_) => {
-            None
-        }
+        ComputedStyleTargetKey::PopupDocument(_) => None,
     }
 }
 

@@ -22,7 +22,6 @@ mod url_helpers;
 mod xhr;
 
 use moli_fetch::{Request, Response, observe_cookie_access_report_for_request};
-use moli_webapi_declare::WebApiObject;
 
 use crate::network::ResourceRequestClient;
 
@@ -88,7 +87,7 @@ pub(in crate::network_host) use self::fetch_surface::{
     REQUEST_IS_HISTORY_NAVIGATION_SLOT, REQUEST_IS_RELOAD_NAVIGATION_SLOT, REQUEST_KEEPALIVE_SLOT,
     REQUEST_METHOD_SLOT, REQUEST_MODE_SLOT, REQUEST_PRIORITY_SLOT, REQUEST_REDIRECT_SLOT,
     REQUEST_REFERRER_POLICY_SLOT, REQUEST_REFERRER_SLOT, REQUEST_SIGNAL_SLOT,
-    constructor_prototype, new_abort_signal_for_request_with_source,
+    new_abort_signal_for_request_with_source,
 };
 pub(crate) use self::fetch_surface::{
     REQUEST_URL_SLOT, is_branded_request_object, request_headers_entries, request_method,
@@ -206,85 +205,6 @@ pub(crate) const FILE_NOT_FOUND_ERROR_TEXT: &str = "net::ERR_FILE_NOT_FOUND";
 pub(crate) const FAILED_ERROR_TEXT: &str = "net::ERR_FAILED";
 pub(crate) use crate::protocol_types::extract_subresource_auth_challenge;
 pub(crate) use moli_fetch::NET_ERR_ABORTED_ERROR_TEXT as ABORTED_ERROR_TEXT;
-
-#[derive(WebApiObject)]
-#[webapi(fragment, prototype = "Response")]
-struct ChildResponseConstructorDeclaration<'scope> {
-    data: v8::Local<'scope, v8::Value>,
-
-    #[webapi(
-        method = "redirect",
-        length = 1,
-        callback = self::fetch_surface::response_static_redirect_callback,
-        data = self.data
-    )]
-    redirect: (),
-}
-
-pub(crate) fn install_fetch_constructors_for_base_url<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    window: v8::Local<'s, v8::Object>,
-    base_url: &url::Url,
-) {
-    let Some(data) = v8_string(scope, base_url.as_str()).map(Into::into) else {
-        return;
-    };
-    install_fetch_constructors_with_data(scope, window, data);
-}
-
-fn install_fetch_constructors_with_data<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    window: v8::Local<'s, v8::Object>,
-    data: v8::Local<'s, v8::Value>,
-) {
-    let global = scope.get_current_context().global(scope);
-    let parent_request = window
-        .get(scope, v8str(scope, "Request").into())
-        .or_else(|| global.get(scope, v8str(scope, "Request").into()))
-        .and_then(|value| v8::Local::<v8::Function>::try_from(value).ok());
-    if let Some(request) = v8::Function::builder(request_constructor_callback)
-        .length(1)
-        .data(data)
-        .build(scope)
-    {
-        let prototype = parent_request
-            .and_then(|parent_request| parent_request.get(scope, v8str(scope, "prototype").into()))
-            .or_else(|| constructor_prototype(scope, global, "Request").map(Into::into));
-        if let Some(prototype) = prototype {
-            let _ = request.set(scope, v8str(scope, "prototype").into(), prototype);
-        }
-        let _ = window.set(scope, v8str(scope, "Request").into(), request.into());
-    }
-
-    let parent_response = window
-        .get(scope, v8str(scope, "Response").into())
-        .or_else(|| global.get(scope, v8str(scope, "Response").into()))
-        .and_then(|value| v8::Local::<v8::Function>::try_from(value).ok());
-    if let Some(response) = v8::Function::builder(response_constructor_callback)
-        .data(data)
-        .build(scope)
-    {
-        let prototype = parent_response
-            .and_then(|parent_response| {
-                parent_response.get(scope, v8str(scope, "prototype").into())
-            })
-            .or_else(|| constructor_prototype(scope, global, "Response").map(Into::into));
-        if let Some(prototype) = prototype {
-            let _ = response.set(scope, v8str(scope, "prototype").into(), prototype);
-        }
-        if let Some(parent_response) = parent_response {
-            for name in ["error", "json"] {
-                if let Some(value) = parent_response.get(scope, v8str(scope, name).into()) {
-                    let _ = response.set(scope, v8str(scope, name).into(), value);
-                }
-            }
-        }
-        ChildResponseConstructorDeclaration::new(data)
-            .initialize(scope, response.into())
-            .expect("child Response constructor declaration should initialize");
-        let _ = window.set(scope, v8str(scope, "Response").into(), response.into());
-    }
-}
 
 use super::{
     blob,

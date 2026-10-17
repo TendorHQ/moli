@@ -1470,139 +1470,28 @@ fn live_iframe_attribute_mutation_targets_computed_style_cache() {
 }
 
 #[test]
-fn held_detached_iframe_computed_style_is_empty_after_srcdoc_navigation() {
-    let mut vm = new_storage_test_vm("https://detached-iframe-srcdoc-computed-style.test/");
-
-    let result = vm
-        .eval(
-            r#"
-(() => {
-  const detachedDocument = document.implementation.createHTMLDocument('');
-  const frame = detachedDocument.createElement('iframe');
-  frame.id = 'detached-srcdoc-navigation-frame';
-  frame.srcdoc = '<style>body { color: rgb(0, 128, 0); }</style><body>first</body>';
-  detachedDocument.body.appendChild(frame);
-  const firstDocument = frame.contentDocument;
-  const held = frame.contentWindow.getComputedStyle(firstDocument.body);
-  const before = `${held.length > 0}:${held.color}`;
-
-  frame.srcdoc = '<style>body { color: rgb(1, 2, 3); }</style><body>second</body>';
-  const oldHeld = `${held.length}:${held.color}`;
-  const secondDocument = frame.contentDocument;
-  const secondHeld = frame.contentWindow.getComputedStyle(secondDocument.body);
-  const secondFresh = secondHeld.color;
-
-  let symbolError = 'none';
-  try {
-    frame.srcdoc = Symbol('srcdoc');
-  } catch (error) {
-    symbolError = error.name;
-  }
-  const afterFailedSrcdoc = `${symbolError}:${secondHeld.length > 200}:${secondHeld.color}:${frame.contentDocument === secondDocument}`;
-
-  frame.removeAttribute('srcdoc');
-  const secondOldHeld = `${secondHeld.length}:${secondHeld.color}`;
-  const blankDocument = frame.contentDocument;
-  blankDocument.body.id = 'detached-srcdoc-final-body';
-  const blankFresh = frame.contentWindow.getComputedStyle(blankDocument.body).color;
-  return [
-    before,
-    oldHeld,
-    secondFresh,
-    firstDocument === secondDocument,
-    afterFailedSrcdoc,
-    secondOldHeld,
-    blankFresh,
-    secondDocument === blankDocument
-  ].join('|');
-})()
-"#,
-        )
-        .expect("held detached iframe computed style srcdoc navigation should evaluate");
-
-    assert_eq!(
-        result,
-        "true:rgb(0, 128, 0)|0:|rgb(1, 2, 3)|false|TypeError:true:rgb(1, 2, 3):true|0:|rgb(0, 0, 0)|false"
-    );
-    let child_document = owner_document_handle_for_element_id(&vm, "detached-srcdoc-final-body");
-    assert_eq!(
-        computed_style_cache_entry_count_for_document(&vm, child_document),
-        1
-    );
-}
-
-#[test]
-fn held_detached_iframe_computed_style_is_empty_after_src_navigation() {
-    let mut vm = new_storage_test_vm("https://detached-iframe-src-computed-style.test/");
-
-    let result = vm
-        .eval(
-            r#"
-(() => {
-  const detachedDocument = document.implementation.createHTMLDocument('');
-  const frame = detachedDocument.createElement('iframe');
-  frame.id = 'detached-src-navigation-frame';
-  const first = 'data:text/html;charset=utf-8;base64,PGJvZHkgc3R5bGU9ImNvbG9yOiByZ2IoMCwgMTI4LCAwKSI+Zmlyc3Q8L2JvZHk+';
-  const second = 'data:text/html;charset=utf-8;base64,PGJvZHkgc3R5bGU9ImNvbG9yOiByZ2IoMSwgMiwgMykiPnNlY29uZDwvYm9keT4=';
-  const third = 'data:text/html;charset=utf-8;base64,PGJvZHkgc3R5bGU9ImNvbG9yOiByZ2IoNCwgNSwgNikiPnRoaXJkPC9ib2R5Pg==';
-  frame.src = first;
-  detachedDocument.body.appendChild(frame);
-  const firstDocument = frame.contentDocument;
-  const held = frame.contentWindow.getComputedStyle(firstDocument.body);
-  const before = `${held.length > 0}:${held.color}`;
-
-  frame.src = second;
-  const oldHeld = `${held.length}:${held.color}`;
-  const secondDocument = frame.contentDocument;
-  const secondHeld = frame.contentWindow.getComputedStyle(secondDocument.body);
-  const secondFresh = secondHeld.color;
-
-  frame.setAttribute('src', third);
-  const secondOldHeld = `${secondHeld.length}:${secondHeld.color}`;
-  const thirdDocument = frame.contentDocument;
-  const thirdHeld = frame.contentWindow.getComputedStyle(thirdDocument.body);
-  const thirdFresh = thirdHeld.color;
-
-  let symbolError = 'none';
-  try {
-    frame.src = Symbol('src');
-  } catch (error) {
-    symbolError = error.name;
-  }
-  const afterFailedSrc = `${symbolError}:${thirdHeld.length > 200}:${thirdHeld.color}:${frame.contentDocument === thirdDocument}`;
-
-  frame.removeAttribute('src');
-  const thirdOldHeld = `${thirdHeld.length}:${thirdHeld.color}`;
-  const blankDocument = frame.contentDocument;
-  blankDocument.body.id = 'detached-src-final-body';
-  const blankFresh = frame.contentWindow.getComputedStyle(blankDocument.body).color;
-  return [
-    before,
-    oldHeld,
-    secondFresh,
-    firstDocument === secondDocument,
-    secondOldHeld,
-    thirdFresh,
-    secondDocument === thirdDocument,
-    afterFailedSrc,
-    thirdOldHeld,
-    blankFresh,
-    thirdDocument === blankDocument
-  ].join('|');
-})()
-"#,
-        )
-        .expect("held detached iframe computed style src navigation should evaluate");
-
-    assert_eq!(
-        result,
-        "true:rgb(0, 128, 0)|0:|rgb(1, 2, 3)|false|0:|rgb(4, 5, 6)|false|TypeError:true:rgb(4, 5, 6):true|0:|rgb(0, 0, 0)|false"
-    );
-    let child_document = owner_document_handle_for_element_id(&vm, "detached-src-final-body");
-    assert_eq!(
-        computed_style_cache_entry_count_for_document(&vm, child_document),
-        1
-    );
+fn inert_iframes_remain_windowless_after_src_and_srcdoc_changes() {
+    let mut vm = new_storage_test_vm("https://inert-frame-navigation.test/");
+    assert_eq!(vm.eval(r#"
+        const owner = document.implementation.createHTMLDocument('');
+        const frame = owner.createElement('iframe');
+        owner.body.appendChild(frame);
+        const results = [];
+        const check = () => results.push(frame.contentDocument === null && frame.contentWindow === null && frame.getSVGDocument() === null);
+        check();
+        for (const src of ['about:blank', 'data:text/html,<p>opaque</p>', 'https://foreign.example/private']) {
+          frame.src = src;
+          check();
+          frame.srcdoc = '<p>srcdoc</p>';
+          check();
+          frame.removeAttribute('srcdoc');
+          check();
+        }
+        let error = '';
+        try { frame.srcdoc = Symbol('srcdoc'); } catch (caught) { error = caught.name; }
+        check();
+        JSON.stringify([results.every(Boolean), error, owner.defaultView, frames.length])
+    "#).unwrap(), r#"[true,"TypeError",null,0]"#);
 }
 
 #[test]

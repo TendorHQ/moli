@@ -779,7 +779,7 @@ fn domparser_xml_preserves_content_type_and_document_interface_for_success_and_e
 }
 
 #[test]
-fn detached_iframe_windows_do_not_change_document_visibility() {
+fn inert_iframes_do_not_create_windows_or_change_document_visibility() {
     let mut vm = new_storage_test_vm("https://detached-iframe-visibility.test/");
 
     let result = vm
@@ -801,24 +801,10 @@ fn detached_iframe_windows_do_not_change_document_visibility() {
       outer.documentElement.appendChild(frame);
       const label = `${name}/${first}`;
       check(outer.defaultView === null, `${label}: windowless owner`);
-      let child;
-      if (first === "document") {
-        child = frame.contentDocument;
-        check(child.hidden && child.visibilityState === "hidden", `${label}: before contentWindow`);
-      }
-      const view = frame.contentWindow;
-      child ||= frame.contentDocument;
-      check(view !== null && view.document === child, `${label}: synthetic window`);
-      check(child.defaultView === view, `${label}: associated window retained`);
-      check(child.hidden && child.visibilityState === "hidden", `${label}: after contentWindow`);
+      check(frame.contentDocument === null, `${label}: no child Document`);
+      check(frame.contentWindow === null, `${label}: no child Window`);
       check(outer.hidden && outer.visibilityState === "hidden", `${label}: owner stays hidden`);
-      const nested = child.createElement("iframe");
-      nested.srcdoc = "<p>nested</p>";
-      child.body.appendChild(nested);
-      const nestedChild = nested.contentDocument;
-      check(nestedChild.hidden && nestedChild.visibilityState === "hidden", `${label}: nested before contentWindow`);
-      check(nested.contentWindow.document === nestedChild, `${label}: nested window`);
-      check(nestedChild.hidden && nestedChild.visibilityState === "hidden", `${label}: nested after contentWindow`);
+
     }
   }
   return JSON.stringify(errors);

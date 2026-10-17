@@ -509,29 +509,37 @@ fn detached_document_shadow_root_inner_html_setter_updates_query_surface() {
 #[test]
 fn child_document_content_type_uses_resource_mime() {
     let mut vm = new_storage_test_vm("https://child-content-type.test/");
-
-    let result = vm
-        .eval(
-            r#"
-(() => {
-  const parsed = new DOMParser().parseFromString(
-    '<iframe id="html" src="data:text/html;charset=utf-8,<p>ok</p>"></iframe>' +
-    '<iframe id="image" src="data:image/png;base64,AA=="></iframe>',
-    'text/html'
-  );
-  const htmlFrame = parsed.getElementById('html');
-  const imageFrame = parsed.getElementById('image');
-
-  return [
-    htmlFrame.contentDocument && htmlFrame.contentDocument.contentType,
-    imageFrame.contentDocument && imageFrame.contentDocument.contentType
-  ].join('|');
-})()
-"#,
-        )
-        .expect("child document contentType should evaluate");
-
-    assert_eq!(result, "text/html|image/png");
+    vm.eval(r#"
+        const root = document.documentElement || document.appendChild(document.createElement('html'));
+        const body = document.body || root.appendChild(document.createElement('body'));
+        for (const [id, src] of [
+          ['html', 'data:text/html;charset=utf-8,<p>ok</p>'],
+          ['image', 'data:image/png;base64,AA==']
+        ]) {
+          body.appendChild(Object.assign(document.createElement('iframe'), {id, src}));
+        }
+        'created'
+    "#).unwrap();
+    vm.drain_pending_child_frame_work_for_test();
+    let frames = vm.child_browsing_context_frame_tree_snapshot();
+    let mut content_types = Vec::new();
+    for id in ["html", "image"] {
+        let frame = frames
+            .iter()
+            .find(|frame| frame.owner_element_id.as_deref() == Some(id))
+            .unwrap();
+        // These data URLs have opaque origins. Inspect their own Document in
+        // an isolated world rather than exposing it through the parent page.
+        let world = vm
+            .create_isolated_world_for_frame(&frame.frame_id, "mime-probe", false)
+            .unwrap();
+        content_types.push(
+            vm.eval_in_isolated_context(world, "document.contentType")
+                .unwrap(),
+        );
+    }
+    assert_eq!(content_types, ["text/html", "image/png"]);
+    assert_eq!(vm.eval("document.getElementById('html').contentDocument === null && document.getElementById('image').contentDocument === null").unwrap(), "true");
 }
 
 #[test]

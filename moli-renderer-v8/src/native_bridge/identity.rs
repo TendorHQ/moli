@@ -144,7 +144,6 @@ fn functional_pseudo_name<'a>(pseudo_element: &'a str, function_name: &str) -> O
 pub(crate) enum ComputedStyleTargetKey {
     Dynamic,
     ChildFrame(DomHandle),
-    DetachedIframe(DomHandle),
     PopupDocument(DomHandle),
 }
 

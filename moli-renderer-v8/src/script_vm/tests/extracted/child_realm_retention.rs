@@ -174,24 +174,21 @@ fn promoted_child_content_surfaces_follow_author_reachability() {
 }
 
 #[test]
-fn detached_iframe_projection_keeps_its_cached_surfaces_across_gc() {
-    let mut vm = new_storage_test_vm("https://detached-content-cache.test/");
-    vm.eval(
-        r#"
-        (() => {
-          const detached = document.implementation.createHTMLDocument('');
-          globalThis.savedDetachedFrame = detached.createElement('iframe');
-          detached.body.append(savedDetachedFrame);
-          const child = savedDetachedFrame.contentDocument;
-          const win = savedDetachedFrame.contentWindow;
-          child.authorMarker = 42;
-          win.authorMarker = 43;
-          child.body.innerHTML = '<p>kept</p>';
-          return 'cached';
-        })()
-        "#,
-    )
-    .unwrap();
+fn inert_iframe_remains_windowless_across_gc() {
+    let mut vm = new_storage_test_vm("https://inert-content-cache.test/");
+    assert_eq!(
+        vm.eval(
+            r#"
+        const detached = document.implementation.createHTMLDocument('');
+        globalThis.savedDetachedFrame = detached.createElement('iframe');
+        savedDetachedFrame.srcdoc = '<p>inert</p>';
+        detached.body.append(savedDetachedFrame);
+        JSON.stringify([savedDetachedFrame.contentDocument, savedDetachedFrame.contentWindow])
+    "#
+        )
+        .unwrap(),
+        "[null,null]"
+    );
     for _ in 0..2 {
         vm.collect_renderer_document_isolate_garbage().unwrap();
     }
@@ -200,16 +197,21 @@ fn detached_iframe_projection_keeps_its_cached_surfaces_across_gc() {
     assert_eq!(
         vm.eval(
             r#"
-            JSON.stringify([
-              savedDetachedFrame.contentDocument.authorMarker,
-              savedDetachedFrame.contentWindow.authorMarker,
-              savedDetachedFrame.contentWindow.document === savedDetachedFrame.contentDocument,
-              savedDetachedFrame.contentDocument.body.textContent
-            ])
-            "#,
+        JSON.stringify([
+          savedDetachedFrame.contentDocument,
+          savedDetachedFrame.contentWindow,
+          savedDetachedFrame.ownerDocument.querySelector('iframe') === savedDetachedFrame
+        ])
+    "#
         )
         .unwrap(),
-        r#"[42,43,true,"kept"]"#
+        "[null,null,true]"
+    );
+    assert_eq!(
+        vm._context_host
+            .borrow()
+            .detached_content_surface_cache_counts_for_test(),
+        [0; 6]
     );
 }
 

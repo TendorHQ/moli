@@ -1349,13 +1349,7 @@ fn frame_owner_content_document<'s>(
     if iframe_uses_detached_content_cache(runtime, handle)
         || !runtime.dom_host().is_connected(handle)
     {
-        return if iframe_uses_detached_content_cache(runtime, handle)
-            || disconnected_iframe_can_materialize_detached_content(runtime, handle)
-        {
-            detached_iframe_content_document(scope, receiver)
-        } else {
-            None
-        };
+        return None;
     }
     unsafe { &mut *runtime_ptr }.frame_owner_content_document_wrapper(scope, handle)
 }
@@ -1387,16 +1381,7 @@ pub(super) fn frame_owner_content_window_getter_function<'s>(
     if iframe_uses_detached_content_cache(runtime, handle)
         || !runtime.dom_host().is_connected(handle)
     {
-        if iframe_uses_detached_content_cache(runtime, handle)
-            || disconnected_iframe_can_materialize_detached_content(runtime, handle)
-        {
-            match detached_iframe_content_window(scope, receiver) {
-                Some(window) => rv.set(window.into()),
-                None => rv.set_null(),
-            }
-        } else {
-            rv.set_null();
-        }
+        rv.set_null();
         return;
     }
     let runtime = unsafe { &mut *runtime_ptr };
