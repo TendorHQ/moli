@@ -326,7 +326,6 @@ contenteditable/select-text-change-crash.html
 cookies/cookie-enabled-noncookie-frame.html
 cookies/meta-blocked.html
 cookies/navigated-away.html
-cors/response-headers.htm
 credential-management/require_securecontext.html
 css/compositing/inheritance.html
 css/compositing/parsing/background-blend-mode-computed-multiple.html
@@ -623,6 +622,7 @@ css/css-flexbox/align-content-004.htm
 css/css-flexbox/align-content-005.htm
 css/css-flexbox/align-content-006.htm
 css/css-flexbox/align-content-horiz-001a.html
+css/css-flexbox/align-content-horiz-001b.html
 css/css-flexbox/align-content-horiz-002.html
 css/css-flexbox/align-content-rounding.html
 css/css-flexbox/align-content-stretch-rounding.html
@@ -780,6 +780,7 @@ css/css-flexbox/flex-basis-008.html
 css/css-flexbox/flex-basis-010.html
 css/css-flexbox/flex-basis-011.html
 css/css-flexbox/flex-basis-012.html
+css/css-flexbox/flex-basis-content-percentage-height.html
 css/css-flexbox/flex-basis-item-margins-001.html
 css/css-flexbox/flex-box-wrap.html
 css/css-flexbox/flex-child-percent-basis-resize-1.html
@@ -963,6 +964,7 @@ css/css-flexbox/flexbox-flex-wrap-flexing-002.html
 css/css-flexbox/flexbox-flex-wrap-flexing-003.html
 css/css-flexbox/flexbox-flex-wrap-flexing.html
 css/css-flexbox/flexbox-flex-wrap-horiz-001.html
+css/css-flexbox/flexbox-flex-wrap-horiz-002.html
 css/css-flexbox/flexbox-flex-wrap-nowrap.htm
 css/css-flexbox/flexbox-flex-wrap-vert-001.html
 css/css-flexbox/flexbox-flex-wrap-vert-002.html
@@ -1499,9 +1501,14 @@ css/css-flexbox/percentage-heights-002.html
 css/css-flexbox/percentage-heights-005.html
 css/css-flexbox/percentage-heights-006.html
 css/css-flexbox/percentage-heights-007.html
+css/css-flexbox/percentage-heights-008.html
 css/css-flexbox/percentage-heights-009.html
 css/css-flexbox/percentage-heights-010.html
 css/css-flexbox/percentage-heights-012.html
+css/css-flexbox/percentage-heights-015.html
+css/css-flexbox/percentage-heights-016.html
+css/css-flexbox/percentage-heights-017.html
+css/css-flexbox/percentage-heights-018.html
 css/css-flexbox/percentage-heights-019.html
 css/css-flexbox/percentage-heights-021.html
 css/css-flexbox/percentage-margins-001.html
@@ -1954,6 +1961,11 @@ css/css-grid/grid-items/grid-items-002.html
 css/css-grid/grid-items/grid-items-003.html
 css/css-grid/grid-items/grid-items-contribution-negative-margins.html
 css/css-grid/grid-items/grid-items-inline-blocks-001.html
+css/css-grid/grid-items/grid-items-minimum-height-orthogonal-001.html
+css/css-grid/grid-items/grid-items-minimum-width-001.html
+css/css-grid/grid-items/grid-items-minimum-width-002.html
+css/css-grid/grid-items/grid-items-minimum-width-orthogonal-001.html
+css/css-grid/grid-items/grid-items-minimum-width-orthogonal-002.html
 css/css-grid/grid-items/grid-items-percentage-margins-003.html
 css/css-grid/grid-items/grid-items-percentage-margins-004.html
 css/css-grid/grid-items/grid-items-percentage-margins-005.html
@@ -3989,7 +4001,6 @@ dom/nodes/Node-textContent.html
 dom/nodes/NodeList-Iterable.html
 dom/nodes/NodeList-static-length-getter-tampered-1.html
 dom/nodes/NodeList-static-length-getter-tampered-2.html
-dom/nodes/NodeList-static-length-getter-tampered-3.html
 dom/nodes/NodeList-static-length-getter-tampered-indexOf-1.html
 dom/nodes/NodeList-static-length-getter-tampered-indexOf-2.html
 dom/nodes/NodeList-static-length-getter-tampered-indexOf-3.html
@@ -5856,6 +5867,7 @@ html/browsers/sandboxing/sandbox-inherited-from-initiator-frame.html
 html/browsers/sandboxing/sandbox-inherited-from-initiator-response.html
 html/browsers/sandboxing/sandbox-javascript-window-open.html
 html/browsers/sandboxing/sandbox-new-execution-context.html
+html/browsers/sandboxing/sandbox-popup-inherits-script-blocking.html
 html/browsers/the-window-object/Document-defaultView.html
 html/browsers/the-window-object/Window-document.html
 html/browsers/the-window-object/accessing-other-browsing-contexts/indexed-browsing-contexts-03.html
@@ -6495,7 +6507,6 @@ html/semantics/forms/the-input-element/input-stepup.html
 html/semantics/forms/the-input-element/input-submit-remove-jssubmit.html
 html/semantics/forms/the-input-element/input-type-button.html
 html/semantics/forms/the-input-element/input-type-change-empty-crash.html
-html/semantics/forms/the-input-element/input-type-change-submit.html
 html/semantics/forms/the-input-element/input-type-checkbox.html
 html/semantics/forms/the-input-element/input-type-number-rtl-invalid-crash.html
 html/semantics/forms/the-input-element/input-untrusted-key-event.html
@@ -8317,7 +8328,6 @@ service-workers/service-worker/fetch-request-no-freshness-headers.https.html
 service-workers/service-worker/getregistration.https.html
 service-workers/service-worker/immutable-prototype-serviceworker.https.html
 service-workers/service-worker/import-scripts-data-url.https.html
-service-workers/service-worker/import-scripts-mime-types.https.html
 service-workers/service-worker/indexeddb.https.html
 service-workers/service-worker/install-event-type.https.html
 service-workers/service-worker/installing.https.html
@@ -8342,7 +8352,6 @@ service-workers/service-worker/registration-basic.https.html
 service-workers/service-worker/registration-events.https.html
 service-workers/service-worker/registration-iframe.https.html
 service-workers/service-worker/rejections.https.html
-service-workers/service-worker/respond-with-body-accessed-response.https.html
 service-workers/service-worker/serviceworker-message-event-historical.https.html
 service-workers/service-worker/serviceworkerobject-scripturl.https.html
 service-workers/service-worker/state.https.html
@@ -8901,8 +8910,10 @@ trusted-types/should-sink-type-mismatch-violation-be-blocked-by-csp-003.html
 trusted-types/trusted-types-duplicate-names-list-report-only.html
 trusted-types/trusted-types-eval-reporting-no-unsafe-eval.html
 trusted-types/trusted-types-eval-reporting-report-only.html
-trusted-types/trusted-types-navigation.html?06-10
+trusted-types/trusted-types-navigation.html?01-05
+trusted-types/trusted-types-navigation.html?11-15
 trusted-types/trusted-types-navigation.html?16-20
+trusted-types/trusted-types-navigation.html?36-last
 trusted-types/trusted-types-reporting-for-DOMParser-parseFromString.html
 trusted-types/trusted-types-reporting-for-DedicatedWorker-DedicatedWorker-constructor.html
 trusted-types/trusted-types-reporting-for-DedicatedWorker-eval.html
@@ -8930,6 +8941,7 @@ trusted-types/trusted-types-reporting-for-SharedWorker-DedicatedWorker-construct
 trusted-types/trusted-types-reporting-for-SharedWorker-eval.html
 trusted-types/trusted-types-reporting-for-SharedWorker-function-constructor.html
 trusted-types/trusted-types-reporting-for-SharedWorker-importScripts.html
+trusted-types/trusted-types-reporting-for-SharedWorker-setTimeout-setInterval.html
 trusted-types/trusted-types-reporting-for-Window-DedicatedWorker-constructor.html
 trusted-types/trusted-types-reporting-for-Window-SharedWorker-constructor.html
 trusted-types/trusted-types-reporting-for-Window-eval.html
@@ -9519,14 +9531,12 @@ workers/interfaces/WorkerUtils/navigator/005.html
 workers/interfaces/WorkerUtils/navigator/006.html
 workers/interfaces/WorkerUtils/navigator/007.html
 workers/interfaces/WorkerUtils/navigator/language.html
-workers/modules/dedicated-worker-import-csp.html
 workers/modules/dedicated-worker-import-data-url-cross-origin.html
 workers/modules/dedicated-worker-import-failure.html
 workers/modules/dedicated-worker-import-meta.html
 workers/modules/dedicated-worker-options-type.html
 workers/modules/dedicated-worker-parse-error-failure.html
 workers/modules/shared-worker-import-csp.html
-workers/modules/shared-worker-import-data-url-cross-origin.html
 workers/modules/shared-worker-import-failure.html
 workers/modules/shared-worker-import-meta.html
 workers/modules/shared-worker-options-type.html
@@ -9646,7 +9656,6 @@ xhr/send-accept-language.htm
 xhr/send-after-setting-document-domain.htm
 xhr/send-blob-with-no-mime-type.html
 xhr/send-data-blob.htm
-xhr/send-entity-body-basic.htm
 xhr/send-entity-body-empty.htm
 xhr/send-entity-body-get-head-async.htm
 xhr/send-entity-body-get-head.htm
@@ -9676,10 +9685,8 @@ xhr/setrequestheader-bogus-name.htm
 xhr/setrequestheader-bogus-value.htm
 xhr/setrequestheader-case-insensitive.htm
 xhr/setrequestheader-header-allowed.htm
-xhr/setrequestheader-header-forbidden.htm
 xhr/setrequestheader-open-setrequestheader.htm
 xhr/status-async.htm
-xhr/status-basic.htm
 xhr/status-error.htm
 xhr/sync-xhr-and-window-onload.html
 xhr/template-element.html
@@ -9721,7 +9728,6 @@ xhr/xmlhttprequest-timeout-worker-overrides.html?timeout disabled after initiall
 xhr/xmlhttprequest-timeout-worker-overrides.html?timeout enabled after initially disabled
 xhr/xmlhttprequest-timeout-worker-overrides.html?timeout overrides load after a delay
 xhr/xmlhttprequest-timeout-worker-overridesexpires.html?timeout set to expired value before load fires
-xhr/xmlhttprequest-timeout-worker-overridesexpires.html?timeout set to expiring value after load fires
 xhr/xmlhttprequest-timeout-worker-overridesexpires.html?timeout set to non-expiring value after timeout fires
 xhr/xmlhttprequest-timeout-worker-simple.html?load fires normally
 xhr/xmlhttprequest-timeout-worker-simple.html?no time out scheduled, load fires normally
