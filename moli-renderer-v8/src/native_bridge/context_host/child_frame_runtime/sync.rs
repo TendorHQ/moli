@@ -140,6 +140,11 @@ impl JsContextHost {
         let Some(wrapper) = self.child_window_proxy_records.live_window(scope, handle) else {
             return;
         };
+        let Some(context) = wrapper.get_creation_context(scope) else {
+            return;
+        };
+        // Native history synchronization may be initiated by a foreign Window.
+        let scope = &mut v8::ContextScope::new(scope, context);
         let Some(entry_seed) = self
             .child_browsing_contexts
             .get(&handle)
