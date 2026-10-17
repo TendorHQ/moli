@@ -63,7 +63,6 @@ fetch/api/policies/referrer-no-referrer-service-worker.https.html
 fetch/api/policies/referrer-origin-service-worker.https.html
 fetch/api/policies/referrer-origin-when-cross-origin-service-worker.https.html
 fetch/api/policies/referrer-unsafe-url-service-worker.https.html
-fetch/nosniff/importscripts.html
 focus/hasfocus-different-site.html
 focus/hasfocus-same-site.html
 focus/nested-focus-within-iframe-focus-event.html
@@ -73,7 +72,6 @@ html/browsers/browsing-the-web/history-traversal/pageswap/pageswap-replace-navig
 html/browsers/browsing-the-web/navigating-across-documents/009.html
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/form-submit-popup.html
 html/browsers/browsing-the-web/navigating-across-documents/unknown-protocol-reload-crash.html
-html/browsers/history/the-history-interface/001.html
 html/browsers/history/the-history-interface/joint_session_history/002.html
 html/browsers/history/the-history-interface/traverse_the_history_1.html
 html/browsers/history/the-history-interface/traverse_the_history_unload_1.html
@@ -157,7 +155,6 @@ infrastructure/expected-fail/timeout.html
 navigation-api/navigate-event/defer/tentative/defer-back.html
 navigation-api/navigate-event/defer/tentative/defer-restore-callback-abort.html
 navigation-api/navigate-event/defer/tentative/defer-same-document.html
-navigation-api/navigate-event/intercept-cross-origin.html
 navigation-api/navigate-event/navigate-form-requestSubmit.html
 navigation-api/navigation-activation/activation-traverse-not-in-entries.html
 navigation-api/navigation-methods/return-value/traverseTo-detach-cross-document-before-navigate-event.html
@@ -180,6 +177,7 @@ page-visibility/onvisibilitychange.html
 page-visibility/unload-bubbles.html
 page-visibility/unload.html
 preload/preload-link-cached-stylesheet-different-doc.html
+print/crashtests/reload-crash.html
 requestidlecallback/callback-suspended.html
 resource-timing/input-sequence-of-events.html
 resource-timing/tentative/initiator-url/post-message-shared-worker.html
@@ -222,7 +220,6 @@ service-workers/service-worker/skip-waiting-without-client.https.html
 service-workers/service-worker/unregister-immediately-before-installed.https.html
 service-workers/service-worker/unregister-immediately-during-extendable-events.https.html
 streams/transferable/deserialize-error.window.js?moli-wpt-script=window
-streams/writable-streams/garbage-collection.any.js?moli-wpt-any=dedicatedworker
 svg/linking/scripted/href-animate-element.html
 svg/linking/scripted/href-mpath-element.html
 svg/linking/scripted/href-script-element.html

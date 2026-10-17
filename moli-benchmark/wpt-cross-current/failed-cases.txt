@@ -230,7 +230,6 @@ css/css-flexbox/css-flexbox-row-wrap-reverse.html
 css/css-flexbox/css-flexbox-row-wrap.html
 css/css-flexbox/css-flexbox-row.html
 css/css-flexbox/css-flexbox-test1.html
-css/css-flexbox/dynamic-isize-change-004.html
 css/css-flexbox/fieldset-baseline-alignment.html
 css/css-flexbox/flex-aspect-ratio-img-column-011.html
 css/css-flexbox/flex-aspect-ratio-img-column-017.html
@@ -808,7 +807,6 @@ css/css-grid/grid-important.html
 css/css-grid/grid-item-non-auto-height-stretch-001.html
 css/css-grid/grid-item-non-auto-height-stretch-003.html
 css/css-grid/grid-items/grid-auto-margin-and-replaced-item-001.html
-css/css-grid/grid-items/grid-automatic-minimum-intrinsic-aspect-ratio-001.html
 css/css-grid/grid-items/grid-intrinsic-maximums.html
 css/css-grid/grid-items/grid-item-dynamic-min-contribution-001.html
 css/css-grid/grid-items/grid-item-flex-container-001.html
@@ -1698,8 +1696,6 @@ css/css-sizing/aspect-ratio/flex-aspect-ratio-053.html
 css/css-sizing/aspect-ratio/flex-aspect-ratio-054.html
 css/css-sizing/aspect-ratio/floats-aspect-ratio-001.html
 css/css-sizing/aspect-ratio/grid-aspect-ratio-018.html
-css/css-sizing/aspect-ratio/grid-aspect-ratio-022.html
-css/css-sizing/aspect-ratio/grid-aspect-ratio-024.html
 css/css-sizing/aspect-ratio/grid-aspect-ratio-027.html
 css/css-sizing/aspect-ratio/grid-aspect-ratio-028.html
 css/css-sizing/aspect-ratio/grid-aspect-ratio-029.html
@@ -2784,6 +2780,7 @@ html/browsers/browsing-the-web/unloading-documents/beforeunload-on-navigation-of
 html/browsers/browsing-the-web/unloading-documents/beforeunload-synchronous.html
 html/browsers/browsing-the-web/unloading-documents/navigation-during-beforeunload.html
 html/browsers/browsing-the-web/unloading-documents/prompt/001.html
+html/browsers/history/the-history-interface/001.html
 html/browsers/history/the-history-interface/005.html
 html/browsers/history/the-history-interface/009.html
 html/browsers/history/the-history-interface/010.html
@@ -2985,6 +2982,7 @@ html/semantics/embedded-content/the-iframe-element/sandbox-ascii-case-insensitiv
 html/semantics/embedded-content/the-iframe-element/sandbox-inherit-to-blank-document-unsandboxed.html
 html/semantics/embedded-content/the-iframe-element/sandbox_011.htm
 html/semantics/embedded-content/the-iframe-element/sandbox_029.htm
+html/semantics/embedded-content/the-iframe-element/src-repeated-in-ancestor.html
 html/semantics/embedded-content/the-img-element/current-pixel-density/error.html
 html/semantics/embedded-content/the-img-element/currentSrc-blob-cache.html
 html/semantics/embedded-content/the-img-element/decode/image-decode-image-document.html
@@ -3617,4 +3615,5 @@ xhr/send-entity-body-document-bogus.htm
 xhr/send-entity-body-document.htm
 xhr/send-no-response-event-order.htm
 xhr/send-receive-utf16.htm
+xhr/setrequestheader-content-type.htm
 xml/xml-prolog-accepted-versions.html
