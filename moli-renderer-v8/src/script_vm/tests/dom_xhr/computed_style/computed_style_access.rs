@@ -1192,17 +1192,16 @@ fn detached_nested_iframe_window_get_computed_style_uses_iframe_width() {
 }
 
 #[test]
-fn detached_iframe_computed_style_keeps_pseudo_and_target_identity() {
+fn live_iframe_computed_style_keeps_pseudo_and_target_identity() {
     let mut vm = new_storage_test_vm("https://detached-iframe-computed-pseudo.test/");
 
     let result = vm
         .eval(
             r#"
 (() => {
-  const detachedDocument = document.implementation.createHTMLDocument('');
-  const frame = detachedDocument.createElement('iframe');
+  const frame = document.createElement('iframe');
   frame.setAttribute('width', '220');
-  frame.srcdoc = `
+  const frameMarkup = `
     <style>
       body { color: rgb(255, 0, 0); background-color: rgb(1, 2, 3); }
       body::before { content: "x"; color: rgb(0, 128, 0); }
@@ -1211,7 +1210,13 @@ fn detached_iframe_computed_style_keeps_pseudo_and_target_identity() {
       }
     </style>
     <body>text</body>`;
-  detachedDocument.body.appendChild(frame);
+  const frameRoot = document.documentElement || document.appendChild(document.createElement('html'));
+  const frameParent = document.body || frameRoot.appendChild(document.createElement('body'));
+  frameParent.appendChild(frame);
+  const initialDocument = frame.contentDocument;
+  initialDocument.open();
+  initialDocument.write(frameMarkup);
+  initialDocument.close();
 
   const childDocument = frame.contentDocument;
   const target = childDocument.body;
@@ -1227,7 +1232,7 @@ fn detached_iframe_computed_style_keeps_pseudo_and_target_identity() {
     after.color,
     highlight.length > 200,
     highlight.color,
-    topOrigin.length,
+    topOrigin.color === origin.color,
     origin.color,
     origin.backgroundColor,
     before.color,
@@ -1237,16 +1242,16 @@ fn detached_iframe_computed_style_keeps_pseudo_and_target_identity() {
 })()
 "#,
         )
-        .expect("detached iframe computed pseudo style should evaluate");
+        .expect("live iframe computed pseudo style should evaluate");
 
     assert_eq!(
         result,
-        "rgb(255, 0, 0)|rgb(1, 2, 3)|rgb(0, 128, 0)|rgb(0, 0, 255)|true|rgb(255, 0, 0)|0|rgb(255, 0, 0)|rgb(1, 2, 3)|rgb(0, 128, 0)|rgb(0, 0, 255)|true"
+        "rgb(255, 0, 0)|rgb(1, 2, 3)|rgb(0, 128, 0)|rgb(0, 0, 255)|true|rgb(255, 0, 0)|true|rgb(255, 0, 0)|rgb(1, 2, 3)|rgb(0, 128, 0)|rgb(0, 0, 255)|true"
     );
 }
 
 #[test]
-fn held_detached_iframe_computed_style_uses_target_owner_sources_after_adoption() {
+fn held_live_iframe_computed_style_uses_target_owner_sources_after_adoption() {
     let mut vm = new_storage_test_vm("https://detached-iframe-held-owner-source.test/");
 
     let result = vm
@@ -1273,9 +1278,8 @@ fn held_detached_iframe_computed_style_uses_target_owner_sources_after_adoption(
   `;
   head.appendChild(activeStyle);
 
-  const detachedDocument = document.implementation.createHTMLDocument('');
-  const frame = detachedDocument.createElement('iframe');
-  frame.srcdoc = `
+  const frame = document.createElement('iframe');
+  const frameMarkup = `
     <style>
       #cross-doc-target {
         color: rgb(255, 0, 0);
@@ -1284,7 +1288,13 @@ fn held_detached_iframe_computed_style_uses_target_owner_sources_after_adoption(
       }
     </style>
     <body><div id="cross-doc-target">x</div></body>`;
-  detachedDocument.body.appendChild(frame);
+  const frameRoot = document.documentElement || document.appendChild(document.createElement('html'));
+  const frameParent = document.body || frameRoot.appendChild(document.createElement('body'));
+  frameParent.appendChild(frame);
+  const initialDocument = frame.contentDocument;
+  initialDocument.open();
+  initialDocument.write(frameMarkup);
+  initialDocument.close();
 
   const childWindow = frame.contentWindow;
   const childDocument = frame.contentDocument;
@@ -1306,7 +1316,7 @@ fn held_detached_iframe_computed_style_uses_target_owner_sources_after_adoption(
 })()
 "#,
         )
-        .expect("held detached iframe computed style should use target owner sources");
+        .expect("held live iframe computed style should use target owner sources");
 
     assert_eq!(
         result,
@@ -1315,7 +1325,7 @@ fn held_detached_iframe_computed_style_uses_target_owner_sources_after_adoption(
 }
 
 #[test]
-fn held_detached_iframe_custom_property_animation_uses_target_owner_registry_after_adoption() {
+fn held_live_iframe_custom_property_animation_uses_target_owner_registry_after_adoption() {
     let mut vm = new_storage_test_vm("https://detached-iframe-held-custom-animation.test/");
 
     let result = vm
@@ -1345,10 +1355,15 @@ fn held_detached_iframe_custom_property_animation_uses_target_owner_registry_aft
   `;
   head.appendChild(activeStyle);
 
-  const detachedDocument = document.implementation.createHTMLDocument('');
-  const frame = detachedDocument.createElement('iframe');
-  frame.srcdoc = '<body><div id="held-animation-target">x</div></body>';
-  detachedDocument.body.appendChild(frame);
+  const frame = document.createElement('iframe');
+  const frameMarkup = '<body><div id="held-animation-target">x</div></body>';
+  const frameRoot = document.documentElement || document.appendChild(document.createElement('html'));
+  const frameParent = document.body || frameRoot.appendChild(document.createElement('body'));
+  frameParent.appendChild(frame);
+  const initialDocument = frame.contentDocument;
+  initialDocument.open();
+  initialDocument.write(frameMarkup);
+  initialDocument.close();
 
   const childWindow = frame.contentWindow;
   const childDocument = childWindow.document;
@@ -1365,23 +1380,22 @@ fn held_detached_iframe_custom_property_animation_uses_target_owner_registry_aft
 })()
 "#,
         )
-        .expect("held detached iframe custom property animation should use target owner registry");
+        .expect("held live iframe custom property animation should use target owner registry");
 
     assert_eq!(result, "true|20px|20px");
 }
 
 #[test]
-fn detached_iframe_attribute_mutation_targets_computed_style_cache() {
+fn live_iframe_attribute_mutation_targets_computed_style_cache() {
     let mut vm = new_storage_test_vm("https://detached-iframe-attribute-style-cache.test/");
 
     let before = vm
         .eval(
             r#"
 (() => {
-  const detachedDocument = document.implementation.createHTMLDocument('');
-  const frame = detachedDocument.createElement('iframe');
+  const frame = document.createElement('iframe');
   frame.id = 'detached-attribute-style-frame';
-  frame.srcdoc = `
+  const frameMarkup = `
     <style>
       #detached-attribute-outside { color: rgb(1, 2, 3); }
       #detached-attribute-target { color: rgb(7, 8, 9); }
@@ -1391,7 +1405,13 @@ fn detached_iframe_attribute_mutation_targets_computed_style_cache() {
       <section><div id="detached-attribute-outside">outside</div></section>
       <section><div id="detached-attribute-target">target</div></section>
     </body>`;
-  detachedDocument.body.appendChild(frame);
+  const frameRoot = document.documentElement || document.appendChild(document.createElement('html'));
+  const frameParent = document.body || frameRoot.appendChild(document.createElement('body'));
+  frameParent.appendChild(frame);
+  const initialDocument = frame.contentDocument;
+  initialDocument.open();
+  initialDocument.write(frameMarkup);
+  initialDocument.close();
 
   const childDocument = frame.contentDocument;
   globalThis.__detachedAttributeStyleFrame = frame;
@@ -1405,7 +1425,7 @@ fn detached_iframe_attribute_mutation_targets_computed_style_cache() {
 })()
 "#,
         )
-        .expect("detached iframe attribute style cache setup should evaluate");
+        .expect("live iframe attribute style cache setup should evaluate");
 
     assert_eq!(before, "rgb(1, 2, 3)|rgb(7, 8, 9)");
     let child_document = owner_document_handle_for_element_id(&vm, "detached-attribute-target");
@@ -1424,7 +1444,7 @@ fn detached_iframe_attribute_mutation_targets_computed_style_cache() {
 })()
 "#,
     )
-    .expect("detached iframe attribute mutation should evaluate");
+    .expect("live iframe attribute mutation should evaluate");
     assert_eq!(mutation_result, "active|true|true");
 
     let after = vm
@@ -1443,7 +1463,7 @@ fn detached_iframe_attribute_mutation_targets_computed_style_cache() {
 })()
 "#,
         )
-        .expect("detached iframe attribute style cache mutation should evaluate");
+        .expect("live iframe attribute style cache mutation should evaluate");
 
     assert_eq!(after, "rgb(1, 2, 3)|rgb(4, 5, 6)|rgb(4, 5, 6)");
     assert!(computed_style_cache_entry_count_for_document(&vm, child_document) > 0);

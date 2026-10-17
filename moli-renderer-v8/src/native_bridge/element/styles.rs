@@ -117,13 +117,14 @@ fn style_object_forces_empty_computed<'s>(
     }
     let empty = match bridge_handle {
         BridgeHandle::ComputedStyle(handle, ref descriptor) => match descriptor.target {
-            ComputedStyleTargetKey::ChildFrame(frame_handle) => {
+            ComputedStyleTargetKey::ChildFrame(_) => {
                 let runtime = unsafe { &*runtime_ptr };
-                let empty = !child_frame_target_document_is_current(runtime, handle, frame_handle)
-                    || style_property_value(runtime, frame_handle, StyleMode::Computed, "display")
-                        == "none";
+                // A live declaration follows its Element after adoption. An
+                // outgoing Document still becomes empty when it is retired.
+                let context = computed_style_target_context(scope, runtime, handle, None);
+                let empty = context.returns_empty_style();
                 cache_target_empty_context(scope, runtime, style, empty);
-                cache_frame_viewport(scope, runtime, style, frame_handle);
+                cache_computed_viewport(scope, style, (!empty).then(|| context.viewport(runtime)));
                 empty
             }
             ComputedStyleTargetKey::DetachedIframe(frame_handle) => {
@@ -149,20 +150,6 @@ fn style_object_forces_empty_computed<'s>(
         unsafe { &*runtime_ptr }.retire_computed_style_for_inactive_handle(handle);
     }
     empty
-}
-
-fn child_frame_target_document_is_current(
-    runtime: &JsContextHost,
-    target: DomHandle,
-    frame_handle: DomHandle,
-) -> bool {
-    let target_document = runtime
-        .dom_host()
-        .node(target)
-        .and_then(crate::dom::native::Node::owner_document);
-    runtime
-        .child_browsing_context_document_handle(frame_handle)
-        .is_some_and(|document| Some(document) == target_document)
 }
 
 fn popup_document_target_is_current(
@@ -240,13 +227,11 @@ fn cache_target_empty_context<'s>(
     );
 }
 
-fn cache_frame_viewport<'s>(
+fn cache_computed_viewport<'s>(
     scope: &mut v8::PinScope<'s, '_>,
-    runtime: &JsContextHost,
     style: v8::Local<'s, v8::Object>,
-    frame_handle: DomHandle,
+    viewport: Option<StyleViewport>,
 ) {
-    let viewport = iframe_handle_viewport(runtime, frame_handle);
     let width = viewport
         .and_then(|viewport| viewport.width)
         .map(|width| v8::Number::new(scope, width).into())
@@ -378,7 +363,7 @@ fn live_computed_style_viewport<'s>(
     };
     let runtime = unsafe { &*runtime_ptr };
     match descriptor.target {
-        ComputedStyleTargetKey::Dynamic => {
+        ComputedStyleTargetKey::Dynamic | ComputedStyleTargetKey::ChildFrame(_) => {
             if let Some(frame) = computed_style_target_child_frame_handle(scope, runtime, handle) {
                 return iframe_handle_viewport(runtime, frame);
             }
@@ -388,14 +373,9 @@ fn live_computed_style_viewport<'s>(
             let document = runtime.dom_host().owner_document_handle(handle)?;
             Some(style_viewport_for_document(runtime, document))
         }
-        ComputedStyleTargetKey::ChildFrame(frame)
-            if child_frame_target_document_is_current(runtime, handle, frame) =>
-        {
-            iframe_handle_viewport(runtime, frame)
+        ComputedStyleTargetKey::DetachedIframe(_) | ComputedStyleTargetKey::PopupDocument(_) => {
+            None
         }
-        ComputedStyleTargetKey::ChildFrame(_)
-        | ComputedStyleTargetKey::DetachedIframe(_)
-        | ComputedStyleTargetKey::PopupDocument(_) => None,
     }
 }
 
