@@ -2673,7 +2673,6 @@ editing/run/underline.html?2001-last
 editing/run/undo-redo-after-mutation.html
 editing/run/unlink.html
 encrypted-media/missing-sinf.html
-event-timing/supported-types-consistent-with-self.html
 eventsource/dedicated-worker/eventsource-close.htm
 eventsource/dedicated-worker/eventsource-close2.htm
 eventsource/dedicated-worker/eventsource-constructor-non-same-origin.htm
@@ -2714,6 +2713,7 @@ fullscreen/api/element-request-fullscreen-not-allowed.html
 fullscreen/api/promises-reject.html
 gyroscope/Gyroscope-supported-by-permissions-policy.html
 hr-time/test_cross_frame_start.html
+html/browsers/browsing-the-web/back-forward-cache/eligibility/broadcast-channel.html
 html/browsers/browsing-the-web/back-forward-cache/eligibility/dedicated-worker.html
 html/browsers/browsing-the-web/back-forward-cache/eligibility/shared-worker.html
 html/browsers/browsing-the-web/back-forward-cache/events.html
@@ -2784,7 +2784,6 @@ html/browsers/browsing-the-web/unloading-documents/beforeunload-on-navigation-of
 html/browsers/browsing-the-web/unloading-documents/beforeunload-synchronous.html
 html/browsers/browsing-the-web/unloading-documents/navigation-during-beforeunload.html
 html/browsers/browsing-the-web/unloading-documents/prompt/001.html
-html/browsers/history/the-history-interface/001.html
 html/browsers/history/the-history-interface/005.html
 html/browsers/history/the-history-interface/009.html
 html/browsers/history/the-history-interface/010.html
@@ -2986,7 +2985,6 @@ html/semantics/embedded-content/the-iframe-element/sandbox-ascii-case-insensitiv
 html/semantics/embedded-content/the-iframe-element/sandbox-inherit-to-blank-document-unsandboxed.html
 html/semantics/embedded-content/the-iframe-element/sandbox_011.htm
 html/semantics/embedded-content/the-iframe-element/sandbox_029.htm
-html/semantics/embedded-content/the-iframe-element/src-repeated-in-ancestor.html
 html/semantics/embedded-content/the-img-element/current-pixel-density/error.html
 html/semantics/embedded-content/the-img-element/currentSrc-blob-cache.html
 html/semantics/embedded-content/the-img-element/decode/image-decode-image-document.html
@@ -3012,7 +3010,6 @@ html/semantics/embedded-content/the-img-element/relevant-mutations-lazy.html
 html/semantics/embedded-content/the-img-element/relevant-mutations.html
 html/semantics/embedded-content/the-img-element/sizes/parse-a-sizes-attribute-display-none.html
 html/semantics/embedded-content/the-img-element/sizes/parse-a-sizes-attribute-quirks-mode.html
-html/semantics/embedded-content/the-img-element/sizes/parse-a-sizes-attribute-standards-mode.html
 html/semantics/embedded-content/the-img-element/sizes/parse-a-sizes-attribute-width-1000px.html
 html/semantics/embedded-content/the-img-element/source-media-outside-doc.html
 html/semantics/embedded-content/the-img-element/source-relevant-mutations.html
@@ -3090,7 +3087,6 @@ html/semantics/popovers/popover-stacking.html
 html/semantics/popovers/popover-types-with-hints.html
 html/semantics/scripting-1/the-script-element/execution-timing/083.html
 html/semantics/scripting-1/the-script-element/execution-timing/085.html
-html/semantics/scripting-1/the-script-element/execution-timing/122.html
 html/semantics/scripting-1/the-script-element/execution-timing/128.html
 html/semantics/scripting-1/the-script-element/execution-timing/137.html
 html/semantics/scripting-1/the-script-element/json-module/cors-crossorigin-requests.html
@@ -3234,9 +3230,6 @@ longtask-timing/longtask-tojson.html
 longtask-timing/shared-renderer/longtask-in-new-window.html
 magnetometer/Magnetometer-supported-by-permissions-policy.html
 mediacapture-insertable-streams/legacy/MediaStreamTrackGenerator-in-service-worker.https.html
-navigation-api/navigate-event/cross-window/click-crossdocument-crossorigin.html
-navigation-api/navigate-event/cross-window/location-crossdocument-crossorigin.html
-navigation-api/navigate-event/cross-window/open-crossdocument-crossorigin.html
 navigation-api/navigate-event/dangling-navigate-event-after-bfcache-restore.html
 navigation-api/navigate-event/defer/tentative/defer-with-multiple-handlers-and-single-reject.html
 navigation-api/navigate-event/defer/tentative/defer-with-multiple-handlers.html
@@ -3244,12 +3237,13 @@ navigation-api/navigate-event/defer/tentative/defer-with-single-handler-reject.h
 navigation-api/navigate-event/defer/tentative/defer-with-single-handler.html
 navigation-api/navigate-event/defer/tentative/restore-after-bfcache.html
 navigation-api/navigate-event/intercept-detach-multiple.html
+navigation-api/navigate-event/navigate-history-back-bfcache.html
 navigation-api/navigate-event/navigation-back-cross-document-preventDefault.html
 navigation-api/navigate-event/navigation-traverseTo-in-iframe-same-document-preventDefault.html
 navigation-api/navigation-activation/activation-after-bfcache-cross-origin.html
-navigation-api/navigation-activation/activation-push-cross-origin.html
+navigation-api/navigation-activation/activation-after-bfcache.html
 navigation-api/navigation-history-entry/entries-after-bfcache-in-iframe.html
-navigation-api/navigation-history-entry/entries-after-blank-navigation-from-cross-origin.html
+navigation-api/navigation-history-entry/entries-after-bfcache.html
 navigation-api/navigation-methods/reload-service-worker-fetch-event.html
 navigation-api/navigation-methods/return-value/back-204-205-download.html
 navigation-api/navigation-methods/sandboxing-back-parent.html
@@ -3594,7 +3588,6 @@ workers/SharedWorker-extendedLifetime-named-module.html
 workers/SharedWorker-extendedLifetime.html
 workers/WorkerNavigator_platform.htm
 workers/interfaces/SharedWorkerGlobalScope/onconnect.html
-workers/interfaces/WorkerGlobalScope/onerror/exception-in-onerror.html
 workers/semantics/structured-clone/dedicated.html
 workers/semantics/structured-clone/shared.html
 worklets/animation-worklet-service-worker-interception.https.html
@@ -3624,6 +3617,4 @@ xhr/send-entity-body-document-bogus.htm
 xhr/send-entity-body-document.htm
 xhr/send-no-response-event-order.htm
 xhr/send-receive-utf16.htm
-xhr/setrequestheader-content-type.htm
-xhr/xmlhttprequest-timeout-worker-overridesexpires.html?timeout set to non-expiring value after timeout fires
 xml/xml-prolog-accepted-versions.html

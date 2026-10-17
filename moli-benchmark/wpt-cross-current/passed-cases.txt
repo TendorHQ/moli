@@ -5575,6 +5575,7 @@ encoding/sniffing.html
 encoding/streams/stringification-crash.html
 encoding/utf-32-from-win1252.html
 encoding/utf-32.html
+event-timing/supported-types-consistent-with-self.html
 fetch/api/abort/destroyed-context.html
 fetch/api/cors/data-url-iframe.html
 fetch/api/cors/data-url-shared-worker.html
@@ -5599,7 +5600,6 @@ fetch/api/response/multi-globals/url-parsing.html
 fetch/api/response/response-body-read-task-handling.html
 fetch/api/response/response-form-data.html
 fetch/content-length/content-length.html
-fetch/nosniff/importscripts.html
 fetch/security/dangling-markup/media.html
 focus/activeelement-after-focusing-different-site-iframe-then-immediately-focusing-back.html
 focus/activeelement-after-immediately-focusing-different-site-iframe.html
@@ -6142,8 +6142,10 @@ html/semantics/document-metadata/the-meta-element/color-scheme/meta-color-scheme
 html/semantics/document-metadata/the-meta-element/http-equiv-and-name-1.html
 html/semantics/document-metadata/the-meta-element/http-equiv-and-name-2.html
 html/semantics/document-metadata/the-meta-element/pragma-directives/attr-meta-http-equiv-refresh/allow-scripts-flag-changing-1.html
+html/semantics/document-metadata/the-meta-element/pragma-directives/attr-meta-http-equiv-refresh/allow-scripts-flag-changing-2.html
 html/semantics/document-metadata/the-meta-element/pragma-directives/attr-meta-http-equiv-refresh/dynamic-append.html
 html/semantics/document-metadata/the-meta-element/pragma-directives/attr-meta-http-equiv-refresh/not-in-shadow-tree.html
+html/semantics/document-metadata/the-meta-element/pragma-directives/attr-meta-http-equiv-refresh/remove-from-document.html
 html/semantics/document-metadata/the-meta-element/pragma-directives/http-equiv-enumerated-ascii-case-insensitive.html
 html/semantics/document-metadata/the-meta-element/the-lang-attribute-012.html
 html/semantics/document-metadata/the-style-element/historical.html
@@ -6264,6 +6266,7 @@ html/semantics/embedded-content/the-iframe-element/sandbox_028.htm
 html/semantics/embedded-content/the-iframe-element/sandbox_030.htm
 html/semantics/embedded-content/the-iframe-element/sandbox_031.htm
 html/semantics/embedded-content/the-iframe-element/sandbox_032.htm
+html/semantics/embedded-content/the-iframe-element/src-repeated-in-ancestor.html
 html/semantics/embedded-content/the-iframe-element/srcdoc-anchor.html
 html/semantics/embedded-content/the-iframe-element/srcdoc-attribute-reset.html
 html/semantics/embedded-content/the-iframe-element/srcdoc-removed-iframe-crash.html
@@ -6860,6 +6863,7 @@ html/semantics/scripting-1/the-script-element/execution-timing/118.html
 html/semantics/scripting-1/the-script-element/execution-timing/119.html
 html/semantics/scripting-1/the-script-element/execution-timing/120.html
 html/semantics/scripting-1/the-script-element/execution-timing/121.html
+html/semantics/scripting-1/the-script-element/execution-timing/122.html
 html/semantics/scripting-1/the-script-element/execution-timing/123.html
 html/semantics/scripting-1/the-script-element/execution-timing/124.html
 html/semantics/scripting-1/the-script-element/execution-timing/125.html
@@ -7638,12 +7642,15 @@ navigation-api/focus-reset/change-focus-during-intercept.html
 navigation-api/focus-reset/change-focus-then-remove-during-intercept.html
 navigation-api/focus-reset/focus-reset-timing.html
 navigation-api/navigate-event/cross-origin-traversal-does-not-fire-navigate.html
+navigation-api/navigate-event/cross-window/click-crossdocument-crossorigin.html
 navigation-api/navigate-event/cross-window/click-crossdocument-sameorigin.html
 navigation-api/navigate-event/cross-window/click-samedocument-crossorigin.html
 navigation-api/navigate-event/cross-window/click-samedocument-sameorigin.html
+navigation-api/navigate-event/cross-window/location-crossdocument-crossorigin.html
 navigation-api/navigate-event/cross-window/location-crossdocument-sameorigin.html
 navigation-api/navigate-event/cross-window/location-samedocument-crossorigin.html
 navigation-api/navigate-event/cross-window/location-samedocument-sameorigin.html
+navigation-api/navigate-event/cross-window/open-crossdocument-crossorigin.html
 navigation-api/navigate-event/cross-window/open-crossdocument-sameorigin.html
 navigation-api/navigate-event/cross-window/open-samedocument-crossorigin.html
 navigation-api/navigate-event/cross-window/open-samedocument-sameorigin.html
@@ -7734,6 +7741,7 @@ navigation-api/navigate-event/traverseTo-detach.html
 navigation-api/navigation-activation/activation-history-pushState.html
 navigation-api/navigation-activation/activation-history-replaceState.html
 navigation-api/navigation-activation/activation-initial-about-blank.html
+navigation-api/navigation-activation/activation-push-cross-origin.html
 navigation-api/navigation-activation/activation-push.html
 navigation-api/navigation-activation/activation-reload.html
 navigation-api/navigation-activation/activation-replace-cross-origin.html
@@ -7744,6 +7752,7 @@ navigation-api/navigation-activation/activation-traverse.html
 navigation-api/navigation-history-entry/after-detach.html
 navigation-api/navigation-history-entry/current-basic.html
 navigation-api/navigation-history-entry/entries-across-origins.html
+navigation-api/navigation-history-entry/entries-after-blank-navigation-from-cross-origin.html
 navigation-api/navigation-history-entry/entries-after-blank-navigation.html
 navigation-api/navigation-history-entry/entries-after-blob-navigation.html
 navigation-api/navigation-history-entry/entries-after-cross-document-forward-pruning.html
@@ -8155,6 +8164,9 @@ resource-timing/initiator-type/img.html
 resource-timing/initiator-type/script.html
 resource-timing/internal-resources-not-counted.html
 resource-timing/link-sequence-of-events.html
+resource-timing/nested-context-navigations-embed.html
+resource-timing/nested-context-navigations-iframe.html
+resource-timing/nested-context-navigations-object.html
 resource-timing/queue-entry-regardless-buffer-size.html
 resource-timing/resource-ignore-data-url.html
 resource-timing/resource-timing-failed-fetch.html
@@ -8646,7 +8658,6 @@ streams/writable-streams/error.any.js?moli-wpt-any=dedicatedworker
 streams/writable-streams/error.any.js?moli-wpt-any=window
 streams/writable-streams/floating-point-total-queue-size.any.js?moli-wpt-any=dedicatedworker
 streams/writable-streams/floating-point-total-queue-size.any.js?moli-wpt-any=window
-streams/writable-streams/garbage-collection.any.js?moli-wpt-any=dedicatedworker
 streams/writable-streams/garbage-collection.any.js?moli-wpt-any=window
 streams/writable-streams/general.any.js?moli-wpt-any=dedicatedworker
 streams/writable-streams/general.any.js?moli-wpt-any=window
@@ -8886,7 +8897,10 @@ trusted-types/trusted-types-duplicate-names-list-report-only.html
 trusted-types/trusted-types-eval-reporting-no-unsafe-eval.html
 trusted-types/trusted-types-eval-reporting-report-only.html
 trusted-types/trusted-types-navigation.html?01-05
+trusted-types/trusted-types-navigation.html?06-10
+trusted-types/trusted-types-navigation.html?11-15
 trusted-types/trusted-types-navigation.html?16-20
+trusted-types/trusted-types-navigation.html?36-last
 trusted-types/trusted-types-reporting-for-DOMParser-parseFromString.html
 trusted-types/trusted-types-reporting-for-DedicatedWorker-DedicatedWorker-constructor.html
 trusted-types/trusted-types-reporting-for-DedicatedWorker-eval.html
@@ -8914,7 +8928,6 @@ trusted-types/trusted-types-reporting-for-SharedWorker-DedicatedWorker-construct
 trusted-types/trusted-types-reporting-for-SharedWorker-eval.html
 trusted-types/trusted-types-reporting-for-SharedWorker-function-constructor.html
 trusted-types/trusted-types-reporting-for-SharedWorker-importScripts.html
-trusted-types/trusted-types-reporting-for-SharedWorker-setTimeout-setInterval.html
 trusted-types/trusted-types-reporting-for-Window-DedicatedWorker-constructor.html
 trusted-types/trusted-types-reporting-for-Window-SharedWorker-constructor.html
 trusted-types/trusted-types-reporting-for-Window-eval.html
@@ -9474,6 +9487,7 @@ workers/interfaces/WorkerGlobalScope/close/setTimeout.html
 workers/interfaces/WorkerGlobalScope/location/members.html
 workers/interfaces/WorkerGlobalScope/location/setting-members.html
 workers/interfaces/WorkerGlobalScope/location/worker-separate-file.html
+workers/interfaces/WorkerGlobalScope/onerror/exception-in-onerror.html
 workers/interfaces/WorkerGlobalScope/onerror/handled.html
 workers/interfaces/WorkerGlobalScope/onerror/message-classic-DOMException.html
 workers/interfaces/WorkerGlobalScope/onerror/message-classic-Error.html
@@ -9706,6 +9720,7 @@ xhr/xmlhttprequest-timeout-worker-overrides.html?timeout enabled after initially
 xhr/xmlhttprequest-timeout-worker-overrides.html?timeout overrides load after a delay
 xhr/xmlhttprequest-timeout-worker-overridesexpires.html?timeout set to expired value before load fires
 xhr/xmlhttprequest-timeout-worker-overridesexpires.html?timeout set to expiring value after load fires
+xhr/xmlhttprequest-timeout-worker-overridesexpires.html?timeout set to non-expiring value after timeout fires
 xhr/xmlhttprequest-timeout-worker-simple.html?load fires normally
 xhr/xmlhttprequest-timeout-worker-simple.html?no time out scheduled, load fires normally
 xhr/xmlhttprequest-timeout-worker-simple.html?timeout hit before load
