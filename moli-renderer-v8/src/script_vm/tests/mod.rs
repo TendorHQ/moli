@@ -1,6 +1,7 @@
 mod beforeinput_target_validation;
 mod credential_container;
 mod credential_json_options;
+mod current_pass_css_fonts;
 mod picture_in_picture_interfaces;
 mod visual_viewport_receiver;
 mod writable_stream_native_receivers;
