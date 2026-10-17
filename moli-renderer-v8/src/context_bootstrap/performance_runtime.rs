@@ -6,6 +6,8 @@ mod install;
 mod lazy_subobjects;
 mod marks_measures;
 mod memory;
+mod name;
+pub(in crate::context_bootstrap) use name::PerformanceEntryName;
 mod resource_buffer;
 mod window_state;
 
@@ -421,7 +423,7 @@ fn append_resource_performance_entry<'s>(
         scope,
         performance,
         "resource",
-        &entry.name,
+        entry.name.into(),
         start_time,
         0.0,
         None,
