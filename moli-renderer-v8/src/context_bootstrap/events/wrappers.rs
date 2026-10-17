@@ -153,12 +153,12 @@ pub(crate) fn new_event_wrapper<'s>(
     Some(wrapper)
 }
 
-/// Project another Realm of the same live Window through the existing weak
-/// Event cache. The dispatch state stays shared and same-world identity stays
-/// intact. Foreign-Window callbacks retain their existing behavior: resolving
-/// an isolated world of another target Window requires an alias/world resolver
-/// that this path does not yet provide.
-pub(crate) fn window_event_callback_values<'s>(
+/// Project DOM and Window listeners of the same live Window through their
+/// existing world caches. The dispatch state stays shared and same-world
+/// identity stays intact. Foreign-Window callbacks retain their existing
+/// behavior: resolving an isolated world of another target Window requires an
+/// alias/world resolver that this path does not yet provide.
+pub(crate) fn event_callback_values<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     receiver: v8::Local<'s, v8::Value>,
     event: v8::Local<'s, v8::Object>,
@@ -167,9 +167,10 @@ pub(crate) fn window_event_callback_values<'s>(
     let Ok(target) = v8::Local::<v8::Object>::try_from(receiver) else {
         return Some((receiver, event));
     };
-    let Some(target) =
-        super::super::shared_event_targets::window_target_in_realm(scope, target, context)
-    else {
+    let Some(target) = super::super::shared_event_targets::window_target_in_realm(
+        scope, target, context,
+    )
+    .or_else(|| super::super::shared_event_targets::node_target_in_realm(scope, target, context)) else {
         return Some((receiver, event));
     };
     if world_wrappers::belongs_to_world(scope, event, context) {
