@@ -197,6 +197,13 @@
 //! execute JavaScript or throw. Use it for checks that additionally require
 //! native resource state; ordinary interface checks should use their descriptor.
 //!
+//! `receiver_access_check` enables V8's receiver access check before invoking
+//! native methods and accessor callbacks. Window bindings use it to reject
+//! cross-origin borrowed calls before argument conversion or a realm switch.
+//! It can be a struct default or a member policy. A member can use `false` to
+//! allow cross-origin calls, or `"getter"` / `"setter"` to check only that half
+//! of an accessor. Interface brand checks remain a separate policy.
+//!
 //! `returns_promise` on a method (including a static method) or accessor getter
 //! converts synchronous exceptions from both the receiver check and the callback
 //! into rejected Promises in the callback's realm. Successful return values are

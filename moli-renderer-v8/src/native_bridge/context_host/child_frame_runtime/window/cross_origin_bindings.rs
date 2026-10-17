@@ -159,7 +159,8 @@ impl<'s> WindowTarget<'s> {
         index: u32,
     ) -> Option<v8::Local<'s, v8::Object>> {
         let handle = self.children(scope).get(index as usize).copied()?;
-        unsafe { &mut *self.host }.child_browsing_context_window_proxy_for_top(scope, handle)
+        unsafe { &mut *self.host }
+            .child_browsing_context_window_proxy_for_accessing_context(scope, handle)
     }
 
     fn named(
@@ -173,7 +174,7 @@ impl<'s> WindowTarget<'s> {
         self.sync_children(scope);
         let host = unsafe { &mut *self.host };
         let handle = host.child_browsing_context_named_child_handle(self.child, name)?;
-        host.child_browsing_context_window_proxy_for_top(scope, handle)
+        host.child_browsing_context_window_proxy_for_accessing_context(scope, handle)
     }
 }
 
@@ -484,8 +485,8 @@ pub(super) fn child_window_cross_origin_indexed_descriptor<'s>(
         throw_cross_origin_location_security_error(scope);
         return v8::Intercepted::kYes;
     };
-    if let Some(value) =
-        unsafe { &mut *target.host }.child_browsing_context_window_proxy_for_top(scope, handle)
+    if let Some(value) = unsafe { &mut *target.host }
+        .child_browsing_context_window_proxy_for_accessing_context(scope, handle)
     {
         let context = cross_origin_accessing_context(scope);
         let scope = &mut v8::ContextScope::new(scope, context);

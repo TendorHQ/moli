@@ -1401,9 +1401,12 @@ pub(super) fn frame_owner_content_window_getter_function<'s>(
     }
     let runtime = unsafe { &mut *runtime_ptr };
     runtime.refresh_child_browsing_context(scope, handle);
-    let exposes_same_origin_wrapper =
-        runtime.child_browsing_context_is_same_origin_with_top(handle);
-    let window = runtime.child_browsing_context_window_proxy_for_top(scope, handle);
+    let exposes_same_origin_wrapper = runtime.frame_owner_can_access_content_document(handle);
+    let window = if exposes_same_origin_wrapper {
+        runtime.child_browsing_context_window_wrapper(scope, handle)
+    } else {
+        runtime.child_browsing_context_window_proxy_for_accessing_context(scope, handle)
+    };
     if window.is_some() {
         runtime.mark_child_browsing_context_window_wrapper_exposed_to_top(handle);
     }
@@ -1412,7 +1415,7 @@ pub(super) fn frame_owner_content_window_getter_function<'s>(
     }
     match window {
         Some(window) => {
-            if runtime.child_browsing_context_is_same_origin_with_top(handle) {
+            if exposes_same_origin_wrapper {
                 runtime.set_cached_detached_iframe_content_window(scope, handle, window);
             }
             rv.set(window.into());

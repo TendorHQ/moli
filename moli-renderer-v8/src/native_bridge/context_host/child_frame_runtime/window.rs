@@ -257,15 +257,6 @@ impl ChildWindowProxyRecords {
             .map(|proxy| v8::Local::new(scope, proxy))
     }
 
-    pub(in crate::native_bridge::context_host) fn has_cross_origin_proxy(
-        &self,
-        handle: DomHandle,
-    ) -> bool {
-        self.records
-            .get(&handle)
-            .is_some_and(|record| record.cross_origin_window_proxy.is_some())
-    }
-
     pub(in crate::native_bridge::context_host) fn set_cross_origin_proxy(
         &mut self,
         scope: &mut v8::PinScope<'_, '_>,
@@ -674,7 +665,7 @@ fn contexts_can_script_access<'s>(
     host.window_execution_context_can_access(accessing_identity, accessed_identity)
 }
 
-fn caller_can_access_window<'s>(
+pub(crate) fn caller_can_access_window<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     window: v8::Local<'s, v8::Object>,
 ) -> bool {
@@ -1062,12 +1053,13 @@ impl JsContextHost {
             .live_window_exposed_to_top(handle)
     }
 
-    pub(crate) fn child_browsing_context_window_proxy_for_top<'s>(
+    pub(crate) fn child_browsing_context_window_proxy_for_accessing_context<'s>(
         &mut self,
         scope: &mut v8::PinScope<'s, '_>,
         handle: DomHandle,
     ) -> Option<v8::Local<'s, v8::Object>> {
-        if self.child_browsing_context_is_same_origin_with_top(handle) {
+        let accessing = cross_origin_accessing_context(scope);
+        if self.accessing_context_can_access_child_window(accessing, handle) {
             return self.child_browsing_context_window_wrapper(scope, handle);
         }
         if let Some(proxy) = self.child_window_proxy_records.live_window(scope, handle) {
@@ -1104,6 +1096,8 @@ impl JsContextHost {
             .child_window_proxy_records
             .cross_origin_proxy(scope, handle)
         {
+            let context = proxy.get_creation_context(scope)?;
+            let scope = &mut v8::ContextScope::new(scope, context);
             let top = Self::child_window_object_slot(scope, proxy, "top")
                 .unwrap_or_else(|| scope.get_current_context().global(scope));
             install_cross_origin_window_index_slots(scope, proxy, child_frame_count, proxy, top)?;
@@ -1116,23 +1110,33 @@ impl JsContextHost {
         }
 
         let (proxy, facade_context) = self.bridge.bindings.instantiate_window_proxy_shell(scope);
-        set_null_prototype(scope, proxy);
         let global = scope.get_current_context().global(scope);
         let top = self.child_browsing_context_root_window(scope, handle, global);
         let parent = self.child_browsing_context_parent_window(scope, handle, top);
         self.child_window_proxy_records
             .set_browsing_context_parent_top(scope, handle, parent, top);
         let named_indices = self.child_browsing_context_child_frame_named_indices(handle);
-        install_live_cross_origin_child_window_surface(
-            scope,
-            proxy,
-            handle,
-            parent,
-            top,
-            proxy,
-            child_frame_count,
-            &named_indices,
-        )?;
+        let context = v8::Local::new(scope, &facade_context);
+        crate::util::install_context_host_pointer_slot(
+            context,
+            self as *mut Self,
+            self.context_host_lifecycle_handle(),
+        );
+        context.set_slot(Rc::new(ChildWindowProxyFacadeContextHandle(handle)));
+        {
+            let scope = &mut v8::ContextScope::new(scope, context);
+            set_null_prototype(scope, proxy);
+            install_live_cross_origin_child_window_surface(
+                scope,
+                proxy,
+                handle,
+                parent,
+                top,
+                proxy,
+                child_frame_count,
+                &named_indices,
+            )?;
+        }
         self.child_window_proxy_records
             .set_facade_context(handle, facade_context);
         self.child_window_proxy_records
@@ -1197,17 +1201,6 @@ impl JsContextHost {
             self.sync_child_browsing_context_window_parent_top_slots(scope, handle, wrapper);
             bind_materialized_child_window_indexed_db_factory(scope, wrapper, handle);
             return (Some(wrapper), ready_work);
-        }
-        if self
-            .child_window_proxy_records
-            .has_cross_origin_proxy(handle)
-            && !self.child_browsing_context_is_same_origin_with_top(handle)
-        {
-            return (
-                self.child_window_proxy_records
-                    .cross_origin_proxy(scope, handle),
-                ready_work,
-            );
         }
         if !self.child_browsing_contexts.contains_key(&handle) {
             return (None, ready_work);

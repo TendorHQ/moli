@@ -42,7 +42,7 @@ pub(in crate::context_bootstrap) fn window_indexed_property_getter<'s>(
     };
     let host = unsafe { &mut *host_ptr };
     let window = if owner.child_window().is_none() {
-        host.child_browsing_context_window_proxy_for_top(scope, handle)
+        host.child_browsing_context_window_proxy_for_accessing_context(scope, handle)
     } else {
         host.child_browsing_context_window_wrapper(scope, handle)
     };
@@ -108,7 +108,7 @@ pub(in crate::context_bootstrap) fn window_indexed_property_descriptor<'s>(
     };
     let host = unsafe { &mut *host_ptr };
     let window = if owner.child_window().is_none() {
-        host.child_browsing_context_window_proxy_for_top(scope, handle)
+        host.child_browsing_context_window_proxy_for_accessing_context(scope, handle)
     } else {
         host.child_browsing_context_window_wrapper(scope, handle)
     };

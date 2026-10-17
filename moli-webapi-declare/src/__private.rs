@@ -17,6 +17,7 @@ pub struct FunctionTemplateMember<'s> {
     pub length: i32,
     pub data: Option<v8::Local<'s, v8::Value>>,
     pub class_name: Option<v8::Local<'s, v8::String>>,
+    pub receiver_access_check: bool,
 }
 
 #[inline(always)]
@@ -31,6 +32,9 @@ fn build_function_template_member<'s>(
         Some(data) => builder.data(data).build(scope),
         None => builder.build(scope),
     };
+    if member.receiver_access_check {
+        function.set_accept_any_receiver(false);
+    }
     if let Some(class_name) = member.class_name {
         function.set_class_name(class_name);
     }

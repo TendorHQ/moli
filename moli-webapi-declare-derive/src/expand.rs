@@ -129,6 +129,7 @@ pub(crate) fn expand_webapi_function_template(
         attrs.rename_all,
         FieldDefaults {
             receiver: attrs.receiver.as_ref(),
+            receiver_access_check: attrs.receiver_access_check,
             enumerable: attrs.default_enumerable,
             ..FieldDefaults::default()
         },
@@ -295,6 +296,7 @@ pub(crate) fn expand_webapi_object(input: DeriveInput) -> Result<proc_macro2::To
         attrs.rename_all,
         FieldDefaults {
             receiver: attrs.receiver.as_ref(),
+            receiver_access_check: attrs.receiver_access_check,
             data_properties: attrs.default_data_properties,
             enumerable: attrs.default_enumerable,
         },
@@ -630,6 +632,10 @@ fn expand_function_template_method_field(
         template_name,
         &name,
         function_name,
+        attrs
+            .receiver_access_check
+            .unwrap_or_default()
+            .checks_getter(),
     );
     let field_read = field
         .ident
@@ -714,6 +720,17 @@ fn expand_function_template_accessor_property_field(
             template_name,
             &name,
             quote!(#class_name),
+            if is_setter {
+                attrs
+                    .receiver_access_check
+                    .unwrap_or_default()
+                    .checks_setter()
+            } else {
+                attrs
+                    .receiver_access_check
+                    .unwrap_or_default()
+                    .checks_getter()
+            },
         )
     });
     let Some(getter_member) = getter_member else {
@@ -1074,7 +1091,19 @@ fn expand_accessor_property_field(
     }
     let (getter, setter) = expand_accessor_callbacks(attrs, |callback, is_setter, data| {
         let accessor_name = if is_setter { "setter" } else { "getter" };
-        let function = expand_function_builder(callback, i32::from(is_setter), data, &name);
+        let check_receiver = if is_setter {
+            attrs
+                .receiver_access_check
+                .unwrap_or_default()
+                .checks_setter()
+        } else {
+            attrs
+                .receiver_access_check
+                .unwrap_or_default()
+                .checks_getter()
+        };
+        let function =
+            expand_function_builder(callback, i32::from(is_setter), data, &name, check_receiver);
         quote! {
             #function.ok_or_else(|| {
                 ::moli_webapi_declare::BindError::new(
@@ -1164,7 +1193,16 @@ fn expand_object_method_field(
     let writable = !attrs.readonly;
     let configurable = !attrs.dont_delete;
     let callback = expand_callback(callback, attrs, false);
-    let build_function = expand_function_builder(&callback, length, attrs.data.as_ref(), &name);
+    let build_function = expand_function_builder(
+        &callback,
+        length,
+        attrs.data.as_ref(),
+        &name,
+        attrs
+            .receiver_access_check
+            .unwrap_or_default()
+            .checks_getter(),
+    );
     let install_method = quote! {
         let function = #build_function.ok_or_else(|| {
             ::moli_webapi_declare::BindError::new(
@@ -1404,6 +1442,7 @@ fn expand_function_builder(
     length: i32,
     data: Option<&syn::Expr>,
     display_name: &proc_macro2::TokenStream,
+    receiver_access_check: bool,
 ) -> proc_macro2::TokenStream {
     // Evaluate callback state during installation, where both `scope` and
     // `self` exist. Merely carrying Rust state does not expose a JS property.
@@ -1419,6 +1458,18 @@ fn expand_function_builder(
             })?;
     });
     let attach_data = data.map(|_| quote!(.data(__webapi_callback_data)));
+    if receiver_access_check {
+        return quote! {{
+            #convert_data
+            let template = ::moli_webapi_declare::v8::FunctionTemplate::builder(#callback)
+                .length(#length)
+                #attach_data
+                .constructor_behavior(::moli_webapi_declare::v8::ConstructorBehavior::Throw)
+                .build(scope);
+            template.set_accept_any_receiver(false);
+            template.get_function(scope)
+        }};
+    }
     quote! {{
         #convert_data
         ::moli_webapi_declare::v8::Function::builder(#callback)
@@ -1436,6 +1487,7 @@ fn expand_template_function_member(
     template_name: &proc_macro2::TokenStream,
     display_name: &proc_macro2::TokenStream,
     class_name: proc_macro2::TokenStream,
+    receiver_access_check: bool,
 ) -> proc_macro2::TokenStream {
     let data = match data {
         Some(data) => quote! {
@@ -1466,6 +1518,7 @@ fn expand_template_function_member(
             length: #length,
             data: #data,
             class_name: #class_name,
+            receiver_access_check: #receiver_access_check,
         }
     }
 }

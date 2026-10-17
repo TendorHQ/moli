@@ -207,6 +207,46 @@ impl JsContextHost {
             .is_some_and(|(owner, child)| owner.can_access(&child))
     }
 
+    pub(in crate::native_bridge::context_host) fn accessing_context_can_access_child_window(
+        &self,
+        context: v8::Local<'_, v8::Context>,
+        handle: DomHandle,
+    ) -> bool {
+        let Some(host_ptr) = crate::util::context_host_ptr_from_context_slot(context) else {
+            return false;
+        };
+        let accessing_host = unsafe { &*host_ptr };
+        let Some(identity) = accessing_host
+            .window_execution_context_identity_for_access_check(context)
+            .filter(|identity| {
+                accessing_host.window_execution_context_identity_is_current(*identity)
+            })
+        else {
+            return false;
+        };
+        let target = OwnerDispatchScope::Child(handle);
+        if std::ptr::eq(accessing_host, self) {
+            return self.window_execution_context_can_access_dispatch_scope(identity, target);
+        }
+        if identity.grants_universal_access() {
+            return true;
+        }
+        // Opaque identities are host-local; only tuple origins can be compared
+        // between hosts before the target has materialized a V8 Context.
+        accessing_host
+            .window_access_origin(identity)
+            .zip(self.child_window_access_origin(handle))
+            .is_some_and(|(origin, target)| {
+                matches!(
+                    (&origin, &target),
+                    (
+                        WindowAccessOrigin::Tuple { .. },
+                        WindowAccessOrigin::Tuple { .. }
+                    )
+                ) && origin.can_access(&target)
+            })
+    }
+
     pub(in crate::native_bridge::context_host) fn child_window_can_access_lightweight_popup(
         &self,
         handle: DomHandle,

@@ -18,6 +18,7 @@ pub(crate) fn expand_webapi_cross_origin(
         || attrs.scope_lifetime.is_some()
         || attrs.default_data_properties
         || attrs.default_enumerable
+        || attrs.receiver_access_check
     {
         return Err(Error::new_spanned(
             input,
@@ -41,6 +42,7 @@ pub(crate) fn expand_webapi_cross_origin(
             || attrs.returns_promise
             || attrs.symbol.is_some()
             || attrs.getter_value.is_some()
+            || attrs.receiver_access_check.is_some()
             || attrs.value.is_some()
             || attrs.init.is_some()
             || attrs.enumerable
