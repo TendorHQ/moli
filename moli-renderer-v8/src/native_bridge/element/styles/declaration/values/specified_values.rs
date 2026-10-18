@@ -176,8 +176,8 @@ fn active_css_animation_names_with_resolution(
 }
 
 pub(super) fn animation_shorthand_names(value: &str) -> Vec<String> {
-    let mut input = ParserInput::new(value);
-    let mut input = Parser::new(&mut input);
+    let input = value;
+    let mut input = Parser::new(input);
     let mut names = Vec::new();
     let mut current = None;
     while let Ok(token) = input.next_including_whitespace_and_comments().cloned() {
@@ -192,7 +192,7 @@ pub(super) fn animation_shorthand_names(value: &str) -> Vec<String> {
                 current = Some(value.to_string());
             }
             Token::Function(_) => {
-                let _ = input.parse_nested_block(|_| Ok::<_, cssparser::ParseError<'_, ()>>(()));
+                let _ = input.parse_nested_block(|_| Ok::<_, cssparser::ParseError<()>>(()));
             }
             _ => {}
         }
@@ -625,8 +625,8 @@ fn normalize_content_specified_value(value: &str) -> Option<String> {
 
 pub(super) fn normalize_cssom_font_family_value(value: &str) -> Option<String> {
     let trimmed = value.trim();
-    let mut input = ParserInput::new(trimmed);
-    let mut input = Parser::new(&mut input);
+    let input = trimmed;
+    let mut input = Parser::new(input);
     let token = input
         .next_including_whitespace_and_comments()
         .cloned()
@@ -764,8 +764,8 @@ fn split_top_level_once(input: &str, needle: char) -> Option<(&str, &str)> {
 }
 
 fn cssom_value_is_attr_function(value: &str) -> bool {
-    let mut input = ParserInput::new(value);
-    let mut input = Parser::new(&mut input);
+    let input = value;
+    let mut input = Parser::new(input);
     matches!(
         input.next_including_whitespace_and_comments(),
         Ok(Token::Function(name)) if name.eq_ignore_ascii_case("attr")
@@ -773,8 +773,8 @@ fn cssom_value_is_attr_function(value: &str) -> bool {
 }
 
 fn normalize_cssom_counter_function(value: &str) -> Option<String> {
-    let mut input = ParserInput::new(value);
-    let mut input = Parser::new(&mut input);
+    let input = value;
+    let mut input = Parser::new(input);
     let Ok(Token::Function(name)) = input.next_including_whitespace_and_comments() else {
         return None;
     };
@@ -792,7 +792,7 @@ fn normalize_cssom_counter_function(value: &str) -> Option<String> {
                 input.expect_exhausted()?;
                 Some(style)
             };
-            Ok::<_, cssparser::ParseError<'_, ()>>((counter_name, style))
+            Ok::<_, cssparser::ParseError<()>>((counter_name, style))
         })
         .ok()?;
     input.expect_exhausted().ok()?;
@@ -818,8 +818,8 @@ pub(super) struct SimpleVarFunction {
 }
 
 pub(super) fn simple_var_function_parts(value: &str) -> Option<SimpleVarFunction> {
-    let mut input = ParserInput::new(value);
-    let mut parser = Parser::new(&mut input);
+    let input = value;
+    let mut parser = Parser::new(input);
     parser.expect_function_matching("var").ok()?;
     let parts = parser
         .parse_nested_block(|input| {
@@ -831,17 +831,17 @@ pub(super) fn simple_var_function_parts(value: &str) -> Option<SimpleVarFunction
                 input.expect_comma()?;
                 Some(
                     simple_var_fallback_component_text(input)
-                        .ok_or_else(|| input.new_custom_error(()))?,
+                        .ok_or_else(|| cssparser::ParseError::custom(()))?,
                 )
             };
-            Ok::<_, cssparser::ParseError<'_, ()>>(SimpleVarFunction { name, fallback })
+            Ok::<_, cssparser::ParseError<()>>(SimpleVarFunction { name, fallback })
         })
         .ok()?;
     parser.expect_exhausted().ok()?;
     parts.name.starts_with("--").then_some(parts)
 }
 
-fn simple_var_fallback_component_text(input: &mut Parser<'_, '_>) -> Option<String> {
+fn simple_var_fallback_component_text(input: &mut Parser<'_>) -> Option<String> {
     let start = input.position();
     while input.next_including_whitespace_and_comments().is_ok() {}
     let value = input.slice_from(start).trim();

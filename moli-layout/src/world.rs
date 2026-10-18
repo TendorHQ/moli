@@ -700,10 +700,10 @@ where
         }
     }
 
-    pub(crate) fn numeric_cache(&self, id: LayoutBoxId) -> Option<&Cache> {
+    pub(crate) fn numeric_cache(&mut self, id: LayoutBoxId) -> Option<&mut Cache> {
         self.box_cache_slots
             .get(id.index())
-            .and_then(|slot| self.box_caches.get(*slot))
+            .and_then(|slot| self.box_caches.get_mut(*slot))
     }
 
     pub(crate) fn numeric_cache_mut(&mut self, id: LayoutBoxId) -> &mut Cache {
