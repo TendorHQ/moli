@@ -17,27 +17,34 @@ const RESPONSE_CANCELLED: u8 = 2;
 /// never redirects an existing writer to a different transfer.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ResponseProgress {
-    state: Arc<AtomicU8>,
-    timing: Arc<Mutex<FetchResponseTiming>>,
+    inner: Arc<ResponseProgressState>,
+}
+
+#[derive(Debug, Default)]
+struct ResponseProgressState {
+    state: AtomicU8,
+    timing: Mutex<FetchResponseTiming>,
 }
 
 impl ResponseProgress {
     pub(crate) fn mark_request_started(&self) {
-        self.timing
+        self.inner
+            .timing
             .lock()
             .request_started_at
             .get_or_insert_with(Instant::now);
     }
 
     pub(crate) fn mark_interim_response_started(&self) {
-        self.timing
+        self.inner
+            .timing
             .lock()
             .first_interim_response_started_at
             .get_or_insert_with(Instant::now);
     }
 
     pub(crate) fn mark_response_body_received(&self) {
-        self.timing.lock().body_bytes_received = true;
+        self.inner.timing.lock().body_bytes_received = true;
     }
 
     pub(crate) fn commit(&self) {
@@ -46,7 +53,7 @@ impl ResponseProgress {
     }
 
     fn commit_state(&self) {
-        let _ = self.state.compare_exchange(
+        let _ = self.inner.state.compare_exchange(
             RESPONSE_PENDING,
             RESPONSE_COMMITTED,
             Ordering::AcqRel,
@@ -55,14 +62,16 @@ impl ResponseProgress {
     }
 
     pub(crate) fn mark_response_started(&self) {
-        self.timing
+        self.inner
+            .timing
             .lock()
             .response_started_at
             .get_or_insert_with(Instant::now);
     }
 
     fn finish_timing(&self) {
-        self.timing
+        self.inner
+            .timing
             .lock()
             .response_end_at
             .get_or_insert_with(Instant::now);
@@ -75,11 +84,11 @@ impl ResponseProgress {
     }
 
     fn is_committed(&self) -> bool {
-        self.state.load(Ordering::Acquire) == RESPONSE_COMMITTED
+        self.inner.state.load(Ordering::Acquire) == RESPONSE_COMMITTED
     }
 
     fn cancel_if_pending(&self) -> bool {
-        self.state.compare_exchange(
+        self.inner.state.compare_exchange(
             RESPONSE_PENDING,
             RESPONSE_CANCELLED,
             Ordering::AcqRel,
@@ -226,7 +235,7 @@ impl FetchCancelHandle {
     }
 
     pub fn response_timing(&self) -> FetchResponseTiming {
-        *self.response_progress().timing.lock()
+        *self.response_progress().inner.timing.lock()
     }
 
     #[cfg(test)]
