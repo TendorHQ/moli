@@ -22,6 +22,24 @@ pub(crate) struct ResponseProgress {
 }
 
 impl ResponseProgress {
+    pub(crate) fn mark_request_started(&self) {
+        self.timing
+            .lock()
+            .request_started_at
+            .get_or_insert_with(Instant::now);
+    }
+
+    pub(crate) fn mark_interim_response_started(&self) {
+        self.timing
+            .lock()
+            .first_interim_response_started_at
+            .get_or_insert_with(Instant::now);
+    }
+
+    pub(crate) fn mark_response_body_received(&self) {
+        self.timing.lock().body_bytes_received = true;
+    }
+
     pub(crate) fn commit(&self) {
         self.finish_timing();
         self.commit_state();
@@ -73,11 +91,23 @@ impl ResponseProgress {
 /// Native response boundaries shared with observers of the selected transfer.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct FetchResponseTiming {
+    request_started_at: Option<Instant>,
+    first_interim_response_started_at: Option<Instant>,
+    body_bytes_received: bool,
     response_started_at: Option<Instant>,
     response_end_at: Option<Instant>,
 }
 
 impl FetchResponseTiming {
+    pub fn body_bytes_received(self) -> bool {
+        self.body_bytes_received
+    }
+    pub fn request_started_at(self) -> Option<Instant> {
+        self.request_started_at
+    }
+    pub fn first_interim_response_started_at(self) -> Option<Instant> {
+        self.first_interim_response_started_at
+    }
     pub fn response_started_at(self) -> Option<Instant> {
         self.response_started_at
     }
@@ -108,6 +138,21 @@ pub struct FetchCancelHandle {
 }
 
 impl FetchCancelHandle {
+    #[cfg(test)]
+    fn mark_request_started(&self) {
+        self.response_progress().mark_request_started();
+    }
+
+    #[cfg(test)]
+    fn mark_interim_response_started(&self) {
+        self.response_progress().mark_interim_response_started();
+    }
+
+    #[cfg(test)]
+    fn mark_response_body_received(&self) {
+        self.response_progress().mark_response_body_received();
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -564,5 +609,47 @@ mod tests {
                 assert!(timing.response_end_at().unwrap() >= timing.response_started_at().unwrap());
             }
         }
+    }
+    #[test]
+    fn interim_response_timing_is_first_only_and_isolated_by_response_generation() {
+        let parent = FetchCancelHandle::new();
+        let early = parent.child_for_subrequest();
+        early.mark_request_started();
+        let request_start = early.response_timing().request_started_at().unwrap();
+        early.mark_request_started();
+        assert_eq!(
+            early.response_timing().request_started_at(),
+            Some(request_start)
+        );
+        early.mark_interim_response_started();
+        early.mark_response_body_received();
+        let first = early
+            .response_timing()
+            .first_interim_response_started_at()
+            .unwrap();
+        early.mark_interim_response_started();
+        early.mark_response_started();
+        parent.adopt_response_progress(&early);
+        let timing = parent.response_timing();
+        assert_eq!(timing.first_interim_response_started_at(), Some(first));
+        assert!(timing.body_bytes_received());
+        assert!(request_start <= first);
+        assert!(timing.response_started_at().unwrap() >= first);
+
+        let final_response = parent.child_for_subrequest();
+        final_response.mark_response_started();
+        parent.adopt_response_progress(&final_response);
+        early.mark_interim_response_started();
+        assert!(
+            parent
+                .response_timing()
+                .first_interim_response_started_at()
+                .is_none()
+        );
+        assert!(!parent.response_timing().body_bytes_received());
+        assert!(parent.response_timing().request_started_at().is_none());
+        parent.begin_response_progress();
+        final_response.mark_interim_response_started();
+        assert_eq!(parent.response_timing(), Default::default());
     }
 }

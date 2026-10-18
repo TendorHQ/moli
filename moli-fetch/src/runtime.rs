@@ -2728,6 +2728,14 @@ enum FetchResponseCollector {
 }
 
 impl FetchTransferHandler {
+    fn response_progress(&self) -> Option<&crate::cancellation::ResponseProgress> {
+        match &self.response {
+            FetchResponseCollector::Buffered(collector) => collector.response_progress(),
+            FetchResponseCollector::Streaming(collector) => Some(collector.response_progress()),
+            FetchResponseCollector::StreamingRaw(collector) => Some(collector.response_progress()),
+        }
+    }
+
     fn new_buffered(collector: ResponseCollector) -> Self {
         Self::new(FetchResponseCollector::Buffered(collector))
     }
@@ -2837,6 +2845,11 @@ impl Handler for FetchTransferHandler {
     }
 
     fn progress(&mut self, dltotal: f64, dlnow: f64, ultotal: f64, ulnow: f64) -> bool {
+        if dlnow > 0.0
+            && let Some(timing) = self.response_progress()
+        {
+            timing.mark_response_body_received();
+        }
         match &mut self.response {
             FetchResponseCollector::Buffered(collector) => {
                 collector.progress(dltotal, dlnow, ultotal, ulnow)
@@ -2856,6 +2869,9 @@ impl Handler for FetchTransferHandler {
                 let is_proxy_connect = self
                     .proxy_connect_response_recorder
                     .record_outgoing_header_block(data);
+                if !is_proxy_connect && let Some(timing) = self.response_progress() {
+                    timing.mark_request_started();
+                }
                 if !is_proxy_connect
                     && let Some(recorder) = self.network_observation_recorder.as_ref()
                 {
@@ -2877,7 +2893,9 @@ fn configure_network_observation(
     capture_proxy_connect_response: bool,
 ) -> Result<()> {
     let recorder = request.network_observation_recorder().cloned();
-    let verbose = recorder.is_some() || capture_proxy_connect_response;
+    let verbose = recorder.is_some()
+        || capture_proxy_connect_response
+        || easy.get_ref().response_progress().is_some();
     if let Some(recorder) = recorder.as_ref() {
         recorder.set_current_request_cookie_report(request_cookie_report.cloned());
     }
