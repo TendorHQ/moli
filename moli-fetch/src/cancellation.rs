@@ -112,7 +112,7 @@ impl FetchResponseTiming {
         self.body_bytes_received
     }
     /// The transport's pre-request boundary, after connection/TLS setup and
-    /// before sending the request. Absent for responses served from cache.
+    /// before sending the request. Pure cache hits do not produce this boundary.
     pub fn request_started_at(self) -> Option<Instant> {
         self.request_started_at
     }

@@ -61,8 +61,6 @@ use crate::{
     proxy_connect::{ProxyConnectResponse, ProxyConnectResponseRecorder},
 };
 
-mod request_timing;
-
 const DEFAULT_RUNTIME_TRANSFERS: usize = 256;
 const RUNTIME_POLL_INTERVAL: Duration = Duration::from_millis(50);
 // curl-sys does not currently expose CURLINFO_HTTP_VERSION. This value is
@@ -2842,6 +2840,19 @@ impl FetchTransferHandler {
 }
 
 impl Handler for FetchTransferHandler {
+    fn prereq(
+        &mut self,
+        _primary_ip: &str,
+        _local_ip: &str,
+        _primary_port: u16,
+        _local_port: u16,
+    ) -> bool {
+        if let Some(timing) = self.response_progress() {
+            timing.mark_request_started();
+        }
+        true
+    }
+
     fn write(&mut self, data: &[u8]) -> std::result::Result<usize, WriteError> {
         if !data.is_empty() {
             self.mark_response_body_received();
@@ -2914,7 +2925,8 @@ fn configure_network_observation(
     }
     easy.get_mut()
         .begin_transfer(recorder, capture_proxy_connect_response);
-    request_timing::configure(easy)?;
+    easy.prereq(true)
+        .context("failed to configure curl pre-request callback")?;
     easy.verbose(verbose)
         .context("failed to configure curl network observation")
 }

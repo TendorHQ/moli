@@ -49,8 +49,7 @@ fn read_head(stream: &mut std::net::TcpStream) -> std::io::Result<Vec<u8>> {
 }
 
 #[test]
-fn prerequest_timing_survives_reuse_reset_moves_and_progress_reselection_without_verbose()
--> Result<()> {
+fn prerequest_timing_survives_moves_and_reuse_without_verbose() -> Result<()> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
     let request = Request::get(&format!("http://{}/timing", listener.local_addr()?))?;
     let server = thread::spawn(move || -> std::io::Result<()> {
