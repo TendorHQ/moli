@@ -247,7 +247,7 @@ impl ConverterKind {
 /// A field conversion, optionally collecting an iterable of converted items.
 #[derive(Clone, Copy)]
 pub(crate) struct FieldConverter {
-    kind: ConverterKind,
+    pub(crate) kind: ConverterKind,
     sequence: bool,
 }
 

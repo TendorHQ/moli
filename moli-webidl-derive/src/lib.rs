@@ -1,6 +1,7 @@
 mod attrs;
 mod converter;
 mod expand;
+mod snapshot;
 
 use proc_macro::TokenStream;
 use syn::{DeriveInput, parse_macro_input};
@@ -48,6 +49,10 @@ pub fn derive_webidl_args(input: TokenStream) -> TokenStream {
 /// Nested members support `dictionary`: null parses an empty dictionary while
 /// `Option<T>` skips missing/undefined and `nullable` also skips null.
 /// Iterable members support `sequence` with `Vec<T>` or `Option<Vec<T>>`.
+/// `#[webidl(snapshot)]` additionally derives `WebIdlDictionarySnapshot` for
+/// copying already-converted, native-owned dictionary objects. Raw converters
+/// must supply a `WebIdlSnapshotValue` policy. This opt-in pilot does not support
+/// inheritance, nullable members, custom member parsers, buffers, or callbacks.
 #[proc_macro_derive(WebIdlDictionary, attributes(webidl))]
 pub fn derive_webidl_dictionary(input: TokenStream) -> TokenStream {
     match expand::expand_webidl_dictionary(parse_macro_input!(input as DeriveInput)) {

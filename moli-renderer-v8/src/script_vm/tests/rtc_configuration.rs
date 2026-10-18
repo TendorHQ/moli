@@ -64,6 +64,51 @@ fn rtc_configuration_uses_registered_native_proxy_identity() {
 }
 
 #[test]
+fn rtc_configuration_snapshots_preserve_certificate_identity_and_immutability() {
+    let mut vm = new_storage_page_task_executor_test_vm("https://rtc-configuration.test/");
+    let context_ptr = &vm.page_default_runtime.context as *const _;
+    vm.with_context_scope_by_ptr_and_checkpoint_for_test(context_ptr, |scope, _| {
+        let certificate = v8::Object::new(scope);
+        crate::web_api_interfaces::RTCCertificate::DESCRIPTOR
+            .initialize(scope, certificate)
+            .unwrap();
+        let handler = crate::util::new_null_prototype_object(scope);
+        let proxy = v8::Proxy::new(scope, certificate, handler).unwrap();
+        moli_webapi_declare::register_web_api_proxy(scope, proxy).unwrap();
+        let global = scope.get_current_context().global(scope);
+        for (name, value) in [
+            ("certificate", v8::Local::<v8::Value>::from(certificate)),
+            ("nativeCertificate", proxy.into()),
+        ] {
+            assert_eq!(
+                global.create_data_property(scope, crate::util::v8str(scope, name).into(), value),
+                Some(true)
+            );
+        }
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(vm.eval(r#"(() => {
+      const input = [certificate, nativeCertificate];
+      const pc = new RTCPeerConnection({certificates:input});
+      input.length = 0;
+      const first = pc.getConfiguration();
+      if (first.certificates.length !== 2 || first.certificates[0] !== certificate || first.certificates[1] !== nativeCertificate) return false;
+      first.certificates.reverse();
+      pc.setConfiguration({certificates:[certificate, nativeCertificate], iceTransportPolicy:'relay'});
+      const next = pc.getConfiguration();
+      if (first.certificates === next.certificates || next.certificates[0] !== certificate || next.certificates[1] !== nativeCertificate || next.iceTransportPolicy !== 'relay') return false;
+      for (const certificates of [[], [certificate], [nativeCertificate, certificate]]) {
+        try {pc.setConfiguration({certificates}); return false;}
+        catch (error) {if (error.name !== 'InvalidModificationError') return false;}
+      }
+      const unchanged = pc.getConfiguration();
+      pc.close();
+      return unchanged.certificates[0] === certificate && unchanged.certificates[1] === nativeCertificate && unchanged.iceTransportPolicy === 'relay';
+    })()"#).unwrap(), "true");
+}
+
+#[test]
 fn rtc_configuration_applies_reentrant_updates_before_validating_the_outer_call() {
     let mut vm = new_storage_page_task_executor_test_vm("https://rtc-configuration.test/");
     assert_eq!(vm.eval(r#"(() => {

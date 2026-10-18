@@ -27,8 +27,10 @@
 //! `#[derive(WebIdlArgs)]` generates positional argument parsing for a V8
 //! native binding's `FunctionCallbackArguments`. `#[derive(WebIdlDictionary)]`
 //! generates named property parsing for dictionary objects. Both derives use
-//! the converter wrappers in `types` and only produce Rust values; object shape
-//! declaration and Web API wrapper allocation remain outside this crate.
+//! the converter wrappers in `types` and produce Rust values. The opt-in
+//! `#[webidl(snapshot)]` also generates copy metadata for already-bound native
+//! dictionary snapshots; object shape declaration and Web API wrapper allocation
+//! remain outside this crate.
 //! Dictionary members are converted in lexicographical order of their final
 //! JavaScript names. `#[webidl(inherit)]` on one dictionary field converts the
 //! ancestor's members from the same object first; it does not read a nested
@@ -66,6 +68,7 @@ mod convert;
 pub use buffer_source::{AllowSharedBufferSource, NonSharedBufferSource};
 mod error;
 mod helpers;
+mod snapshot;
 mod traits;
 mod types;
 
@@ -91,6 +94,9 @@ pub use moli_webidl_callback::{
     WebIdlCallbackInterface,
 };
 pub use moli_webidl_derive::{WebIdlArgs, WebIdlDictionary, WebIdlEnum};
+pub use snapshot::{
+    SnapshotKind, SnapshotMember, SnapshotPrototype, WebIdlDictionarySnapshot, WebIdlSnapshotValue,
+};
 pub use traits::{ParseOutcome, WebIdlArguments, WebIdlConverter, WebIdlDictionary, WebIdlEnum};
 pub use types::{
     Boolean, BufferSource, ByteString, ClampedUnsignedShort, Dictionary, DomString, DomString16,

@@ -7,12 +7,20 @@ pub(crate) struct ContainerAttrs {
     pub(crate) prefix: Option<LitStr>,
     pub(crate) scope_lifetime: Option<syn::Lifetime>,
     pub(crate) rename_all: Option<RenameRule>,
+    pub(crate) snapshot: bool,
 }
 
 pub(crate) fn parse_container_attrs(attrs: &[syn::Attribute]) -> Result<ContainerAttrs, Error> {
     let mut parsed = ContainerAttrs::default();
     for attr in attrs.iter().filter(|attr| attr.path().is_ident("webidl")) {
         attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("snapshot") {
+                if parsed.snapshot {
+                    return Err(meta.error("duplicate snapshot attribute"));
+                }
+                parsed.snapshot = true;
+                return Ok(());
+            }
             if meta.path.is_ident("prefix") {
                 parsed.prefix = Some(meta.value()?.parse()?);
                 return Ok(());

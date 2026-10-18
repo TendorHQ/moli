@@ -119,9 +119,17 @@ pub(crate) fn expand_webidl_dictionary(
             }
         }
     }
-    let bindings = inherited
+    let ordered_fields = inherited
         .into_iter()
         .chain(members.into_values())
+        .collect::<Vec<_>>();
+    let snapshot = if attrs.snapshot {
+        crate::snapshot::expand_snapshot(&struct_name, &generics, &ordered_fields, rename_all)?
+    } else {
+        quote! {}
+    };
+    let bindings = ordered_fields
+        .into_iter()
         .map(|field| expand_dictionary_field(field, &prefix, rename_all, &scope_lifetime))
         .collect::<Result<Vec<_>, _>>()?;
     let idents = fields
@@ -130,6 +138,8 @@ pub(crate) fn expand_webidl_dictionary(
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(quote! {
+        #snapshot
+
         impl #impl_generics ::moli_webidl::WebIdlDictionary<#scope_lifetime> for #struct_name #ty_generics #where_clause {
             fn parse_dictionary(
                 scope: &mut v8::PinScope<#scope_lifetime, '_>,
@@ -667,6 +677,25 @@ fn expand_dictionary_field(
 mod tests {
     use super::{expand_webidl_args, expand_webidl_dictionary, impl_parts_for_scope};
     use syn::parse_quote;
+
+    #[test]
+    fn snapshots_reject_unsupported_ownership_and_member_policies() {
+        for input in [
+            parse_quote! { #[webidl(snapshot)] struct Options { #[webidl(inherit)] base: Base } },
+            parse_quote! { #[webidl(snapshot)] struct Options { #[webidl(nullable)] value: Option<String> } },
+            parse_quote! { #[webidl(snapshot)] struct Options { #[webidl(with = parse)] value: Custom } },
+            parse_quote! { #[webidl(snapshot)] struct Options { value: BufferSource } },
+            parse_quote! { #[webidl(snapshot)] struct Options { value: WebIdlCallbackFunction } },
+            parse_quote! { #[webidl(snapshot)] struct Options { value: WebIdlCallbackInterface } },
+        ] {
+            assert!(
+                expand_webidl_dictionary(input)
+                    .unwrap_err()
+                    .to_string()
+                    .starts_with("dictionary snapshots")
+            );
+        }
+    }
 
     #[test]
     fn dictionary_member_names_must_be_unique_after_renaming() {

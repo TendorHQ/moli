@@ -6,10 +6,11 @@ use super::{
     RTC_PEER_CONNECTION_SIGNALING_STATE_SLOT,
 };
 use crate::{
-    util::{get_private_value, new_null_prototype_object, set_private_value, v8str},
+    util::{get_private_value, set_private_value, v8str},
     web_api_interfaces, webidl,
 };
 use moli_webapi_declare::{WebApiObject, WebApiValue};
+use webidl::{SnapshotKind, SnapshotPrototype, WebIdlDictionarySnapshot, WebIdlSnapshotValue};
 
 #[derive(Clone, Copy, webidl::WebIdlEnum)]
 #[webidl(name = "RTCBundlePolicy")]
@@ -67,6 +68,10 @@ impl<'s> WebApiValue<'s> for RtcpMuxPolicy {
 
 struct PoolSize(u8);
 
+impl WebIdlSnapshotValue for PoolSize {
+    const SNAPSHOT_KIND: SnapshotKind = SnapshotKind::Identity;
+}
+
 impl<'s> webidl::WebIdlConverter<'s> for PoolSize {
     type Options = ();
 
@@ -91,6 +96,10 @@ impl<'s> WebApiValue<'s> for PoolSize {
 
 struct Text(webidl::DomString16);
 
+impl WebIdlSnapshotValue for Text {
+    const SNAPSHOT_KIND: SnapshotKind = SnapshotKind::Identity;
+}
+
 impl<'s> webidl::WebIdlConverter<'s> for Text {
     type Options = ();
 
@@ -111,6 +120,11 @@ impl<'s> WebApiValue<'s> for Text {
 }
 
 struct IceUrls(Vec<String>);
+
+impl WebIdlSnapshotValue for IceUrls {
+    // The union converter always binds its canonical value as a URL sequence.
+    const SNAPSHOT_KIND: SnapshotKind = SnapshotKind::Sequence(&SnapshotKind::Identity);
+}
 
 impl<'s> webidl::WebIdlConverter<'s> for IceUrls {
     type Options = ();
@@ -142,41 +156,32 @@ impl<'s> WebApiValue<'s> for IceUrls {
 }
 
 #[derive(webidl::WebIdlDictionary, WebApiObject)]
-#[webidl(prefix = "RTCIceServer")]
-#[webapi(plain, enumerable)]
+#[webidl(prefix = "RTCIceServer", snapshot)]
+#[webapi(plain, data_properties, enumerable)]
 struct IceServer {
     #[webidl(converter = "raw")]
-    #[webapi(data_property)]
     credential: Option<Text>,
     #[webidl(required, converter = "raw")]
-    #[webapi(data_property)]
     urls: IceUrls,
     #[webidl(converter = "raw")]
-    #[webapi(data_property)]
     username: Option<Text>,
 }
 
 #[derive(webidl::WebIdlDictionary, WebApiObject)]
-#[webidl(prefix = "RTCConfiguration")]
-#[webapi(plain, enumerable)]
+#[webidl(prefix = "RTCConfiguration", snapshot)]
+#[webapi(plain, data_properties, enumerable)]
 struct Configuration<'s> {
     #[webidl(converter = "enum", default = BundlePolicy::Balanced)]
-    #[webapi(data_property)]
     bundle_policy: BundlePolicy,
     #[webidl(sequence, interface = web_api_interfaces::RTCCertificate, default = Vec::new())]
-    #[webapi(data_property)]
     certificates: Vec<v8::Local<'s, v8::Object>>,
     #[webidl(converter = "raw", default = PoolSize(0))]
-    #[webapi(data_property)]
     ice_candidate_pool_size: PoolSize,
     #[webidl(sequence, converter = "dictionary", default = Vec::new())]
-    #[webapi(data_property)]
     ice_servers: Vec<IceServer>,
     #[webidl(converter = "enum", default = IceTransportPolicy::All)]
-    #[webapi(data_property)]
     ice_transport_policy: IceTransportPolicy,
     #[webidl(converter = "enum", default = RtcpMuxPolicy::Require)]
-    #[webapi(data_property)]
     rtcp_mux_policy: RtcpMuxPolicy,
 }
 
@@ -197,7 +202,10 @@ pub(super) fn constructor_configuration<'s>(
         .configuration
         .bind(scope)
         .expect("converted RTCConfiguration");
-    Some(copy_configuration(scope, object, true))
+    Some(
+        Configuration::to_js_snapshot(scope, object, SnapshotPrototype::Null)
+            .expect("converted RTCConfiguration snapshot"),
+    )
 }
 
 fn target<'s>(
@@ -224,7 +232,9 @@ pub(super) fn get_configuration<'s>(
 ) {
     let target = target(scope, args.this());
     let stored = configuration(scope, target);
-    rv.set(copy_configuration(scope, stored, false).into());
+    let snapshot = Configuration::to_js_snapshot(scope, stored, SnapshotPrototype::Ordinary)
+        .expect("native RTCConfiguration snapshot");
+    rv.set(snapshot.into());
 }
 
 pub(super) fn set_configuration<'s>(
@@ -271,7 +281,8 @@ pub(super) fn set_configuration<'s>(
     if validate_servers(scope, &parsed.configuration).is_none() {
         return;
     }
-    let snapshot = copy_configuration(scope, next, true);
+    let snapshot = Configuration::to_js_snapshot(scope, next, SnapshotPrototype::Null)
+        .expect("converted RTCConfiguration snapshot");
     set_private_value(
         scope,
         target,
@@ -380,79 +391,4 @@ fn same_certificates<'s>(
                 .expect("certificate")
                 .strict_equals(next.get_index(scope, index).expect("certificate"))
         })
-}
-
-fn copy_configuration<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    source: v8::Local<'s, v8::Object>,
-    internal: bool,
-) -> v8::Local<'s, v8::Object> {
-    let output = if internal {
-        new_null_prototype_object(scope)
-    } else {
-        v8::Object::new(scope)
-    };
-    for name in [
-        "bundlePolicy",
-        "certificates",
-        "iceCandidatePoolSize",
-        "iceServers",
-        "iceTransportPolicy",
-        "rtcpMuxPolicy",
-    ] {
-        let mut value = property(scope, source, name);
-        if matches!(name, "certificates" | "iceServers") {
-            let array = v8::Local::<v8::Array>::try_from(value).expect("private sequence");
-            let mut items = Vec::new();
-            for index in 0..array.length() {
-                let mut item = array
-                    .get_index(scope, index)
-                    .expect("private sequence item");
-                if name == "iceServers" {
-                    let server =
-                        v8::Local::<v8::Object>::try_from(item).expect("private ICE server");
-                    item = copy_server(scope, server, internal).into();
-                }
-                items.push(item);
-            }
-            value = v8::Array::new_with_elements(scope, &items).into();
-        }
-        assert_eq!(
-            output.create_data_property(scope, v8str(scope, name).into(), value),
-            Some(true)
-        );
-    }
-    output
-}
-
-fn copy_server<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    source: v8::Local<'s, v8::Object>,
-    internal: bool,
-) -> v8::Local<'s, v8::Object> {
-    let output = if internal {
-        new_null_prototype_object(scope)
-    } else {
-        v8::Object::new(scope)
-    };
-    for name in ["credential", "urls", "username"] {
-        let key = v8str(scope, name);
-        // Optional members are absent, not inherited from a polluted prototype.
-        if source.has_own_property(scope, key.into()) != Some(true) {
-            continue;
-        }
-        let mut value = property(scope, source, name);
-        if name == "urls" {
-            let array = v8::Local::<v8::Array>::try_from(value).expect("private URL sequence");
-            let items: Vec<_> = (0..array.length())
-                .map(|index| array.get_index(scope, index).expect("private URL"))
-                .collect();
-            value = v8::Array::new_with_elements(scope, &items).into();
-        }
-        assert_eq!(
-            output.create_data_property(scope, key.into(), value),
-            Some(true)
-        );
-    }
-    output
 }
