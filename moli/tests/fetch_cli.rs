@@ -4154,12 +4154,14 @@ fn cli_dump_json_keeps_transport_failures_as_process_errors() -> Result<()> {
 
 #[test]
 fn cli_connection_failure_reports_curl_code_and_cause() -> Result<()> {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
-    let address = listener.local_addr()?;
-    drop(listener);
+    // Reserve the port without listening so parallel fixtures cannot acquire it.
+    let socket = tokio::net::TcpSocket::new_v4()?;
+    socket.bind("127.0.0.1:0".parse()?)?;
+    let address = socket.local_addr()?;
     let url = format!("http://{address}/connection-refused");
 
     let output = run_fetch_cli(&url)?;
+    drop(socket);
     let stdout = clean_output(&output.stdout);
     let stderr = clean_output(&output.stderr);
     assert!(!output.status.success(), "stdout={stdout}\nstderr={stderr}");
