@@ -1,4 +1,4 @@
-use std::{str, time::Duration};
+use std::{num::NonZeroUsize, str, time::Duration};
 
 use anyhow::{Error, Result};
 use curl::easy::{Easy2, Handler, WriteError};
@@ -186,7 +186,7 @@ pub struct StreamingResponseCollector {
     max_response_size: Option<usize>,
     response_too_large: bool,
     response_bytes_received: usize,
-    declared_identity_body_length: Option<usize>,
+    declared_identity_body_length: Option<NonZeroUsize>,
     cache_body_writer: Option<HttpCacheBodyWriter>,
     cache_plan: Option<StreamingCachePlan>,
     started: bool,
@@ -258,7 +258,7 @@ pub struct RawStreamingResponseCollector {
     max_response_size: Option<usize>,
     response_too_large: bool,
     response_bytes_received: usize,
-    declared_identity_body_length: Option<usize>,
+    declared_identity_body_length: Option<NonZeroUsize>,
     cache_body_writer: Option<HttpCacheBodyWriter>,
     cache_plan: Option<StreamingCachePlan>,
     started: bool,
@@ -506,11 +506,12 @@ impl StreamingResponseCollector {
             self.client_hint_restart_requested = true;
             return false;
         }
-        self.declared_identity_body_length = identity_encoded_content_length(&self.headers);
+        let declared_body_length = identity_encoded_content_length(&self.headers);
+        self.declared_identity_body_length = declared_body_length.and_then(NonZeroUsize::new);
         // Create the cache writer only after final response headers prove the
         // response is cacheable.
         self.maybe_create_cache_body_writer();
-        self.maybe_emit_start();
+        self.maybe_emit_start(declared_body_length == Some(0));
         if response_body_ends_at_headers(self.status) && self.started {
             self.finish_streaming_body();
             self.header_terminated = true;
@@ -538,7 +539,7 @@ impl StreamingResponseCollector {
         }
     }
 
-    fn maybe_emit_start(&mut self) {
+    fn maybe_emit_start(&mut self, body_is_empty: bool) {
         if self.started || self.response_too_large {
             return;
         }
@@ -552,9 +553,7 @@ impl StreamingResponseCollector {
         {
             return;
         }
-        if self.declared_identity_body_length == Some(0)
-            || response_body_ends_at_headers(self.status)
-        {
+        if body_is_empty || response_body_ends_at_headers(self.status) {
             self.response_progress.commit();
         }
         self.started = true;
@@ -910,8 +909,9 @@ impl RawStreamingResponseCollector {
             self.client_hint_restart_requested = true;
             return false;
         }
-        self.declared_identity_body_length = identity_encoded_content_length(&self.headers);
-        if self.declared_identity_body_length == Some(0) {
+        let declared_body_length = identity_encoded_content_length(&self.headers);
+        self.declared_identity_body_length = declared_body_length.and_then(NonZeroUsize::new);
+        if declared_body_length == Some(0) {
             self.response_progress.commit();
         }
         self.maybe_create_cache_body_writer();
@@ -1125,7 +1125,10 @@ impl Handler for StreamingResponseCollector {
         }
 
         self.response_bytes_received += data.len();
-        if self.started && self.declared_identity_body_length == Some(self.response_bytes_received)
+        if self.started
+            && self
+                .declared_identity_body_length
+                .is_some_and(|length| length.get() == self.response_bytes_received)
         {
             self.response_progress.commit();
         }
@@ -1205,7 +1208,10 @@ impl Handler for RawStreamingResponseCollector {
         }
 
         self.response_bytes_received += data.len();
-        if self.declared_identity_body_length == Some(self.response_bytes_received) {
+        if self
+            .declared_identity_body_length
+            .is_some_and(|length| length.get() == self.response_bytes_received)
+        {
             self.response_progress.commit();
         }
         self.write_cache_body_bytes(data);
@@ -1357,6 +1363,49 @@ mod tests {
         cancel_handle.cancel();
 
         assert!(!easy.get_mut().progress(0.0, 0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn html_zero_length_commits_only_for_an_accepted_response() {
+        for (status, headers, committed) in [
+            ("HTTP/1.1 200 OK", vec!["Content-Length: 0"], true),
+            ("HTTP/1.1 200 OK", vec![], false),
+            (
+                "HTTP/1.1 302 Found",
+                vec!["Location: /next", "Content-Length: 0"],
+                false,
+            ),
+        ] {
+            let cancel = FetchCancelHandle::new();
+            let (start_tx, _start_rx) = oneshot::channel();
+            let (body_tx, _body_rx) = mpsc::unbounded_channel();
+            let mut collector = StreamingResponseCollector::new(
+                new_shared_browser_cookie_store(),
+                start_tx,
+                body_tx,
+                cancel.clone(),
+            );
+            collector.begin_request(
+                None,
+                Url::parse("https://example.test/body").unwrap(),
+                NetworkCookieRequestContext::top_level_navigation("GET"),
+                None,
+                true,
+                Vec::new(),
+                None,
+            );
+            assert!(collector.header(format!("{status}\r\n").as_bytes()));
+            for header in headers {
+                assert!(collector.header(format!("{header}\r\n").as_bytes()));
+            }
+            assert!(collector.header(b"\r\n"));
+            assert_eq!(cancel.response_completion_is_committed(), committed);
+            assert_eq!(
+                cancel.response_timing().response_end_at().is_some(),
+                committed
+            );
+            assert_eq!(cancel.cancel_if_response_pending(), !committed);
+        }
     }
 
     #[test]
