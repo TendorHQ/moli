@@ -61,6 +61,8 @@ use crate::{
     proxy_connect::{ProxyConnectResponse, ProxyConnectResponseRecorder},
 };
 
+mod request_timing;
+
 const DEFAULT_RUNTIME_TRANSFERS: usize = 256;
 const RUNTIME_POLL_INTERVAL: Duration = Duration::from_millis(50);
 // curl-sys does not currently expose CURLINFO_HTTP_VERSION. This value is
@@ -2885,9 +2887,6 @@ impl Handler for FetchTransferHandler {
                 let is_proxy_connect = self
                     .proxy_connect_response_recorder
                     .record_outgoing_header_block(data);
-                if !is_proxy_connect && let Some(timing) = self.response_progress() {
-                    timing.mark_request_started();
-                }
                 if !is_proxy_connect
                     && let Some(recorder) = self.network_observation_recorder.as_ref()
                 {
@@ -2909,14 +2908,13 @@ fn configure_network_observation(
     capture_proxy_connect_response: bool,
 ) -> Result<()> {
     let recorder = request.network_observation_recorder().cloned();
-    let verbose = recorder.is_some()
-        || capture_proxy_connect_response
-        || easy.get_ref().response_progress().is_some();
+    let verbose = recorder.is_some() || capture_proxy_connect_response;
     if let Some(recorder) = recorder.as_ref() {
         recorder.set_current_request_cookie_report(request_cookie_report.cloned());
     }
     easy.get_mut()
         .begin_transfer(recorder, capture_proxy_connect_response);
+    request_timing::configure(easy)?;
     easy.verbose(verbose)
         .context("failed to configure curl network observation")
 }
@@ -3822,6 +3820,9 @@ fn request_panics_for_testing(request: &Request) -> bool {
 
 #[cfg(test)]
 mod response_timing_tests;
+
+#[cfg(test)]
+mod request_timing_tests;
 
 #[cfg(test)]
 mod tests {

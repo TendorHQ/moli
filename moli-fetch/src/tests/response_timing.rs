@@ -153,3 +153,138 @@ async fn raw_response_timing_is_native_even_when_the_consumer_does_not_poll() ->
     server.join().expect("server thread")?;
     Ok(())
 }
+
+#[tokio::test]
+async fn native_request_timing_is_transfer_scoped_on_multiplexed_http2() -> Result<()> {
+    let server = ScriptedH2Server::spawn_with_response_barrier(
+        vec![ScriptedResponse::ok("h2"); 2],
+        Arc::new(tokio::sync::Barrier::new(2)),
+    );
+    let mut config = FetchConfig::default();
+    config.set_tls_verify_host(false);
+    config.set_transport_connection_limits(Some(1), Some(1), Some(2));
+    let owner = FetchRuntimeOwner::new(&config, new_shared_browser_cookie_store());
+    let handle = owner.handle();
+    let buffered_cancel = FetchCancelHandle::new();
+    let raw_cancel = FetchCancelHandle::new();
+    let before = Instant::now();
+    let buffered = handle.submit_with_cancel(
+        Request::get(&server.url_path("/buffered"))?,
+        buffered_cancel.clone(),
+    )?;
+    let raw =
+        handle.submit_raw_stream(Request::get(&server.url_path("/raw"))?, raw_cancel.clone())?;
+    let requests = async {
+        let buffered = async {
+            let response = buffered.await??;
+            assert_eq!(
+                response.negotiated_http_version,
+                Some(NegotiatedHttpVersion::Http2)
+            );
+            assert_eq!(response.body_text(), "h2");
+            Ok::<_, anyhow::Error>(())
+        };
+        let raw = async {
+            let mut response = raw.into_response().await?;
+            assert_eq!(
+                response.negotiated_http_version,
+                Some(NegotiatedHttpVersion::Http2)
+            );
+            let mut body = Vec::new();
+            while let Some(chunk) = response.next_chunk().await {
+                body.extend_from_slice(&chunk);
+            }
+            response.finish().await?;
+            assert_eq!(body, b"h2");
+            Ok::<_, anyhow::Error>(())
+        };
+        tokio::try_join!(buffered, raw)
+    };
+    tokio::time::timeout(Duration::from_secs(5), requests).await??;
+    let after = Instant::now();
+    for cancel in [buffered_cancel, raw_cancel] {
+        let timing = cancel.response_timing();
+        assert!(timing.request_started_at().unwrap() >= before);
+        assert!(timing.request_started_at().unwrap() <= timing.response_started_at().unwrap());
+        assert!(timing.response_started_at().unwrap() <= timing.response_end_at().unwrap());
+        assert!(timing.response_end_at().unwrap() <= after);
+    }
+    // The barrier withholds all responses until both streams have arrived.
+    // A single connection therefore proves concurrent multiplexing, not just
+    // sequential reuse of an HTTP/2 connection.
+    assert_eq!(server.connection_stream_counts(), [2]);
+    server.shutdown();
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_request_timing_waits_for_the_proxy_tunnel() -> Result<()> {
+    let server = ScriptedH2Server::spawn(vec![ScriptedResponse::ok("tunneled")]);
+    let url = server.url_path("/timing");
+    let origin = Url::parse(&url)?;
+    let origin_port = origin.port().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    listener.set_nonblocking(true)?;
+    let proxy_url = format!("http://{}", listener.local_addr()?);
+    let (connect_seen_tx, connect_seen) = oneshot::channel();
+    let (release_connect, release_connect_rx) = oneshot::channel();
+    let proxy = thread::spawn(move || -> Result<()> {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(async {
+                let listener = TcpListener::from_std(listener)?;
+                let (mut downstream, _) = listener.accept().await?;
+                let mut head = Vec::new();
+                let mut byte = [0];
+                while !head.ends_with(b"\r\n\r\n") {
+                    downstream.read_exact(&mut byte).await?;
+                    head.extend_from_slice(&byte);
+                }
+                assert!(head.starts_with(b"CONNECT "));
+                connect_seen_tx.send(()).unwrap();
+                release_connect_rx.await?;
+                let mut upstream =
+                    tokio::net::TcpStream::connect(("127.0.0.1", origin_port)).await?;
+                downstream
+                    .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
+                    .await?;
+                // Dropping the client after completion closes the tunnel.
+                let _ = tokio::io::copy_bidirectional(&mut downstream, &mut upstream).await;
+                Ok(())
+            })
+    });
+    let mut config = FetchConfig::default();
+    config.set_tls_verify_host(false);
+    config.set_http_proxy(Some(proxy_url));
+    let client = FetchClient::new(&config, new_shared_browser_cookie_store());
+    let cancel = FetchCancelHandle::new();
+    let fetch = client.fetch_raw_stream_with_cancel(Request::get(&url)?, cancel.clone());
+    let release = async {
+        tokio::time::timeout(Duration::from_secs(5), connect_seen).await??;
+        assert!(cancel.response_timing().request_started_at().is_none());
+        let released_at = Instant::now();
+        release_connect.send(()).unwrap();
+        Ok::<_, anyhow::Error>(released_at)
+    };
+    let (response, released_at) = tokio::join!(fetch, release);
+    let mut response = response?;
+    assert_eq!(
+        response.negotiated_http_version,
+        Some(NegotiatedHttpVersion::Http2)
+    );
+    let mut body = Vec::new();
+    while let Some(chunk) = response.next_chunk().await {
+        body.extend_from_slice(&chunk);
+    }
+    response.finish().await?;
+    assert_eq!(body, b"tunneled");
+    let timing = cancel.response_timing();
+    assert!(timing.request_started_at().unwrap() >= released_at?);
+    assert!(timing.request_started_at().unwrap() <= timing.response_started_at().unwrap());
+    drop(response);
+    drop(client);
+    proxy.join().unwrap()?;
+    server.shutdown();
+    Ok(())
+}
