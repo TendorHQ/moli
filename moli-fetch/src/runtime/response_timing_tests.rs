@@ -403,3 +403,89 @@ fn transfer_progress_preserves_cancellation_and_body_observations_on_reuse() {
     cancel.cancel();
     assert!(!handler.progress(4.0, 4.0, 0.0, 0.0));
 }
+
+#[tokio::test]
+async fn html_redirect_to_a_cached_response_preserves_channels_and_timing() -> Result<()> {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let address = format!("http://{}", listener.local_addr()?);
+    let cache_dir = std::env::temp_dir().join(format!(
+        "moli-html-redirect-timing-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos(),
+    ));
+    let server = thread::spawn(move || -> std::io::Result<()> {
+        for response in [
+            b"HTTP/1.1 200 OK\r\nCache-Control: max-age=600\r\nContent-Length: 4\r\nConnection: close\r\n\r\nbody".as_slice(),
+            b"HTTP/1.1 103 Early Hints\r\n\r\nHTTP/1.1 302 Found\r\nLocation: /cache\r\nContent-Length: 4\r\nConnection: close\r\n\r\njunk".as_slice(),
+        ] {
+            let (mut stream, _) = listener.accept()?;
+            read_request(&mut stream)?;
+            stream.write_all(response)?;
+        }
+        Ok(())
+    });
+    let mut config = FetchConfig::default();
+    config.set_http_cache_dir(Some(cache_dir.display().to_string()));
+    let (owner, _, pending) =
+        submit_html_request(&config, Request::get(&format!("{address}/cache"))?);
+    pending.into_response().await?.finish().await?;
+
+    let pending = owner
+        .handle()
+        .submit_html_stream(Request::get(&format!("{address}/redirect"))?)?;
+    let cancel = pending.cancel_handle.clone();
+    let mut response = pending.into_response().await?;
+    assert!(response.from_cache);
+    assert!(response.redirected);
+    assert_eq!(response.final_url.path(), "/cache");
+    assert_eq!(response.redirect_chain.len(), 1);
+    assert!(!response.redirect_chain[0].from_cache);
+    let mut body = String::new();
+    while let Some(chunk) = response.next_chunk().await {
+        body.push_str(&chunk);
+    }
+    response.finish().await?;
+    assert_eq!(body, "body");
+    let timing = cancel.response_timing();
+    assert!(timing.request_started_at().is_none());
+    assert!(timing.first_interim_response_started_at().is_none());
+    assert!(!timing.body_bytes_received());
+    assert!(timing.response_started_at().unwrap() <= timing.response_end_at().unwrap());
+    assert!(!cancel.cancel_if_response_pending());
+    server.join().expect("server thread")?;
+    drop(owner);
+    std::fs::remove_dir_all(cache_dir)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn html_failure_before_reusing_an_easy_preserves_the_original_error() -> Result<()> {
+    let cancel = FetchCancelHandle::new();
+    let (started_tx, started_rx) = oneshot::channel();
+    let (body_tx, mut body_rx) = mpsc::unbounded_channel();
+    let (completion_tx, completion_rx) = oneshot::channel();
+    let mut job = StreamingRuntimeJob::new(
+        Request::get("http://example.test/cache")?,
+        started_tx,
+        body_tx,
+        completion_tx,
+        cancel.clone(),
+    );
+    job.easy = Some(Easy2::new(FetchTransferHandler::new_streaming(
+        StreamingResponseCollector::new(
+            new_shared_browser_cookie_store(),
+            job.started_tx.take().unwrap(),
+            job.body_tx.take().unwrap(),
+            cancel.clone(),
+        ),
+    )));
+    fail_streaming_job_with_easy(job, None, anyhow!("cached redirect rejected"));
+    let error = started_rx.await?.unwrap_err();
+    assert!(format!("{error:#}").contains("cached redirect rejected"));
+    assert!(body_rx.recv().await.is_none());
+    assert!(completion_rx.await?.is_err());
+    assert!(cancel.response_timing().response_end_at().is_some());
+    Ok(())
+}

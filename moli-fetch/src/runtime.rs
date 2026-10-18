@@ -2978,10 +2978,19 @@ fn complete_streaming_html_job(job: StreamingRuntimeJob, response: Response) {
 }
 
 fn complete_cached_streaming_html_job(
-    job: StreamingRuntimeJob,
+    mut job: StreamingRuntimeJob,
     cached: CachedStreamingResponseLookup,
     request_cookie_report: Option<StoredCookieQueryReport>,
 ) {
+    // Redirects and retries keep the response channels in the reused easy.
+    // Return them to the job before publishing a final cache hit.
+    if let Some(mut easy) = job.easy.take() {
+        (job.started_tx, job.body_tx) = easy
+            .get_mut()
+            .streaming_mut()
+            .expect("cached HTML response should use streaming collector")
+            .take_response_channels();
+    }
     let redirected = !job.request.redirect_chain.is_empty();
     let redirect_chain = job.request.redirect_chain.clone();
     let CachedStreamingResponseLookup {
@@ -3705,10 +3714,11 @@ fn fail_streaming_job(job: StreamingRuntimeJob, error: anyhow::Error) {
 }
 
 fn fail_streaming_job_with_easy(
-    job: StreamingRuntimeJob,
-    mut easy: Option<Easy2<FetchTransferHandler>>,
+    mut job: StreamingRuntimeJob,
+    easy: Option<Easy2<FetchTransferHandler>>,
     error: anyhow::Error,
 ) {
+    let mut easy = easy.or_else(|| job.easy.take());
     let error = network_fetch_failure_for_request(
         &job.request,
         &job.current_url,
