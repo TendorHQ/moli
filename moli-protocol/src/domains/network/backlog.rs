@@ -864,7 +864,7 @@ pub(crate) fn record_subresource_request_body(
     conn: &mut CdpConnection,
     owner: &CommandOwnerScope,
     request_id: &str,
-    request_body: Option<&[u8]>,
+    request_body: Option<&bytes::Bytes>,
     session_ids: &[Option<String>],
 ) {
     let Some(request_body) = request_body else {
@@ -877,7 +877,7 @@ pub(crate) fn record_subresource_request_body(
     conn.record_collected_network_data_body(
         request_id.to_owned(),
         data_type,
-        crate::conn::CapturedBody::from_bytes(request_body.to_vec()),
+        crate::conn::CapturedBody::from_bytes(request_body.clone()),
         collector_ids.iter().cloned(),
         collection_was_gated,
     );
@@ -886,7 +886,7 @@ pub(crate) fn record_subresource_request_body(
     };
     runtime_slot.record_captured_request_body_with_collector_scope(
         request_id.to_owned(),
-        request_body.to_vec(),
+        request_body.clone(),
         session_ids.to_vec(),
         collector_ids,
         collection_was_gated,

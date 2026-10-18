@@ -53,7 +53,7 @@ pub(crate) struct RequestInputSnapshot {
     pub(crate) keepalive: bool,
     pub(crate) priority: moli_fetch::FetchPriorityHint,
     pub(crate) duplex: String,
-    pub(crate) body: Option<Vec<u8>>,
+    pub(crate) body: Option<bytes::Bytes>,
     pub(crate) body_unusable: bool,
     pub(crate) headers: Vec<(String, String)>,
     pub(crate) signal: Option<v8::Global<v8::Object>>,
@@ -134,7 +134,8 @@ fn request_input_snapshot_inner<'s>(
     let duplex = defined_object_string_property(scope, object, "duplex")
         .unwrap_or_else(|| "half".to_owned());
     let body = try_network_body_bytes_from_object(scope, object)
-        .map_err(|_| webidl::WebIdlError::custom_message("Failed to materialize request body"))?;
+        .map_err(|_| webidl::WebIdlError::custom_message("Failed to materialize request body"))?
+        .map(bytes::Bytes::from);
     let headers = webidl::property_result(
         scope,
         object,
@@ -201,9 +202,9 @@ fn request_input_snapshot_from_private_slots<'s>(
     let body = if body_unusable {
         None
     } else {
-        try_network_body_bytes_from_object(scope, object).map_err(|_| {
-            webidl::WebIdlError::custom_message("Failed to materialize request body")
-        })?
+        try_network_body_bytes_from_object(scope, object)
+            .map_err(|_| webidl::WebIdlError::custom_message("Failed to materialize request body"))?
+            .map(bytes::Bytes::from)
     };
     // Inherited headers are an internal list copy, unlike an explicit
     // RequestInit.headers value, which undergoes WebIDL iterable conversion.

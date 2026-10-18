@@ -373,7 +373,7 @@ pub(super) fn spawn_network_xhr_fetch(
     internal_id
 }
 
-pub(super) fn request_body_text(body: &Option<Vec<u8>>) -> Option<String> {
+pub(super) fn request_body_text(body: &Option<bytes::Bytes>) -> Option<String> {
     body.as_ref()
         .map(|body| String::from_utf8_lossy(body).into_owned())
 }

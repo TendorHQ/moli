@@ -5,7 +5,7 @@ use std::str::FromStr;
 pub(super) struct ParsedWindowFetchInput {
     pub(super) url: String,
     pub(super) method: String,
-    pub(super) body: Option<Vec<u8>>,
+    pub(super) body: Option<bytes::Bytes>,
     pub(super) headers: Vec<(String, String)>,
     pub(super) request_mode: moli_fetch::RequestMode,
     pub(super) credentials_mode: moli_fetch::RequestCredentialsMode,

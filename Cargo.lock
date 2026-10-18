@@ -2723,6 +2723,7 @@ name = "moli-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "moli-browser-profile",
  "moli-cookie-jar",
  "moli-dom",
@@ -2847,6 +2848,7 @@ name = "moli-fetch"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "cidr",
  "crossbeam-channel",
  "curl",
@@ -3080,6 +3082,7 @@ name = "moli-page-types"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "bytes",
  "http-auth",
  "moli-browser-profile",
  "moli-cookie-jar",
@@ -3150,6 +3153,7 @@ dependencies = [
  "anyhow",
  "axum",
  "base64 0.22.1",
+ "bytes",
  "chromiumoxide_cdp",
  "data-url",
  "futures-util",
@@ -3246,6 +3250,7 @@ name = "moli-protocol-webdriver-bidi"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "bytes",
  "moli-header-field",
  "moli-protocol",
  "serde_json",
@@ -3269,6 +3274,7 @@ dependencies = [
  "app_units",
  "base64 0.22.1",
  "brotlic",
+ "bytes",
  "crossbeam-channel",
  "cssparser",
  "curl",

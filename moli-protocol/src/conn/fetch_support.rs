@@ -1480,7 +1480,7 @@ impl PendingSubresourceFetchRequest {
         &mut self,
         url: Option<Url>,
         method: Option<String>,
-        body: Option<String>,
+        body: Option<bytes::Bytes>,
         headers: Option<moli_fetch::RequestHeaderOverride>,
     ) {
         let Some(chain) = self.request_stage_chain.as_mut() else {
@@ -1493,8 +1493,8 @@ impl PendingSubresourceFetchRequest {
             chain.method = method;
         }
         if let Some(body) = body {
-            chain.body = Some(body);
-            chain.body_overridden = true;
+            chain.body = Some(String::from_utf8_lossy(&body).into_owned());
+            chain.body_override = Some(body);
         }
         if let Some(headers) = headers {
             chain.headers = headers.headers().clone();
@@ -1508,7 +1508,7 @@ impl PendingSubresourceFetchRequest {
     ) -> (
         Option<Url>,
         Option<String>,
-        Option<Option<String>>,
+        Option<Option<bytes::Bytes>>,
         Option<moli_fetch::RequestHeaderOverride>,
     ) {
         let Some(chain) = self.request_stage_chain.as_ref() else {
@@ -1517,7 +1517,7 @@ impl PendingSubresourceFetchRequest {
         (
             Some(chain.url.clone()),
             Some(chain.method.clone()),
-            chain.body_overridden.then(|| chain.body.clone()),
+            chain.body_override.clone().map(Some),
             chain.header_override.clone(),
         )
     }
@@ -1541,8 +1541,8 @@ pub struct PendingSubresourceFetchRequestStageChain {
     pub method: String,
     pub headers: moli_fetch::RequestHeaders,
     pub body: Option<String>,
-    /// A display snapshot is not an override of the renderer's binary body.
-    pub body_overridden: bool,
+    /// None preserves the renderer's upload; Some(empty) explicitly clears it.
+    pub body_override: Option<bytes::Bytes>,
     pub request_cookie_report: Option<StoredCookieQueryReport>,
     pub remaining_sessions: Vec<PendingSubresourceFetchRequestStage>,
 }
@@ -1707,7 +1707,7 @@ impl CdpConnection {
         internal_id: u64,
         url: Option<Url>,
         method: Option<String>,
-        body: Option<Option<String>>,
+        body: Option<Option<bytes::Bytes>>,
         headers: Option<moli_fetch::RequestHeaders>,
         intercept_response: bool,
         handle_auth_requests: bool,
@@ -1731,7 +1731,7 @@ impl CdpConnection {
         internal_id: u64,
         url: Option<Url>,
         method: Option<String>,
-        body: Option<Option<String>>,
+        body: Option<Option<bytes::Bytes>>,
         headers: Option<moli_fetch::RequestHeaders>,
         intercept_response: bool,
         handle_auth_requests: bool,
@@ -1756,7 +1756,7 @@ impl CdpConnection {
         internal_id: u64,
         url: Option<Url>,
         method: Option<String>,
-        body: Option<Option<String>>,
+        body: Option<Option<bytes::Bytes>>,
         headers: Option<moli_fetch::RequestHeaders>,
         intercept_response: bool,
         handle_auth_requests: bool,

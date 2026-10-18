@@ -602,7 +602,7 @@ fn append_content_security_policy_report_requests(
         let Ok(request) = Request::new_bytes(
             "POST",
             endpoint,
-            Some(body.as_bytes().to_vec()),
+            Some(bytes::Bytes::copy_from_slice(body.as_bytes())),
             vec![("Content-Type".to_owned(), content_type.to_owned())],
         ) else {
             continue;

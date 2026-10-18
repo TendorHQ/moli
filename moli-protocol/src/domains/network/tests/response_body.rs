@@ -257,7 +257,7 @@ async fn get_request_post_data_matches_chromium_errors_and_binary_encoding() {
         .runtime_slot
         .record_captured_request_body_with_collector_scope(
             "REQ-empty".to_owned(),
-            Vec::new(),
+            bytes::Bytes::new(),
             [None::<String>],
             std::iter::empty::<String>(),
             false,
@@ -267,7 +267,7 @@ async fn get_request_post_data_matches_chromium_errors_and_binary_encoding() {
         .runtime_slot
         .record_captured_request_body_with_collector_scope(
             "REQ-binary".to_owned(),
-            vec![0x00, 0xff, b'a'],
+            bytes::Bytes::from_static(&[0x00, 0xff, b'a']),
             [None::<String>],
             std::iter::empty::<String>(),
             false,
@@ -464,7 +464,7 @@ async fn get_request_post_data_respects_recorded_session_visibility() {
         .runtime_slot
         .record_captured_request_body_with_collector_scope(
             "REQ-aux-only".to_owned(),
-            b"aux-only body".to_vec(),
+            bytes::Bytes::from_static(b"aux-only body"),
             [Some("SID-attached".to_owned())],
             std::iter::empty::<String>(),
             false,
@@ -526,7 +526,7 @@ async fn get_request_post_data_returns_main_document_navigation_post_body() {
         requested_url,
         request_method: "POST".to_owned(),
         request_body: Some("username=alice&pw=s3cret".to_owned()),
-        request_body_bytes: Some(b"username=alice&pw=s3cret".to_vec()),
+        request_body_bytes: Some(bytes::Bytes::from_static(b"username=alice&pw=s3cret")),
         request_headers: Vec::new().into(),
         request_load_policy: crate::conn::NavigationRequestLoadPolicy::DocumentInitiated,
         timestamp: 0.0,
@@ -599,6 +599,7 @@ async fn get_request_post_data_uses_text_projection_while_bidi_collector_keeps_t
     let mut transport_bytes = multipart_text.as_bytes().to_vec();
     transport_bytes.extend_from_slice(&file_bytes);
     transport_bytes.extend_from_slice(b"\r\n----MoliFormDataBoundary0000--\r\n");
+    let transport_bytes = bytes::Bytes::from(transport_bytes);
 
     let requested_url = Url::parse("http://127.0.0.1:1/upload").unwrap();
     let navigation_state = NavigationDispatchState {
@@ -763,13 +764,13 @@ async fn get_network_data_returns_bidi_response_body_bytes() {
         .expect("bidi session runtime slot")
         .record_captured_request_body_with_collector_scope(
             "REQ-bidi-request".to_owned(),
-            "bidi request body".as_bytes().to_vec(),
+            bytes::Bytes::from_static(b"bidi request body"),
             [Some("bidi-session-1".to_owned())],
             request_collector_ids,
             false,
         );
 
-    let binary_request = vec![0x00, 0xff, b'a'];
+    let binary_request = bytes::Bytes::from_static(&[0x00, 0xff, b'a']);
     let binary_request_collector_ids = ctx.conn.network_data_collector_ids_for_session_owner_body(
         Some("bidi-session-1"),
         crate::automation::DevToolsNetworkDataType::Request,

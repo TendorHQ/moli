@@ -1169,7 +1169,7 @@ impl LayoutMetricTrace {
 pub(crate) struct ChildBrowsingContextNavigationRequest {
     pub(crate) url: Url,
     pub(crate) method: String,
-    pub(crate) body: Option<Vec<u8>>,
+    pub(crate) body: Option<bytes::Bytes>,
     pub(crate) request_headers: Vec<(String, String)>,
 }
 

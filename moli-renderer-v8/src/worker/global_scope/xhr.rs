@@ -13,7 +13,7 @@ pub(in crate::worker) struct PreparedWorkerXhrSendRequest {
     resolved_url: Url,
     method: String,
     request_headers: moli_fetch::RequestHeaders,
-    send_body: Option<Vec<u8>>,
+    send_body: Option<bytes::Bytes>,
     credentials_mode: RequestCredentialsMode,
 }
 
@@ -906,7 +906,7 @@ pub(in crate::worker) fn record_worker_xhr_failure(
         pending
             .request_body
             .as_ref()
-            .map(|body| body.as_bytes().to_vec()),
+            .map(|body| bytes::Bytes::copy_from_slice(body.as_bytes())),
         SubresourceResourceType::Xhr,
         network_error_text,
     );

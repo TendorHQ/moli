@@ -1342,7 +1342,8 @@ pub struct DevToolsContinueInterceptedRequestCommand {
     pub request_id: DevToolsRequestId,
     pub url: Option<String>,
     pub method: Option<String>,
-    pub post_data: Option<String>,
+    /// No replacement when absent; an empty buffer explicitly clears the upload.
+    pub post_data: Option<bytes::Bytes>,
     pub headers: Option<moli_fetch::RequestHeaders>,
     pub intercept_response: bool,
 }

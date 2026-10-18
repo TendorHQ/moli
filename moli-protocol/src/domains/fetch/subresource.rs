@@ -319,7 +319,7 @@ async fn prepare_subresource_fetch_pause_sources_async(
                     method: info.method.clone(),
                     headers: info.request_headers.clone(),
                     body: info.request_body.clone(),
-                    body_overridden: false,
+                    body_override: None,
                     request_cookie_report: info.request_cookie_report.clone(),
                     remaining_sessions,
                 }));

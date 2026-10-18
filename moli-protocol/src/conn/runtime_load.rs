@@ -809,7 +809,7 @@ pub(crate) struct BackgroundNavigationLoadJob {
     load_inputs: TargetNavigationLoadInputs,
     method: String,
     raw_url: String,
-    body: Option<Vec<u8>>,
+    body: Option<bytes::Bytes>,
     request_headers: moli_fetch::RequestHeaders,
     body_progress_source: MainDocumentBodyProgressSource,
     /// Browser-context transport/cache state shared with the resident engine.
@@ -2356,7 +2356,7 @@ impl CdpConnection {
             load_inputs,
             method,
             raw_url,
-            body.map(String::into_bytes),
+            body.map(bytes::Bytes::from),
             request_headers,
             body_progress_source,
         )
@@ -2417,7 +2417,7 @@ impl CdpConnection {
         load_inputs: TargetNavigationLoadInputs,
         method: &str,
         raw_url: &str,
-        body: Option<Vec<u8>>,
+        body: Option<bytes::Bytes>,
         request_headers: moli_fetch::RequestHeaders,
         body_progress_source: MainDocumentBodyProgressSource,
     ) -> anyhow::Result<NavigationLoadOutcome> {
@@ -3192,7 +3192,7 @@ impl CdpConnection {
             &load_inputs,
             method,
             raw_url,
-            body.map(String::into_bytes),
+            body.map(bytes::Bytes::from),
             request_headers,
             auth,
         )
@@ -3221,7 +3221,7 @@ impl CdpConnection {
         load_inputs: &TargetNavigationLoadInputs,
         method: &str,
         raw_url: &str,
-        body: Option<Vec<u8>>,
+        body: Option<bytes::Bytes>,
         request_headers: moli_fetch::RequestHeaders,
         auth: Option<SubresourceAuthCredentials>,
     ) -> anyhow::Result<NetworkFetchResult<StreamingRawResponse>> {
@@ -3899,7 +3899,7 @@ fn build_navigation_network_request(
     load_inputs: &TargetNavigationLoadInputs,
     method: &str,
     raw_url: &str,
-    body: Option<Vec<u8>>,
+    body: Option<bytes::Bytes>,
     request_headers: moli_fetch::RequestHeaders,
     auth: Option<SubresourceAuthCredentials>,
 ) -> anyhow::Result<Request> {

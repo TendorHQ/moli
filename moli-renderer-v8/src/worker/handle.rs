@@ -572,7 +572,7 @@ pub(crate) struct WorkerPendingFetchContinue {
     pub(crate) url: Url,
     pub(crate) method: String,
     /// Upload bytes after applying explicit overrides, including an empty body.
-    pub(crate) body: Option<Vec<u8>>,
+    pub(crate) body: Option<bytes::Bytes>,
     pub(crate) headers: moli_fetch::RequestHeaders,
     pub(crate) intercept_response: bool,
     pub(crate) handle_auth_requests: bool,
@@ -588,7 +588,7 @@ pub(crate) struct WorkerPendingXhrContinue {
     pub(crate) url: Url,
     pub(crate) method: String,
     /// Upload bytes after applying explicit overrides, including an empty body.
-    pub(crate) body: Option<Vec<u8>>,
+    pub(crate) body: Option<bytes::Bytes>,
     pub(crate) headers: moli_fetch::RequestHeaders,
     pub(crate) intercept_response: bool,
     pub(crate) handle_auth_requests: bool,

@@ -836,7 +836,7 @@ enum FormSubmissionMethod {
     },
     Post {
         resolved_url: Url,
-        body: Vec<u8>,
+        body: bytes::Bytes,
         content_type: String,
         form_data_entries: Vec<(String, v8::Global<v8::Value>)>,
     },
@@ -978,7 +978,7 @@ fn submit_post_form_to_top_level_browsing_context(
     form_handle: DomHandle,
     submitter: Option<DomHandle>,
     resolved_url: Url,
-    body: Vec<u8>,
+    body: bytes::Bytes,
     content_type: String,
     form_data_entries: &[(String, v8::Global<v8::Value>)],
     user_initiated: bool,
@@ -1031,7 +1031,7 @@ fn submit_post_form_to_child_browsing_context(
     submitter: Option<DomHandle>,
     target_document: DomHandle,
     resolved_url: Url,
-    body: Vec<u8>,
+    body: bytes::Bytes,
     content_type: String,
     form_data_entries: &[(String, v8::Global<v8::Value>)],
 ) -> bool {
@@ -1128,7 +1128,7 @@ fn build_form_submission_request(
         let encoded = serialize_submission_body(scope, &entries, enctype?, submission_encoding);
         return Some(FormSubmissionMethod::Post {
             resolved_url,
-            body: encoded.body,
+            body: encoded.body.into(),
             content_type: encoded.content_type,
             form_data_entries: entries,
         });

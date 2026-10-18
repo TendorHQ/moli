@@ -28,7 +28,8 @@ enum RequestContext {
 pub struct Request {
     pub url: Url,
     pub method: String,
-    pub body: Option<Vec<u8>>,
+    /// Immutable upload bytes, shared when a request is cloned or redirected.
+    pub body: Option<bytes::Bytes>,
     /// Wire bytes, with the source encoding resolved before header merging.
     pub request_headers: crate::RequestHeaders,
     redirect_headers: Option<crate::RequestHeaders>,
@@ -542,7 +543,7 @@ impl Request {
         Self::new_bytes(
             method,
             raw_url,
-            body.map(String::into_bytes),
+            body.map(bytes::Bytes::from),
             request_headers,
         )
     }
@@ -552,7 +553,7 @@ impl Request {
     pub fn new_bytes(
         method: &str,
         raw_url: &str,
-        body: Option<Vec<u8>>,
+        body: Option<bytes::Bytes>,
         request_headers: impl Into<crate::RequestHeaders>,
     ) -> Result<Self> {
         let url = Url::parse(raw_url)
@@ -563,7 +564,7 @@ impl Request {
     fn new_http_with_url(
         method: &str,
         url: Url,
-        body: Option<Vec<u8>>,
+        body: Option<bytes::Bytes>,
         request_headers: impl Into<crate::RequestHeaders>,
     ) -> Self {
         Self {
@@ -887,7 +888,7 @@ impl Request {
     pub fn new_browser_bytes(
         method: &str,
         raw_url: &str,
-        body: Option<Vec<u8>>,
+        body: Option<bytes::Bytes>,
         headers: impl Into<crate::RequestHeaders>,
         origin: WebOrigin,
     ) -> Result<Self> {
@@ -897,7 +898,7 @@ impl Request {
     pub fn new_browser(
         method: &str,
         url: Url,
-        body: Option<Vec<u8>>,
+        body: Option<bytes::Bytes>,
         headers: impl Into<crate::RequestHeaders>,
         origin: WebOrigin,
     ) -> Self {

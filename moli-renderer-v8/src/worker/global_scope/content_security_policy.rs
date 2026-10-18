@@ -677,7 +677,7 @@ fn record_worker_content_security_policy_report_failure(
         request.url,
         request.method,
         request.request_headers.clone(),
-        request_body.map(String::into_bytes),
+        request_body.map(bytes::Bytes::from),
         SubresourceResourceType::CspReport,
         message,
     );

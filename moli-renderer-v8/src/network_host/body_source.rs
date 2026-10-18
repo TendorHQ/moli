@@ -371,9 +371,10 @@ fn context_host_mut<'s>(
 pub(in crate::network_host) fn set_network_body_owned_bytes<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     object: v8::Local<'s, v8::Object>,
-    bytes: Vec<u8>,
+    bytes: impl Into<Vec<u8>>,
 ) -> Option<v8::Local<'s, v8::ArrayBuffer>> {
-    let buffer = blob::array_buffer_from_bytes(scope, bytes)?;
+    // JS can mutate this backing store, so it must own its bytes exclusively.
+    let buffer = blob::array_buffer_from_bytes(scope, bytes.into())?;
     // Keep body storage behind a dedicated source object. Today this source is
     // still ArrayBuffer-backed; stream/spool-backed variants should extend this
     // module instead of teaching Fetch/XHR call sites about more hidden slots.

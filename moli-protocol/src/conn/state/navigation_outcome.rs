@@ -358,7 +358,7 @@ pub struct NavigationDispatchState {
     pub request_body: Option<String>,
     /// Authoritative bytes used for transport. This differs from the text
     /// projection for multipart form data containing binary file payloads.
-    pub request_body_bytes: Option<Vec<u8>>,
+    pub request_body_bytes: Option<bytes::Bytes>,
     pub request_headers: moli_fetch::RequestHeaders,
     pub request_load_policy: NavigationRequestLoadPolicy,
     pub timestamp: f64,
@@ -366,15 +366,15 @@ pub struct NavigationDispatchState {
 }
 
 impl NavigationDispatchState {
-    pub(crate) fn clone_request_body_bytes(&self) -> Option<Vec<u8>> {
+    pub(crate) fn clone_request_body_bytes(&self) -> Option<bytes::Bytes> {
         self.request_body_bytes
             .clone()
-            .or_else(|| self.request_body.clone().map(String::into_bytes))
+            .or_else(|| self.request_body.clone().map(bytes::Bytes::from))
     }
 
-    pub(crate) fn set_request_body_text(&mut self, body: String) {
-        self.request_body_bytes = Some(body.as_bytes().to_vec());
-        self.request_body = Some(body);
+    pub(crate) fn set_request_body_bytes(&mut self, body: bytes::Bytes) {
+        self.request_body = Some(String::from_utf8_lossy(&body).into_owned());
+        self.request_body_bytes = Some(body);
     }
 }
 

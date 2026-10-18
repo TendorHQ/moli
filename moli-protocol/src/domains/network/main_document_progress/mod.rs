@@ -2371,7 +2371,7 @@ pub(crate) fn record_main_document_request_body(
             .unwrap_or_else(|| String::from_utf8_lossy(&transport_bytes).into_owned());
         runtime_slot.record_captured_request_body_with_collector_scope(
             request_id,
-            cdp_request_body.into_bytes(),
+            cdp_request_body.into(),
             session_ids.iter().cloned(),
             collector_ids,
             collection_was_gated,

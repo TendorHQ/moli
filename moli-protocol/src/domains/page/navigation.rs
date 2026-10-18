@@ -2056,7 +2056,7 @@ pub(super) fn start_session_owner_navigation_from_renderer(
     owner: &CommandOwnerScope,
     url: &str,
     request_method: &str,
-    request_body: Option<&[u8]>,
+    request_body: Option<&bytes::Bytes>,
     request_headers: &[(String, String)],
     browser_navigation_kind: moli_fetch::BrowserNavigationRequestKind,
     web_mcp_invocation: Option<moli_page_types::RendererWebMcpNavigation>,
@@ -2101,7 +2101,7 @@ pub(super) fn start_session_owner_navigation_from_renderer(
             None,
             result_projection,
             request_method,
-            request_body.map(<[u8]>::to_vec),
+            request_body.cloned(),
             request_headers.to_vec(),
             // The renderer has already settled the browsing-context action;
             // fetching and committing the destination is a new navigation
@@ -2688,7 +2688,7 @@ fn start_navigate_to_url_command_with_background_policy_and_request(
     referrer: Option<&str>,
     result_projection: NavigationResultProjection,
     request_method: &str,
-    request_body: Option<Vec<u8>>,
+    request_body: Option<bytes::Bytes>,
     request_headers: Vec<(String, String)>,
     allow_background_navigation: bool,
     request_load_policy: NavigationRequestLoadPolicy,

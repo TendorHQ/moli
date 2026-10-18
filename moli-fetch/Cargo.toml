@@ -11,6 +11,7 @@ test-support = ["moli-cookie-jar/test-support"]
 [dependencies]
 moli-header-field = { path = "../moli-header-field" }
 anyhow = "1.0.100"
+bytes = "1"
 cidr = "0.3.2"
 crossbeam-channel = "0.5.15"
 curl = { version = "0.4.51", default-features = false, features = ["brotli", "http2", "poll_7_68_0", "ssl", "static-curl"] }

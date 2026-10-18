@@ -18,8 +18,7 @@ use moli_url_policy::BrowserUrlScheme;
 use url::Url;
 
 use super::helpers::{
-    decode_base64_bytes, decode_base64_to_string, response_headers_from_params,
-    response_headers_with_presence_from_params,
+    decode_base64_bytes, response_headers_from_params, response_headers_with_presence_from_params,
 };
 use super::navigation::{
     complete_tokened_materialized_navigation_as_background_events_async,
@@ -166,8 +165,8 @@ fn build_cdp_continue_intercepted_request_command(
         parse_continue_request_url(url)?;
     }
     let decoded_post_data = match params.post_data.as_ref().map(AsRef::as_ref) {
-        Some(post_data) => match decode_base64_to_string(post_data) {
-            Ok(body) => Some(body),
+        Some(post_data) => match decode_base64_bytes(post_data) {
+            Ok(body) => Some(bytes::Bytes::from(body)),
             Err(()) => return Err(()),
         },
         None => None,
@@ -378,7 +377,7 @@ fn start_devtools_continue_intercepted_request_command(
             pending.navigation.request_method = method;
         }
         if let Some(body) = command.post_data.clone() {
-            pending.navigation.set_request_body_text(body);
+            pending.navigation.set_request_body_bytes(body);
         }
         if let Some(headers) = command.headers.clone() {
             if command.context.protocol == FrontendProtocol::Cdp {
@@ -1983,7 +1982,7 @@ mod protocol_neutral_tests {
         assert_eq!(command.request_id.as_str(), "interception-job-0");
         assert_eq!(command.url.as_deref(), Some("https://example.test/next"));
         assert_eq!(command.method.as_deref(), Some("POST"));
-        assert_eq!(command.post_data.as_deref(), Some("hello"));
+        assert_eq!(command.post_data.as_deref(), Some(b"hello".as_slice()));
         assert_eq!(
             command.headers.map(|headers| headers.to_byte_strings()),
             Some(vec![("x-test".to_owned(), "1".to_owned())])
@@ -2103,7 +2102,7 @@ mod protocol_neutral_tests {
                 method: "GET".to_owned(),
                 headers: vec![("x-old".to_owned(), "1".to_owned())].into(),
                 body: None,
-                body_overridden: false,
+                body_override: None,
                 request_cookie_report: None,
                 remaining_sessions: vec![PendingSubresourceFetchRequestStage {
                     session_id: Some("SID-attached".to_owned()),
@@ -2141,6 +2140,8 @@ mod protocol_neutral_tests {
             .expect("continueRequest params should be present");
         let command = build_cdp_continue_intercepted_request_command(&conn, &cmd, params)
             .expect("continueRequest command should normalize");
+
+        let upload_storage = command.post_data.as_ref().unwrap().as_ptr();
 
         let step = start_devtools_fetch_command(
             &mut conn,
@@ -2208,7 +2209,11 @@ mod protocol_neutral_tests {
             Some("https://example.test/rewritten")
         );
         assert_eq!(method.as_deref(), Some("POST"));
-        assert_eq!(body, Some(Some("body".to_owned())));
+        assert_eq!(body, Some(Some(bytes::Bytes::from_static(b"body"))));
+        assert_eq!(
+            body.as_ref().unwrap().as_ref().unwrap().as_ptr(),
+            upload_storage
+        );
         assert_eq!(
             headers.map(|headers| headers.headers().to_byte_strings()),
             Some(vec![("x-new".to_owned(), "2".to_owned())])
@@ -2388,7 +2393,7 @@ mod protocol_neutral_tests {
                 method: "GET".to_owned(),
                 headers: Vec::new().into(),
                 body: None,
-                body_overridden: false,
+                body_override: None,
                 request_cookie_report: None,
                 remaining_sessions: vec![PendingSubresourceFetchRequestStage {
                     session_id: Some("BIDI-SID".to_owned()),

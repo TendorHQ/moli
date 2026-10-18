@@ -13,7 +13,7 @@ async fn binary_request_round_trip(
     scope: RequestScope,
     xhr: bool,
     chained: bool,
-    replacement: Option<&str>,
+    replacement: Option<&[u8]>,
     inspect_paused_body: bool,
 ) {
     let (sender, mut received) = tokio::sync::mpsc::unbounded_channel();
@@ -169,7 +169,7 @@ async fn binary_request_round_trip(
     let actual = received
         .try_recv()
         .expect("server must have consumed the body before completion");
-    let expected = replacement.map(str::as_bytes).unwrap_or(BODY);
+    let expected = replacement.unwrap_or(BODY);
     assert_eq!(
         actual, expected,
         "Fetch.continueRequest must preserve the original bytes unless overridden"
@@ -191,15 +191,18 @@ async fn binary_request_round_trip(
         "params":{"requestId":network_id}}),
     )
     .await;
-    let body = replacement.map_or_else(|| BASE64_STANDARD.encode(BODY), str::to_owned);
-    if replacement == Some("") {
+    let (body, base64_encoded) = match std::str::from_utf8(expected) {
+        Ok(body) => (body.to_owned(), false),
+        Err(_) => (BASE64_STANDARD.encode(expected), true),
+    };
+    if expected.is_empty() {
         // Keep the existing Network API contract for an empty upload; the
         // server and JavaScript assertions above still require zero bytes.
         ctx.expect_error(id, -32000, "No post data available for the request");
     } else {
         ctx.expect_result(
             id,
-            json!({"postData":body,"base64Encoded":replacement.is_none()}),
+            json!({"postData":body,"base64Encoded":base64_encoded}),
             Some("SID-1"),
         );
     }
@@ -227,7 +230,7 @@ async fn chained_fetch_text_override_replaces_binary_request_body() {
         RequestScope::Window,
         false,
         true,
-        Some("replacement"),
+        Some(b"replacement"),
         false,
     )
     .await;
@@ -260,12 +263,12 @@ async fn chained_worker_xhr_noop_preserves_binary_request_body() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn chained_worker_fetch_empty_override_replaces_binary_request_body() {
-    binary_request_round_trip(RequestScope::Worker, false, true, Some(""), false).await;
+    binary_request_round_trip(RequestScope::Worker, false, true, Some(b""), false).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn chained_worker_xhr_empty_override_replaces_binary_request_body() {
-    binary_request_round_trip(RequestScope::Worker, true, true, Some(""), false).await;
+    binary_request_round_trip(RequestScope::Worker, true, true, Some(b""), false).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -274,7 +277,7 @@ async fn chained_worker_fetch_text_override_replaces_binary_request_body() {
         RequestScope::Worker,
         false,
         true,
-        Some("replacement"),
+        Some(b"replacement"),
         false,
     )
     .await;
@@ -282,7 +285,14 @@ async fn chained_worker_fetch_text_override_replaces_binary_request_body() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn chained_worker_xhr_text_override_replaces_binary_request_body() {
-    binary_request_round_trip(RequestScope::Worker, true, true, Some("replacement"), false).await;
+    binary_request_round_trip(
+        RequestScope::Worker,
+        true,
+        true,
+        Some(b"replacement"),
+        false,
+    )
+    .await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -303,4 +313,76 @@ async fn shared_worker_fetch_noop_preserves_binary_request_body() {
 #[tokio::test(flavor = "multi_thread")]
 async fn shared_worker_xhr_noop_preserves_binary_request_body() {
     binary_request_round_trip(RequestScope::SharedWorker, true, false, None, false).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn chained_fetch_binary_override_preserves_bytes() {
+    binary_request_round_trip(
+        RequestScope::Window,
+        false,
+        true,
+        Some(&[0, 254, 192, 128, 65, 66]),
+        false,
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn chained_xhr_binary_override_preserves_bytes() {
+    binary_request_round_trip(
+        RequestScope::Window,
+        true,
+        true,
+        Some(&[0, 254, 192, 128, 65, 66]),
+        false,
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn chained_worker_fetch_binary_override_preserves_bytes() {
+    binary_request_round_trip(
+        RequestScope::Worker,
+        false,
+        true,
+        Some(&[0, 254, 192, 128, 65, 66]),
+        false,
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn chained_worker_xhr_binary_override_preserves_bytes() {
+    binary_request_round_trip(
+        RequestScope::Worker,
+        true,
+        true,
+        Some(&[0, 254, 192, 128, 65, 66]),
+        false,
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn chained_shared_worker_fetch_binary_override_preserves_bytes() {
+    binary_request_round_trip(
+        RequestScope::SharedWorker,
+        false,
+        true,
+        Some(&[0, 254, 192, 128, 65, 66]),
+        false,
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn chained_shared_worker_xhr_binary_override_preserves_bytes() {
+    binary_request_round_trip(
+        RequestScope::SharedWorker,
+        true,
+        true,
+        Some(&[0, 254, 192, 128, 65, 66]),
+        false,
+    )
+    .await;
 }

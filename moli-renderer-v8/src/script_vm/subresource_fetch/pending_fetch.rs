@@ -6,7 +6,7 @@ impl ScriptVm {
         internal_id: u64,
         url: Option<Url>,
         method: Option<String>,
-        body: Option<Option<String>>,
+        body: Option<Option<bytes::Bytes>>,
         headers: Option<moli_fetch::RequestHeaderOverride>,
         intercept_response: bool,
         handle_auth_requests: bool,
@@ -46,7 +46,10 @@ impl ScriptVm {
         // The text snapshot is only for protocol display. Unless the client
         // explicitly replaces the body, retain the original binary upload.
         if let Some(body) = &body {
-            info.request_body_bytes = body.as_ref().map(|body| body.as_bytes().to_vec());
+            info.request_body_bytes = body.clone();
+            info.request_body = body
+                .as_ref()
+                .map(|body| String::from_utf8_lossy(body).into_owned());
         }
         let pending = match continuation {
             PendingSubresourceContinuation::WebSocket(connection) => {
@@ -74,7 +77,7 @@ impl ScriptVm {
                 let fetch_id = target.fetch_id();
                 let request_url = url.unwrap_or_else(|| info.url.clone());
                 let request_method = method.unwrap_or_else(|| info.method.clone());
-                let request_body = body.unwrap_or_else(|| info.request_body.clone());
+                let request_body = info.request_body.clone();
                 let request_headers = headers.unwrap_or_else(|| info.request_headers.clone());
                 let continued = self.continue_worker_owned_fetch(
                     target,
@@ -131,7 +134,7 @@ impl ScriptVm {
                 let xhr_id = target.xhr_id();
                 let request_url = url.unwrap_or_else(|| info.url.clone());
                 let request_method = method.unwrap_or_else(|| info.method.clone());
-                let request_body = body.unwrap_or_else(|| info.request_body.clone());
+                let request_body = info.request_body.clone();
                 let request_headers = headers.unwrap_or_else(|| info.request_headers.clone());
                 let continued = self.continue_worker_owned_xhr(
                     target,
@@ -215,12 +218,8 @@ impl ScriptVm {
             PendingSubresourceContinuation::CspReport { client_id } => {
                 let request_url = url.unwrap_or_else(|| info.url.clone());
                 let request_method = method.unwrap_or_else(|| info.method.clone());
-                let request_body_bytes = match &body {
-                    Some(Some(body)) => Some(body.as_bytes().to_vec()),
-                    Some(None) => None,
-                    None => info.request_body_bytes.clone(),
-                };
-                let request_body = body.unwrap_or_else(|| info.request_body.clone());
+                let request_body_bytes = info.request_body_bytes.clone();
+                let request_body = info.request_body.clone();
                 let request_headers = headers.unwrap_or_else(|| info.request_headers.clone());
                 let pending = PendingSubresourceFetchState {
                     redirect_headers: redirect_headers.clone(),
@@ -286,7 +285,7 @@ impl ScriptVm {
         };
         let request_url = url.unwrap_or_else(|| pending.info.url.clone());
         let request_method = method.unwrap_or_else(|| pending.info.method.clone());
-        let request_body = body.unwrap_or_else(|| pending.info.request_body.clone());
+        let request_body = pending.info.request_body.clone();
         let request_headers = headers.unwrap_or_else(|| pending.info.request_headers.clone());
         self.continue_pending_subresource_fetch_via_loader(
             pending,
@@ -412,7 +411,7 @@ impl ScriptVm {
         request_method: String,
         request_headers: moli_fetch::RequestHeaders,
         request_body: Option<String>,
-        request_body_bytes: Option<Vec<u8>>,
+        request_body_bytes: Option<bytes::Bytes>,
     ) -> Result<Option<PendingSubresourceFetchState>> {
         if self
             ._context_host
@@ -2020,7 +2019,7 @@ impl ScriptVm {
         internal_id: u64,
         url: Option<Url>,
         method: Option<String>,
-        body: Option<Option<String>>,
+        body: Option<Option<bytes::Bytes>>,
         headers: Option<moli_fetch::RequestHeaderOverride>,
         intercept_response: bool,
         handle_auth_requests: bool,

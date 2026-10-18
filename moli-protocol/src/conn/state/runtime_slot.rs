@@ -1136,7 +1136,7 @@ impl TargetRuntimeSlot {
     pub(crate) fn record_captured_request_body_with_collector_scope(
         &mut self,
         request_id: String,
-        request_body: Vec<u8>,
+        request_body: bytes::Bytes,
         session_ids: impl IntoIterator<Item = Option<String>>,
         collector_ids: impl IntoIterator<Item = String>,
         collection_was_gated: bool,

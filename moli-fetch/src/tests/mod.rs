@@ -307,6 +307,36 @@ async fn http_transport_rejects_file_urls_in_every_response_mode() -> Result<()>
 }
 
 #[test]
+fn cloned_requests_and_preserving_redirects_share_upload_storage() -> Result<()> {
+    let upload = vec![0, 255, 195, 40, 128, 65];
+    let original_storage = upload.as_ptr().wrapping_add(1);
+    let body = bytes::Bytes::from(upload).slice(1..5);
+    let request = Request::new_bytes(
+        "POST",
+        "https://example.test/upload",
+        Some(body.clone()),
+        Vec::new(),
+    )?;
+
+    for status in [307, 308] {
+        let mut redirected = request.clone();
+        redirected.apply_redirect_status(status);
+        let retained = redirected.body.as_ref().unwrap();
+        assert_eq!(retained.as_ptr(), original_storage);
+        assert_eq!(retained, &body);
+        assert_eq!(redirected.method, "POST");
+    }
+
+    let mut rewritten = request.clone();
+    rewritten.apply_redirect_status(303);
+    assert_eq!(rewritten.method, "GET");
+    assert!(rewritten.body.is_none());
+    assert_eq!(request.body.as_ref().unwrap().as_ptr(), original_storage);
+    assert_eq!(request.body.as_ref().unwrap(), &body);
+    Ok(())
+}
+
+#[test]
 fn request_apply_redirect_status_rewrites_post_to_get_and_drops_body_headers() {
     let mut request = Request::new(
         "POST",
@@ -1711,7 +1741,11 @@ async fn request_headers_distinguish_empty_values_from_absent_upload_content_typ
         for method in [
             "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "YO",
         ] {
-            for body in [None, Some(Vec::new()), Some(b"payload".to_vec())] {
+            for body in [
+                None,
+                Some(bytes::Bytes::new()),
+                Some(bytes::Bytes::from_static(b"payload")),
+            ] {
                 if matches!(method, "GET" | "HEAD") && body.is_some() {
                     continue;
                 }
@@ -1781,7 +1815,7 @@ async fn request_headers_distinguish_empty_values_from_absent_upload_content_typ
             content_type.iter().copied().collect::<Vec<_>>(),
             "{case:?}: {request}"
         );
-        if body.as_ref().is_none_or(Vec::is_empty) {
+        if body.as_ref().is_none_or(bytes::Bytes::is_empty) {
             let expected_length = if body.is_some() || matches!(*method, "POST" | "PUT") {
                 vec!["0"]
             } else {

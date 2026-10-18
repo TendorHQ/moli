@@ -23,7 +23,7 @@ pub(super) struct RequestConstructionState {
     pub(super) keepalive: bool,
     pub(super) priority: moli_fetch::FetchPriorityHint,
     pub(super) duplex: String,
-    pub(super) body: Option<Vec<u8>>,
+    pub(super) body: Option<bytes::Bytes>,
     pub(super) inherited_body_unusable: bool,
     pub(super) body_content_type: Option<String>,
     pub(super) headers: Vec<(String, String)>,

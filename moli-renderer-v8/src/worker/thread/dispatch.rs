@@ -2084,7 +2084,8 @@ fn new_service_worker_fetch_request<'s>(
     if !matches!(event.request.method.as_str(), "GET" | "HEAD")
         && let Some(body) = event.request.body.clone()
     {
-        let backing_store = v8::ArrayBuffer::new_backing_store_from_vec(body).make_shared();
+        // The mutable JS buffer must not alias shared immutable upload bytes.
+        let backing_store = v8::ArrayBuffer::new_backing_store_from_vec(body.into()).make_shared();
         let body = v8::ArrayBuffer::with_backing_store(scope, &backing_store);
         let _ = init.set(scope, v8str(scope, "body").into(), body.into());
     }

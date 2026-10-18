@@ -1360,7 +1360,7 @@ mod tests {
             method: "POST".to_owned(),
             request_headers: vec![("x-test".to_owned(), "1".to_owned())].into(),
             request_body: Some("body".to_owned()),
-            request_body_bytes: Some(b"body".to_vec()),
+            request_body_bytes: Some(bytes::Bytes::from_static(b"body")),
             resource_type: SubresourceResourceType::Fetch,
             request_cookie_report: None,
         };

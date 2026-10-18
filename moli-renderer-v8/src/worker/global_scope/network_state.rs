@@ -113,7 +113,7 @@ pub(in crate::worker) struct PendingWorkerFetchNetworkRecord {
     pub(in crate::worker) url: Url,
     pub(in crate::worker) method: String,
     pub(in crate::worker) request_headers: moli_fetch::RequestHeaders,
-    pub(in crate::worker) request_body_bytes: Option<Vec<u8>>,
+    pub(in crate::worker) request_body_bytes: Option<bytes::Bytes>,
     pub(in crate::worker) initial_network_request_headers: Option<Vec<(String, String)>>,
     pub(in crate::worker) intercept_response: bool,
     pub(in crate::worker) handle_auth_requests: bool,

@@ -324,7 +324,7 @@ struct RendererTopLevelNavigationRequest {
     web_mcp_invocation: Option<moli_page_types::RendererWebMcpNavigation>,
     url: String,
     request_method: String,
-    request_body: Option<Vec<u8>>,
+    request_body: Option<bytes::Bytes>,
     request_headers: Vec<(String, String)>,
     browser_navigation_kind: moli_fetch::BrowserNavigationRequestKind,
     history_mutation: moli_page_types::NavigationHistoryMutation,
@@ -355,7 +355,7 @@ impl RendererDocumentSourcedTopLevelLocationNavigation {
         source_document: RendererDocumentLifecycleIdentity,
         url: String,
         request_method: String,
-        request_body: Option<Vec<u8>>,
+        request_body: Option<bytes::Bytes>,
         request_headers: Vec<(String, String)>,
         browser_navigation_kind: moli_fetch::BrowserNavigationRequestKind,
         runtime_command_cause: Option<RendererRuntimeCommandCausalIdentity>,
@@ -431,8 +431,8 @@ impl RendererDocumentSourcedTopLevelLocationNavigation {
         &self.request.request_method
     }
 
-    pub fn request_body(&self) -> Option<&[u8]> {
-        self.request.request_body.as_deref()
+    pub fn request_body(&self) -> Option<&bytes::Bytes> {
+        self.request.request_body.as_ref()
     }
 
     pub fn request_headers(&self) -> &[(String, String)] {
@@ -5145,7 +5145,7 @@ pub enum RendererPageCommand {
         internal_id: u64,
         url: Option<Url>,
         method: Option<String>,
-        body: Option<Option<String>>,
+        body: Option<Option<bytes::Bytes>>,
         headers: Option<moli_fetch::RequestHeaderOverride>,
         intercept_response: bool,
         handle_auth_requests: bool,

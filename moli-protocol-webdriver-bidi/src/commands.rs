@@ -1024,7 +1024,7 @@ fn bidi_network_continue_request_command(
         request_id: DevToolsRequestId::from(request),
         url: optional_string(&command.params, "url")?.map(str::to_owned),
         method: optional_string(&command.params, "method")?.map(str::to_owned),
-        post_data: optional_network_bytes_string(&command.params, "body")?,
+        post_data: optional_network_bytes(&command.params, "body")?.map(bytes::Bytes::from),
         headers,
         intercept_response: optional_bool(&command.params, "interceptResponse")?.unwrap_or(false),
     })
@@ -1170,13 +1170,6 @@ fn optional_network_status_code(params: &Value) -> Result<Option<u16>, BidiError
         ));
     }
     Ok(Some(code as u16))
-}
-
-fn optional_network_bytes_string(params: &Value, field: &str) -> Result<Option<String>, BidiError> {
-    params
-        .get(field)
-        .map(|value| required_network_bytes_value(value, field))
-        .transpose()
 }
 
 fn optional_network_bytes(params: &Value, field: &str) -> Result<Option<Vec<u8>>, BidiError> {

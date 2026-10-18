@@ -35,7 +35,7 @@ pub(crate) fn convert_fetch_arguments<'s, T>(
 pub(crate) struct ParsedFetchInit {
     pub(crate) method: String,
     pub(crate) method_present: bool,
-    pub(crate) body: Option<Vec<u8>>,
+    pub(crate) body: Option<bytes::Bytes>,
     pub(crate) body_present: bool,
     pub(crate) body_content_type: Option<String>,
     pub(crate) headers: Vec<(String, String)>,

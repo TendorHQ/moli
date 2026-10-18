@@ -1388,7 +1388,7 @@ pub(in crate::domains) async fn navigate_command_owner_from_renderer_request_bac
     owner: CommandOwnerScope,
     url: &str,
     request_method: &str,
-    request_body: Option<&[u8]>,
+    request_body: Option<&bytes::Bytes>,
     request_headers: &[(String, String)],
     browser_navigation_kind: moli_fetch::BrowserNavigationRequestKind,
     web_mcp_invocation: Option<moli_page_types::RendererWebMcpNavigation>,

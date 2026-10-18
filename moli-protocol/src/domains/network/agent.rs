@@ -621,7 +621,7 @@ impl TargetNetworkAgentState {
     pub(crate) fn record_captured_request_body_with_collector_scope(
         &mut self,
         request_id: String,
-        request_body: Vec<u8>,
+        request_body: bytes::Bytes,
         session_ids: impl IntoIterator<Item = Option<String>>,
         collector_ids: impl IntoIterator<Item = String>,
         collection_was_gated: bool,
@@ -1228,7 +1228,7 @@ pub(crate) struct CapturedRequestBody {
 
 impl CapturedRequestBody {
     pub(crate) fn new_with_collector_scope(
-        body: Vec<u8>,
+        body: bytes::Bytes,
         session_ids: impl IntoIterator<Item = Option<String>>,
         collector_ids: impl IntoIterator<Item = String>,
         collection_was_gated: bool,
@@ -1297,7 +1297,7 @@ impl CapturedRequestBodyStore {
     pub(crate) fn insert_with_collector_scope(
         &mut self,
         request_id: String,
-        body: Vec<u8>,
+        body: bytes::Bytes,
         session_ids: impl IntoIterator<Item = Option<String>>,
         collector_ids: impl IntoIterator<Item = String>,
         collection_was_gated: bool,
@@ -1671,7 +1671,7 @@ impl TargetNetworkBodyArtifacts {
     pub(crate) fn insert_request_body_with_collector_scope(
         &mut self,
         request_id: String,
-        request_body: Vec<u8>,
+        request_body: bytes::Bytes,
         session_ids: impl IntoIterator<Item = Option<String>>,
         collector_ids: impl IntoIterator<Item = String>,
         collection_was_gated: bool,

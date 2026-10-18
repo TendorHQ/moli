@@ -24,7 +24,7 @@ pub(in crate::worker) fn record_worker_subresource_failure(
         url,
         method,
         request_headers,
-        request_body.map(String::into_bytes),
+        request_body.map(bytes::Bytes::from),
         resource_type,
         error_text,
     );
@@ -37,7 +37,7 @@ pub(in crate::worker) fn record_worker_subresource_failure_with_handle(
     url: Url,
     method: String,
     request_headers: moli_fetch::RequestHeaders,
-    request_body_bytes: Option<Vec<u8>>,
+    request_body_bytes: Option<bytes::Bytes>,
     resource_type: SubresourceResourceType,
     error_text: String,
 ) {
@@ -78,7 +78,7 @@ pub(in crate::worker) fn record_worker_subresource_success(
         url,
         method,
         request_headers,
-        request_body.map(String::into_bytes),
+        request_body.map(bytes::Bytes::from),
         resource_type,
         None,
         head,
@@ -93,7 +93,7 @@ pub(in crate::worker) fn record_worker_subresource_success_with_handle(
     url: Url,
     method: String,
     request_headers: moli_fetch::RequestHeaders,
-    request_body_bytes: Option<Vec<u8>>,
+    request_body_bytes: Option<bytes::Bytes>,
     resource_type: SubresourceResourceType,
     network_request_headers: Option<Vec<(String, String)>>,
     head: ResponseHead,
@@ -151,7 +151,7 @@ pub(in crate::worker) fn spawn_worker_fetch_network(
     network_partition_key: Option<String>,
     resolved_url: Url,
     method: String,
-    body: Option<Vec<u8>>,
+    body: Option<bytes::Bytes>,
     headers: moli_fetch::RequestHeaders,
     request_mode: RequestMode,
     credentials_mode: RequestCredentialsMode,
@@ -393,7 +393,7 @@ fn spawn_worker_fetch_service_worker(
     policy_context: SubresourcePolicyContext,
     resolved_url: Url,
     method: String,
-    body: Option<Vec<u8>>,
+    body: Option<bytes::Bytes>,
     headers: moli_fetch::RequestHeaders,
     request_mode: RequestMode,
     credentials_mode: RequestCredentialsMode,
@@ -514,7 +514,7 @@ pub(in crate::worker) fn spawn_worker_xhr_network(
     network_partition_key: Option<String>,
     resolved_url: Url,
     method: String,
-    body: Option<Vec<u8>>,
+    body: Option<bytes::Bytes>,
     headers: moli_fetch::RequestHeaders,
     credentials_mode: RequestCredentialsMode,
     use_cors_preflight: bool,
@@ -1752,7 +1752,7 @@ pub(in crate::worker) fn response_header_name_is(candidate: &str, expected: &Hea
     HeaderName::from_bytes(candidate.as_bytes()).is_ok_and(|candidate| candidate == *expected)
 }
 
-pub(in crate::worker) fn request_body_text(body: &Option<Vec<u8>>) -> Option<String> {
+pub(in crate::worker) fn request_body_text(body: &Option<bytes::Bytes>) -> Option<String> {
     body.as_ref()
         .map(|body| String::from_utf8_lossy(body).into_owned())
 }
@@ -1844,7 +1844,7 @@ pub(in crate::worker) fn worker_fetch_signal_option<'s>(
 pub(in crate::worker) struct ResolvedWorkerFetchInput<'s> {
     resolved_url: Url,
     method: String,
-    body: Option<Vec<u8>>,
+    body: Option<bytes::Bytes>,
     headers: Vec<(String, String)>,
     request_mode: moli_fetch::RequestMode,
     credentials_mode: RequestCredentialsMode,
@@ -2768,7 +2768,7 @@ pub(in crate::worker) fn record_worker_fetch_failure(
         pending
             .request_body
             .as_ref()
-            .map(|body| body.as_bytes().to_vec()),
+            .map(|body| bytes::Bytes::copy_from_slice(body.as_bytes())),
         SubresourceResourceType::Fetch,
         network_error_text,
     );

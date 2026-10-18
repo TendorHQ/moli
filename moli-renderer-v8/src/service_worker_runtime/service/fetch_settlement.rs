@@ -1942,7 +1942,7 @@ mod tests {
                 moli_fetch::Request::new_browser(
                     "POST",
                     request_url.clone(),
-                    Some(b"payload".to_vec()),
+                    Some(bytes::Bytes::from_static(b"payload")),
                     vec![
                         ("content-type".to_owned(), "text/plain".to_owned()),
                         ("x-keep".to_owned(), "yes".to_owned()),

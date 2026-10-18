@@ -26,7 +26,7 @@ pub struct CapturedBody {
 
 #[derive(Debug)]
 enum CapturedBodyInner {
-    Memory(Vec<u8>),
+    Memory(bytes::Bytes),
     SharedMemory(Arc<[u8]>),
     File { path: PathBuf, len: usize },
     Subresource(moli_core::page::SubresourceResponseBody),
@@ -45,9 +45,9 @@ impl CapturedBody {
         Self::from_bytes(body.into_bytes())
     }
 
-    pub(crate) fn from_bytes(body: Vec<u8>) -> Self {
+    pub(crate) fn from_bytes(body: impl Into<bytes::Bytes>) -> Self {
         Self {
-            inner: Arc::new(CapturedBodyInner::Memory(body)),
+            inner: Arc::new(CapturedBodyInner::Memory(body.into())),
         }
     }
 
@@ -100,7 +100,7 @@ impl CapturedBody {
 
     pub(crate) fn materialize_bytes(&self) -> Result<Vec<u8>> {
         match self.inner.as_ref() {
-            CapturedBodyInner::Memory(bytes) => Ok(bytes.clone()),
+            CapturedBodyInner::Memory(bytes) => Ok(bytes.to_vec()),
             CapturedBodyInner::SharedMemory(bytes) => Ok(bytes.to_vec()),
             CapturedBodyInner::File { path, .. } => {
                 let mut file = File::open(path).with_context(|| {
@@ -444,6 +444,20 @@ fn configure_secure_spool_file_options(_options: &mut OpenOptions) {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn captured_upload_shares_storage_with_transport_bytes() -> Result<()> {
+        let upload = bytes::Bytes::from(vec![0, 255, 195, 40, 128, 65]);
+        let original_storage = upload.as_ptr();
+        let body = CapturedBody::from_bytes(upload.clone());
+        let CapturedBodyInner::Memory(captured) = body.inner.as_ref() else {
+            panic!("captured upload must retain its shared bytes");
+        };
+        assert_eq!(captured.as_ptr(), original_storage);
+        drop(upload);
+        assert_eq!(body.materialize_bytes()?, [0, 255, 195, 40, 128, 65]);
+        Ok(())
+    }
 
     #[test]
     fn captured_body_writer_keeps_small_body_in_memory() -> Result<()> {
