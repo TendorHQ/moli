@@ -2720,6 +2720,7 @@ struct ActiveRawStreamingTransferContext {
 
 pub(crate) struct FetchTransferHandler {
     response: FetchResponseCollector,
+    response_body_observed: bool,
     network_observation_recorder: Option<NetworkObservationRecorder>,
     proxy_connect_response_recorder: ProxyConnectResponseRecorder,
 }
@@ -2731,6 +2732,15 @@ enum FetchResponseCollector {
 }
 
 impl FetchTransferHandler {
+    fn mark_response_body_received(&mut self) {
+        if !self.response_body_observed
+            && let Some(timing) = self.response_progress()
+        {
+            timing.mark_response_body_received();
+            self.response_body_observed = true;
+        }
+    }
+
     fn response_progress(&self) -> Option<&crate::cancellation::ResponseProgress> {
         match &self.response {
             FetchResponseCollector::Buffered(collector) => collector.response_progress(),
@@ -2754,6 +2764,7 @@ impl FetchTransferHandler {
     fn new(response: FetchResponseCollector) -> Self {
         Self {
             response,
+            response_body_observed: false,
             network_observation_recorder: None,
             proxy_connect_response_recorder: ProxyConnectResponseRecorder::default(),
         }
@@ -2806,6 +2817,7 @@ impl FetchTransferHandler {
         network_observation_recorder: Option<NetworkObservationRecorder>,
         capture_proxy_connect_response: bool,
     ) {
+        self.response_body_observed = false;
         self.network_observation_recorder = network_observation_recorder;
         self.proxy_connect_response_recorder
             .begin_transfer(capture_proxy_connect_response);
@@ -2829,10 +2841,8 @@ impl FetchTransferHandler {
 
 impl Handler for FetchTransferHandler {
     fn write(&mut self, data: &[u8]) -> std::result::Result<usize, WriteError> {
-        if !data.is_empty()
-            && let Some(timing) = self.response_progress()
-        {
-            timing.mark_response_body_received();
+        if !data.is_empty() {
+            self.mark_response_body_received();
         }
         match &mut self.response {
             FetchResponseCollector::Buffered(collector) => collector.write(data),
@@ -2853,10 +2863,8 @@ impl Handler for FetchTransferHandler {
     }
 
     fn progress(&mut self, dltotal: f64, dlnow: f64, ultotal: f64, ulnow: f64) -> bool {
-        if dlnow > 0.0
-            && let Some(timing) = self.response_progress()
-        {
-            timing.mark_response_body_received();
+        if dlnow > 0.0 {
+            self.mark_response_body_received();
         }
         match &mut self.response {
             FetchResponseCollector::Buffered(collector) => {

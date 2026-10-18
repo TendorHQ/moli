@@ -309,16 +309,18 @@ async fn html_declared_body_completion_precedes_delivery_of_the_last_chunk() -> 
             Vec::new(),
             None,
         );
-        assert!(collector.header(b"HTTP/1.1 200 OK\r\n"));
-        assert!(collector.header(b"Content-Length: 4\r\n"));
+        let mut handler = FetchTransferHandler::new_streaming(collector);
+        assert!(handler.header(b"HTTP/1.1 200 OK\r\n"));
+        assert!(handler.header(b"Content-Length: 4\r\n"));
         if !encoding_headers.is_empty() {
-            assert!(collector.header(encoding_headers));
+            assert!(handler.header(encoding_headers));
         }
-        assert!(collector.header(b"\r\n"));
-        assert_eq!(collector.write(b"bo").unwrap(), 2);
+        assert!(handler.header(b"\r\n"));
+        assert_eq!(handler.write(b"bo").unwrap(), 2);
         assert_eq!(body_rx.try_recv()?.as_str(), "bo");
+        assert!(cancel.response_timing().body_bytes_received());
         assert!(cancel.response_timing().response_end_at().is_none());
-        assert_eq!(collector.write(b"dy").unwrap(), 2);
+        assert_eq!(handler.write(b"dy").unwrap(), 2);
         assert_eq!(body_rx.try_recv()?.as_str(), "dy");
         // Decoded or chunked lengths cannot be compared with Content-Length.
         assert_eq!(
@@ -381,4 +383,23 @@ fn switching_protocols_timing_is_final_in_every_collector() {
             }
         }
     }
+}
+
+#[test]
+fn transfer_progress_preserves_cancellation_and_body_observations_on_reuse() {
+    let cancel = FetchCancelHandle::new();
+    let mut handler =
+        FetchTransferHandler::new_buffered(ResponseCollector::new(Some(cancel.clone())));
+    for _ in 0..2 {
+        cancel.begin_response_progress();
+        handler.buffered_mut().unwrap().begin_request(None);
+        handler.begin_transfer(None, false);
+        assert!(handler.progress(4.0, 0.0, 0.0, 0.0));
+        assert!(!cancel.response_timing().body_bytes_received());
+        assert!(handler.progress(4.0, 1.0, 0.0, 0.0));
+        assert!(cancel.response_timing().body_bytes_received());
+        assert!(handler.progress(4.0, 4.0, 0.0, 0.0));
+    }
+    cancel.cancel();
+    assert!(!handler.progress(4.0, 4.0, 0.0, 0.0));
 }
