@@ -1012,6 +1012,7 @@ impl RuntimeOwner {
             anyhow::Error,
         ),
     > {
+        job.response_progress = job.cancel_handle.begin_response_progress();
         if let Err(error) = job.request.validate_request_mode_for_url(&job.current_url) {
             return Err((Box::new(job), None, error));
         }
@@ -1138,6 +1139,7 @@ impl RuntimeOwner {
             job.request.redirect_chain.clone(),
             request_extra_info.clone(),
             cache_plan,
+            job.response_progress.clone(),
         );
         collector.set_client_hint_response_policy(prepared_request.response_policy);
 
@@ -3789,6 +3791,9 @@ fn request_panics_for_testing(request: &Request) -> bool {
         name.eq_ignore_ascii_case("x-moli-test-panic") && value == b"runtime-worker"
     })
 }
+
+#[cfg(test)]
+mod response_timing_tests;
 
 #[cfg(test)]
 mod tests {

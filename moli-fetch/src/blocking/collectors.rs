@@ -369,6 +369,7 @@ impl StreamingResponseCollector {
         redirect_chain: Vec<RedirectInfo>,
         network_request_extra_info: Option<NetworkRequestExtraInfo>,
         cache_plan: Option<StreamingCachePlan>,
+        response_progress: ResponseProgress,
     ) {
         self.begin_request(
             max_response_size,
@@ -379,6 +380,7 @@ impl StreamingResponseCollector {
             redirect_chain,
             None,
         );
+        self.response_progress = response_progress;
         self.network_request_extra_info = network_request_extra_info;
         self.cache_plan = cache_plan;
     }
