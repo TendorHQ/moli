@@ -3,6 +3,7 @@ use crate::web_api_interfaces;
 use crate::{util::get_private_value, webidl};
 use moli_web_errors::{DOM_EXCEPTION_CONSTANTS, dom_exception_legacy_code};
 use moli_webapi_declare::{WebApiFunctionTemplate, WebApiObject, WebApiTemplateValue};
+use webidl::WebIdlDictionarySerialize;
 
 mod rtc_error;
 pub(crate) use rtc_error::rtc_error_constructor_callback;
@@ -36,11 +37,13 @@ struct DomErrorConstructorArgs {
 }
 
 #[derive(Default, webidl::WebIdlDictionary)]
-#[webidl(prefix = "QuotaExceededErrorOptions")]
+#[webidl(prefix = "QuotaExceededErrorOptions", snapshot)]
 struct QuotaExceededErrorOptions {
     #[webidl(converter = "double")]
+    #[webidl(snapshot_slot = QUOTA_EXCEEDED_ERROR_QUOTA_SLOT, snapshot_default = v8::null(scope).into())]
     quota: Option<f64>,
     #[webidl(converter = "double")]
+    #[webidl(snapshot_slot = QUOTA_EXCEEDED_ERROR_REQUESTED_SLOT, snapshot_default = v8::null(scope).into())]
     requested: Option<f64>,
 }
 
@@ -105,10 +108,6 @@ struct QuotaExceededErrorObjectDeclaration<'scope> {
     name: (),
     #[webapi(slot = DOM_EXCEPTION_CODE_SLOT, value = f64::from(dom_exception_legacy_code("QuotaExceededError")))]
     code: (),
-    #[webapi(slot = QUOTA_EXCEEDED_ERROR_QUOTA_SLOT)]
-    quota: v8::Local<'scope, v8::Value>,
-    #[webapi(slot = QUOTA_EXCEEDED_ERROR_REQUESTED_SLOT)]
-    requested: v8::Local<'scope, v8::Value>,
 }
 
 #[derive(WebApiFunctionTemplate)]
@@ -498,17 +497,6 @@ fn nullable_double_slot_value<'s>(
     }
 }
 
-fn quota_exceeded_error_declaration<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    message: &str,
-    quota: Option<f64>,
-    requested: Option<f64>,
-) -> QuotaExceededErrorObjectDeclaration<'s> {
-    let quota = nullable_double_slot_value(scope, quota);
-    let requested = nullable_double_slot_value(scope, requested);
-    QuotaExceededErrorObjectDeclaration::new(v8_string(scope, message), quota, requested)
-}
-
 fn initialize_quota_exceeded_error<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     exception: v8::Local<'s, v8::Object>,
@@ -516,9 +504,12 @@ fn initialize_quota_exceeded_error<'s>(
     quota: Option<f64>,
     requested: Option<f64>,
 ) {
-    quota_exceeded_error_declaration(scope, message, quota, requested)
+    QuotaExceededErrorObjectDeclaration::new(v8_string(scope, message))
         .initialize(scope, exception)
         .expect("QuotaExceededError declaration should initialize");
+    QuotaExceededErrorOptions { quota, requested }
+        .initialize_snapshot(scope, exception)
+        .expect("QuotaExceededError options");
     capture_dom_exception_stack(scope, exception);
 }
 
@@ -684,9 +675,12 @@ pub(crate) fn new_quota_exceeded_error_value<'s>(
     quota: Option<f64>,
     requested: Option<f64>,
 ) -> v8::Local<'s, v8::Value> {
-    let exception = quota_exceeded_error_declaration(scope, message, quota, requested)
+    let exception = QuotaExceededErrorObjectDeclaration::new(v8_string(scope, message))
         .bind(scope)
         .expect("QuotaExceededError declaration should bind");
+    QuotaExceededErrorOptions { quota, requested }
+        .initialize_snapshot(scope, exception)
+        .expect("QuotaExceededError options");
     capture_dom_exception_stack(scope, exception);
     exception.into()
 }

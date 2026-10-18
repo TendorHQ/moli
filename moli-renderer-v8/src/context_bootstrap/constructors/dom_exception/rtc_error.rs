@@ -1,6 +1,6 @@
 use super::*;
 use crate::util::apply_webidl_constructor_prototype_fallback;
-use webidl::WebIdlDictionary;
+use webidl::{WebIdlDictionary, WebIdlDictionarySerialize};
 
 const ERROR_DETAIL: &str = "__moliRtcErrorDetail";
 const SDP_LINE_NUMBER: &str = "__moliRtcErrorSdpLineNumber";
@@ -20,29 +20,20 @@ enum ErrorDetail {
     HardwareEncoderError,
 }
 
-impl ErrorDetail {
-    fn token(self) -> &'static str {
-        match self {
-            Self::DataChannelFailure => "data-channel-failure",
-            Self::DtlsFailure => "dtls-failure",
-            Self::FingerprintFailure => "fingerprint-failure",
-            Self::SctpFailure => "sctp-failure",
-            Self::SdpSyntaxError => "sdp-syntax-error",
-            Self::HardwareEncoderNotAvailable => "hardware-encoder-not-available",
-            Self::HardwareEncoderError => "hardware-encoder-error",
-        }
-    }
-}
-
 #[derive(webidl::WebIdlDictionary)]
-#[webidl(prefix = "RTCErrorInit")]
+#[webidl(prefix = "RTCErrorInit", snapshot)]
 struct ErrorInit {
     // Dictionary members are visited lexically, before the message argument.
     #[webidl(required, converter = "enum")]
+    #[webidl(snapshot_slot = ERROR_DETAIL)]
     error_detail: ErrorDetail,
+    #[webidl(snapshot_slot = RECEIVED_ALERT, snapshot_default = v8::null(scope).into())]
     received_alert: Option<u32>,
+    #[webidl(snapshot_slot = SCTP_CAUSE_CODE, snapshot_default = v8::null(scope).into())]
     sctp_cause_code: Option<i32>,
+    #[webidl(snapshot_slot = SDP_LINE_NUMBER, snapshot_default = v8::null(scope).into())]
     sdp_line_number: Option<i32>,
+    #[webidl(snapshot_slot = SENT_ALERT, snapshot_default = v8::null(scope).into())]
     sent_alert: Option<u32>,
 }
 
@@ -82,16 +73,6 @@ struct ObjectDeclaration<'s> {
     name: (),
     #[webapi(slot = DOM_EXCEPTION_CODE_SLOT, init = 0)]
     code: (),
-    #[webapi(slot = ERROR_DETAIL)]
-    error_detail: v8::Local<'s, v8::String>,
-    #[webapi(slot = RECEIVED_ALERT)]
-    received_alert: v8::Local<'s, v8::Value>,
-    #[webapi(slot = SCTP_CAUSE_CODE)]
-    sctp_cause_code: v8::Local<'s, v8::Value>,
-    #[webapi(slot = SDP_LINE_NUMBER)]
-    sdp_line_number: v8::Local<'s, v8::Value>,
-    #[webapi(slot = SENT_ALERT)]
-    sent_alert: v8::Local<'s, v8::Value>,
 }
 
 #[derive(WebApiFunctionTemplate)]
@@ -133,15 +114,13 @@ pub(crate) fn rtc_error_constructor_callback<'s>(
     else {
         return;
     };
-    let declaration = ObjectDeclaration::new(
-        message,
-        v8str(scope, parsed.init.error_detail.token()),
-        nullable_double_slot_value(scope, parsed.init.received_alert.map(f64::from)),
-        nullable_double_slot_value(scope, parsed.init.sctp_cause_code.map(f64::from)),
-        nullable_double_slot_value(scope, parsed.init.sdp_line_number.map(f64::from)),
-        nullable_double_slot_value(scope, parsed.init.sent_alert.map(f64::from)),
-    );
-    if declaration.initialize(scope, args.this()).is_ok() {
+    let declaration = ObjectDeclaration::new(message);
+    if parsed
+        .init
+        .initialize_snapshot(scope, args.this())
+        .is_some()
+        && declaration.initialize(scope, args.this()).is_ok()
+    {
         capture_dom_exception_stack(scope, args.this());
         apply_webidl_constructor_prototype_fallback(
             scope,

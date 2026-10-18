@@ -181,16 +181,6 @@ pub(crate) enum ClipboardPresentationStyle {
     Attachment,
 }
 
-impl ClipboardPresentationStyle {
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::Unspecified => "unspecified",
-            Self::Inline => "inline",
-            Self::Attachment => "attachment",
-        }
-    }
-}
-
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ClipboardSnapshot {
     pub(crate) presentation_style: ClipboardPresentationStyle,

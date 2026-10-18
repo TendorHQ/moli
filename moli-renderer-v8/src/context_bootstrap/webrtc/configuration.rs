@@ -6,11 +6,11 @@ use super::{
     RTC_PEER_CONNECTION_SIGNALING_STATE_SLOT,
 };
 use crate::{
-    util::{get_private_value, set_private_value, v8str},
+    util::{get_private_value, v8str},
     web_api_interfaces, webidl,
 };
-use moli_webapi_declare::{WebApiObject, WebApiValue};
-use webidl::{SnapshotKind, SnapshotPrototype, WebIdlDictionarySnapshot, WebIdlSnapshotValue};
+use moli_webapi_declare::WebApiValue;
+use webidl::{SnapshotKind, SnapshotPrototype, WebIdlDictionarySerialize, WebIdlSnapshotValue};
 
 #[derive(Clone, Copy, webidl::WebIdlEnum)]
 #[webidl(name = "RTCBundlePolicy")]
@@ -39,37 +39,10 @@ enum RtcpMuxPolicy {
     Require,
 }
 
-impl<'s> WebApiValue<'s> for BundlePolicy {
-    fn to_v8_value(&self, scope: &mut v8::PinScope<'s, '_>) -> Option<v8::Local<'s, v8::Value>> {
-        match self {
-            Self::Balanced => "balanced",
-            Self::MaxCompat => "max-compat",
-            Self::MaxBundle => "max-bundle",
-        }
-        .to_v8_value(scope)
-    }
-}
-
-impl<'s> WebApiValue<'s> for IceTransportPolicy {
-    fn to_v8_value(&self, scope: &mut v8::PinScope<'s, '_>) -> Option<v8::Local<'s, v8::Value>> {
-        match self {
-            Self::All => "all",
-            Self::Relay => "relay",
-        }
-        .to_v8_value(scope)
-    }
-}
-
-impl<'s> WebApiValue<'s> for RtcpMuxPolicy {
-    fn to_v8_value(&self, scope: &mut v8::PinScope<'s, '_>) -> Option<v8::Local<'s, v8::Value>> {
-        "require".to_v8_value(scope)
-    }
-}
-
 struct PoolSize(u8);
 
 impl WebIdlSnapshotValue for PoolSize {
-    const SNAPSHOT_KIND: SnapshotKind = SnapshotKind::Identity;
+    const SNAPSHOT_KIND: SnapshotKind = SnapshotKind::Scalar;
 }
 
 impl<'s> webidl::WebIdlConverter<'s> for PoolSize {
@@ -97,7 +70,7 @@ impl<'s> WebApiValue<'s> for PoolSize {
 struct Text(webidl::DomString16);
 
 impl WebIdlSnapshotValue for Text {
-    const SNAPSHOT_KIND: SnapshotKind = SnapshotKind::Identity;
+    const SNAPSHOT_KIND: SnapshotKind = SnapshotKind::Scalar;
 }
 
 impl<'s> webidl::WebIdlConverter<'s> for Text {
@@ -123,7 +96,7 @@ struct IceUrls(Vec<String>);
 
 impl WebIdlSnapshotValue for IceUrls {
     // The union converter always binds its canonical value as a URL sequence.
-    const SNAPSHOT_KIND: SnapshotKind = SnapshotKind::Sequence(&SnapshotKind::Identity);
+    const SNAPSHOT_KIND: SnapshotKind = SnapshotKind::Sequence(&SnapshotKind::Scalar);
 }
 
 impl<'s> webidl::WebIdlConverter<'s> for IceUrls {
@@ -155,9 +128,8 @@ impl<'s> WebApiValue<'s> for IceUrls {
     }
 }
 
-#[derive(webidl::WebIdlDictionary, WebApiObject)]
+#[derive(webidl::WebIdlDictionary)]
 #[webidl(prefix = "RTCIceServer", snapshot)]
-#[webapi(plain, data_properties, enumerable)]
 struct IceServer {
     #[webidl(converter = "raw")]
     credential: Option<Text>,
@@ -167,10 +139,9 @@ struct IceServer {
     username: Option<Text>,
 }
 
-#[derive(webidl::WebIdlDictionary, WebApiObject)]
+#[derive(webidl::WebIdlDictionary)]
 #[webidl(prefix = "RTCConfiguration", snapshot)]
-#[webapi(plain, data_properties, enumerable)]
-struct Configuration<'s> {
+pub(super) struct Configuration<'s> {
     #[webidl(converter = "enum", default = BundlePolicy::Balanced)]
     bundle_policy: BundlePolicy,
     #[webidl(sequence, interface = web_api_interfaces::RTCCertificate, default = Vec::new())]
@@ -192,20 +163,15 @@ struct ConfigurationArgs<'s> {
     configuration: Configuration<'s>,
 }
 
+pub(super) type ConfigurationSnapshot<'s> = webidl::DictionarySnapshot<'s, Configuration<'s>>;
+
 pub(super) fn constructor_configuration<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     args: &v8::FunctionCallbackArguments<'s>,
-) -> Option<v8::Local<'s, v8::Object>> {
+) -> Option<ConfigurationSnapshot<'s>> {
     let parsed = webidl::parse_args::<ConfigurationArgs>(scope, args)?;
     validate_servers(scope, &parsed.configuration)?;
-    let object = parsed
-        .configuration
-        .bind(scope)
-        .expect("converted RTCConfiguration");
-    Some(
-        Configuration::to_js_snapshot(scope, object, SnapshotPrototype::Null)
-            .expect("converted RTCConfiguration snapshot"),
-    )
+    parsed.configuration.to_snapshot(scope)
 }
 
 fn target<'s>(
@@ -219,9 +185,8 @@ fn target<'s>(
 fn configuration<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     target: v8::Local<'s, v8::Object>,
-) -> v8::Local<'s, v8::Object> {
-    get_private_value(scope, target, RTC_PEER_CONNECTION_CONFIGURATION_SLOT)
-        .and_then(|value| v8::Local::try_from(value).ok())
+) -> ConfigurationSnapshot<'s> {
+    ConfigurationSnapshot::from_private_slot(scope, target, RTC_PEER_CONNECTION_CONFIGURATION_SLOT)
         .expect("native RTCConfiguration snapshot")
 }
 
@@ -232,7 +197,8 @@ pub(super) fn get_configuration<'s>(
 ) {
     let target = target(scope, args.this());
     let stored = configuration(scope, target);
-    let snapshot = Configuration::to_js_snapshot(scope, stored, SnapshotPrototype::Ordinary)
+    let snapshot = stored
+        .to_js_snapshot(scope, SnapshotPrototype::Ordinary)
         .expect("native RTCConfiguration snapshot");
     rv.set(snapshot.into());
 }
@@ -252,11 +218,16 @@ pub(super) fn set_configuration<'s>(
         webidl::throw_dom_exception(scope, "InvalidStateError", "The connection is closed.");
         return;
     }
-    let old = configuration(scope, target);
-    let next = parsed
+    let old = configuration(scope, target)
+        .to_v8_value(scope)
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let snapshot = parsed
         .configuration
-        .bind(scope)
+        .to_snapshot(scope)
         .expect("converted RTCConfiguration");
+    let next = snapshot.to_v8_value(scope).unwrap().try_into().unwrap();
     let local_description =
         get_private_value(scope, target, RTC_PEER_CONNECTION_LOCAL_DESCRIPTION_SLOT)
             .expect("native local description");
@@ -281,14 +252,9 @@ pub(super) fn set_configuration<'s>(
     if validate_servers(scope, &parsed.configuration).is_none() {
         return;
     }
-    let snapshot = Configuration::to_js_snapshot(scope, next, SnapshotPrototype::Null)
-        .expect("converted RTCConfiguration snapshot");
-    set_private_value(
-        scope,
-        target,
-        RTC_PEER_CONNECTION_CONFIGURATION_SLOT,
-        snapshot.into(),
-    );
+    snapshot
+        .store_private(scope, target, RTC_PEER_CONNECTION_CONFIGURATION_SLOT)
+        .expect("RTCConfiguration snapshot slot");
 }
 
 fn validate_servers(scope: &mut v8::PinScope<'_, '_>, config: &Configuration<'_>) -> Option<()> {

@@ -8,19 +8,6 @@ struct StaticRangeConstructorArgs<'s> {
     init: v8::Local<'s, v8::Object>,
 }
 
-#[derive(webidl::WebIdlDictionary)]
-#[webidl(prefix = "StaticRangeInit")]
-struct StaticRangeInitMembers<'s> {
-    #[webidl(required, name = "startContainer", with = static_range_node_member)]
-    start_container: v8::Local<'s, v8::Object>,
-    #[webidl(required, name = "startOffset")]
-    start_offset: u32,
-    #[webidl(required, name = "endContainer", with = static_range_node_member)]
-    end_container: v8::Local<'s, v8::Object>,
-    #[webidl(required, name = "endOffset")]
-    end_offset: u32,
-}
-
 pub(super) fn range_constructor_callback<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     args: v8::FunctionCallbackArguments<'s>,
@@ -96,31 +83,6 @@ pub(super) fn document_create_range_callback<'s>(
         return;
     };
     rv.set(range.into());
-}
-
-fn static_range_node_member<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    object: v8::Local<'s, v8::Object>,
-    name: &'static str,
-) -> Result<v8::Local<'s, v8::Object>, webidl::WebIdlError> {
-    let context = webidl::Context::member("StaticRangeInit", name);
-    let Some(value) = webidl::property_result(scope, object, name, context)? else {
-        return Err(webidl::WebIdlError::missing_required(context));
-    };
-    if value.is_undefined() {
-        return Err(webidl::WebIdlError::missing_required(context));
-    }
-    let Ok(node) = v8::Local::<v8::Object>::try_from(value) else {
-        return Err(webidl::WebIdlError::custom_message(
-            "StaticRangeInit member is not a Node.",
-        ));
-    };
-    if object_number_property(scope, node, "nodeType").is_none() {
-        return Err(webidl::WebIdlError::custom_message(
-            "StaticRangeInit member is not a Node.",
-        ));
-    }
-    Ok(node)
 }
 
 fn static_range_endpoint_type_is_invalid<'s>(

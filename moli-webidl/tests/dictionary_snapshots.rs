@@ -1,5 +1,5 @@
-use moli_webapi_declare::WebApiObject;
-use moli_webidl::{SnapshotPrototype, WebIdlDictionary, WebIdlDictionarySnapshot};
+use moli_webapi_declare::WebApiValue;
+use moli_webidl::{SnapshotPrototype, WebIdlDictionary, WebIdlDictionarySerialize};
 
 mod interfaces {
     moli_webapi_declare::declare_web_api_interfaces! {
@@ -7,21 +7,18 @@ mod interfaces {
     }
 }
 
-#[derive(WebIdlDictionary, WebApiObject)]
+#[derive(WebIdlDictionary)]
 #[webidl(snapshot)]
-#[webapi(plain, data_properties, enumerable)]
 struct Server {
     #[webidl(sequence, required)]
     urls: Vec<String>,
     username: Option<String>,
 }
 
-#[derive(WebIdlDictionary, WebApiObject)]
+#[derive(WebIdlDictionary)]
 #[webidl(snapshot)]
-#[webapi(plain, data_properties, enumerable)]
 struct Options<'s> {
     #[webidl(default = 7, name = "renamedNumber")]
-    #[webapi(data_property = "renamedNumber")]
     number: u32,
     #[webidl(sequence, converter = "dictionary", default = Vec::new())]
     servers: Vec<Server>,
@@ -37,8 +34,13 @@ fn snapshot<'s>(
     args: v8::FunctionCallbackArguments<'s>,
     mut rv: v8::ReturnValue<'s>,
 ) {
-    let stored = v8::Local::<v8::Object>::try_from(args.data()).unwrap();
-    let snapshot = Options::to_js_snapshot(scope, stored, SnapshotPrototype::Ordinary).unwrap();
+    let owner = v8::Local::<v8::Object>::try_from(args.data()).unwrap();
+    let stored =
+        moli_webidl::DictionarySnapshot::<Options>::from_private_slot(scope, owner, "SnapshotTest")
+            .unwrap();
+    let snapshot = stored
+        .to_js_snapshot(scope, SnapshotPrototype::Ordinary)
+        .unwrap();
     rv.set(snapshot.into());
 }
 
@@ -74,15 +76,23 @@ fn snapshots_follow_dictionary_metadata_and_copy_only_containers() {
     );
     let parsed =
         moli_webidl::parse_dictionary_object::<Options>(scope, source.try_into().unwrap()).unwrap();
-    let bound = parsed.bind(scope).unwrap();
-    let stored = Options::to_js_snapshot(scope, bound, SnapshotPrototype::Null).unwrap();
+    let snapshot_state = parsed.to_snapshot(scope).unwrap();
+    let stored: v8::Local<v8::Object> = snapshot_state
+        .to_v8_value(scope)
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let owner = v8::Object::new(scope);
+    snapshot_state
+        .store_private(scope, owner, "SnapshotTest")
+        .unwrap();
     let key = v8::String::new(scope, "stored").unwrap();
     assert_eq!(
         global.create_data_property(scope, key.into(), stored.into()),
         Some(true)
     );
     let snapshot = v8::Function::builder(snapshot)
-        .data(stored.into())
+        .data(owner.into())
         .build(scope)
         .unwrap();
     let key = v8::String::new(scope, "snapshot").unwrap();
@@ -128,10 +138,26 @@ fn snapshots_follow_dictionary_metadata_and_copy_only_containers() {
         return true;
     })()"#).is_true());
 
+    // Even a corrupted private carrier must not run an accessor.
+    eval(
+        scope,
+        "globalThis.reads = 0; Object.defineProperty(stored, 'addedLater', {configurable:true, get(){ ++reads; throw Error('getter'); }})",
+    );
+    assert!(
+        snapshot_state
+            .to_js_snapshot(scope, SnapshotPrototype::Ordinary)
+            .is_none()
+    );
+    assert_eq!(eval(scope, "reads").int32_value(scope), Some(0));
+
     // An incomplete binding is an invariant violation, not a partial snapshot.
     let key = v8::String::new(scope, "addedLater").unwrap();
     assert_eq!(stored.delete(scope, key.into()), Some(true));
-    assert!(Options::to_js_snapshot(scope, stored, SnapshotPrototype::Ordinary).is_none());
+    assert!(
+        snapshot_state
+            .to_js_snapshot(scope, SnapshotPrototype::Ordinary)
+            .is_none()
+    );
 }
 
 #[test]
@@ -147,18 +173,15 @@ fn private_snapshots_trace_interfaces_without_rooting_unreachable_cycles() {
         interfaces::Certificate::DESCRIPTOR
             .initialize(scope, certificate)
             .unwrap();
-        let bound = Options {
+        let parsed = Options {
             number: 7,
             servers: Vec::new(),
             certificates: vec![certificate],
             added_later: "new member".into(),
-        }
-        .bind(scope)
-        .unwrap();
-        let stored = Options::to_js_snapshot(scope, bound, SnapshotPrototype::Null).unwrap();
+        };
+        let stored = parsed.to_snapshot(scope).unwrap();
         let owner = v8::Object::new(scope);
-        let slot = v8::Private::new(scope, None);
-        assert_eq!(owner.set_private(scope, slot, stored.into()), Some(true));
+        stored.store_private(scope, owner, "SnapshotTest").unwrap();
         let key = v8::String::new(scope, "owner").unwrap();
         assert_eq!(
             certificate.create_data_property(scope, key.into(), owner.into()),

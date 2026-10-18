@@ -1,6 +1,7 @@
 use super::*;
 use crate::util::{get_private_value, v8_string, v8_string_from_utf16_units, v8str};
-use moli_webapi_declare::{ObjectLiteralDeclaration, WebApiObject};
+use crate::webidl::{SnapshotPrototype, WebIdlDictionarySerialize};
+use moli_webapi_declare::WebApiObject;
 
 mod base;
 mod device;
@@ -11,6 +12,7 @@ pub(crate) use message::construct_original_message_event;
 mod methods;
 mod modifiers;
 mod subclasses;
+pub(crate) use subclasses::initialize_native_security_policy_violation_event;
 mod submit;
 mod ui;
 mod value;
@@ -50,21 +52,6 @@ struct PageTransitionEventInitDeclaration {
     cancelable: bool,
     #[webapi(data_property, enumerable)]
     persisted: bool,
-}
-
-#[derive(WebApiObject)]
-#[webapi(plain, enumerable)]
-struct StorageEventStateDeclaration<'scope> {
-    #[webapi(data_property)]
-    key: v8::Local<'scope, v8::Value>,
-    #[webapi(data_property = "oldValue")]
-    old_value: v8::Local<'scope, v8::Value>,
-    #[webapi(data_property = "newValue")]
-    new_value: v8::Local<'scope, v8::Value>,
-    #[webapi(data_property)]
-    url: v8::Local<'scope, v8::Value>,
-    #[webapi(data_property = "storageArea")]
-    storage_area: v8::Local<'scope, v8::Value>,
 }
 
 #[derive(Default, WebApiObject)]
@@ -156,17 +143,14 @@ pub(crate) fn construct_original_storage_event_utf16<'s>(
         super::exposed_interfaces::ensure_intrinsic_interface_constructor(scope, "StorageEvent")
             .ok()?;
     let event_type = v8_string(scope, event_type)?;
-    let init = ObjectLiteralDeclaration::bind(scope);
-    define_storage_event_init_properties_utf16(
-        scope,
-        &init,
+    let parsed = subclasses::StorageEventInitMembers::from_native(
         key,
         old_value,
         new_value,
         url,
         storage_area,
     );
-    let init = init.into_object();
+    let init = parsed.to_js_snapshot(scope, SnapshotPrototype::Null)?;
     let event = {
         let try_catch = std::pin::pin!(v8::TryCatch::new(scope));
         let scope = try_catch.init();
@@ -194,48 +178,9 @@ pub(in crate::context_bootstrap) fn define_storage_event_properties_utf16<'s>(
     storage_area: Option<v8::Local<'s, v8::Value>>,
 ) {
     let event = event_backing(scope, event);
-    let key_value = storage_event_nullable_string_value_utf16(scope, key);
-    let old_value = storage_event_nullable_string_value_utf16(scope, old_value);
-    let new_value = storage_event_nullable_string_value_utf16(scope, new_value);
-    let url_value = v8_string(scope, url).expect("storage event url").into();
-    let storage_area = storage_area.unwrap_or_else(|| v8::null(scope).into());
-    let _ =
-        StorageEventStateDeclaration::new(key_value, old_value, new_value, url_value, storage_area)
-            .initialize(scope, event);
-}
-
-fn define_storage_event_init_properties_utf16<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    init: &ObjectLiteralDeclaration<'s>,
-    key: Option<&[u16]>,
-    old_value: Option<&[u16]>,
-    new_value: Option<&[u16]>,
-    url: &str,
-    storage_area: Option<v8::Local<'s, v8::Value>>,
-) {
-    let key_value = storage_event_nullable_string_value_utf16(scope, key);
-    init.set_string_property(scope, "key", key_value);
-    let old_value = storage_event_nullable_string_value_utf16(scope, old_value);
-    init.set_string_property(scope, "oldValue", old_value);
-    let new_value = storage_event_nullable_string_value_utf16(scope, new_value);
-    init.set_string_property(scope, "newValue", new_value);
-    let url_value = v8_string(scope, url).expect("storage event url").into();
-    init.set_string_property(scope, "url", url_value);
-    let storage_area = storage_area.unwrap_or_else(|| v8::null(scope).into());
-    init.set_string_property(scope, "storageArea", storage_area);
-}
-
-fn storage_event_nullable_string_value_utf16<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    value: Option<&[u16]>,
-) -> v8::Local<'s, v8::Value> {
-    value
-        .map(|value| {
-            v8_string_from_utf16_units(scope, value)
-                .expect("storage event string")
-                .into()
-        })
-        .unwrap_or_else(|| v8::null(scope).into())
+    subclasses::StorageEventInitMembers::from_native(key, old_value, new_value, url, storage_area)
+        .initialize_own_snapshot(scope, event)
+        .expect("StorageEvent native payload");
 }
 
 pub(crate) use base::{

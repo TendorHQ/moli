@@ -536,6 +536,11 @@ fn text_stream_constructors_preserve_declared_metadata() {
                     fatal: true,
                     ignoreBOM: true,
                 });
+                const metadataOrder = Object.getOwnPropertyNames(decoder)
+                    .filter(name => ["encoding", "fatal", "ignoreBOM"].includes(name));
+                if (metadataOrder.join() !== "encoding,fatal,ignoreBOM") {
+                    throw Error("TextDecoderStream metadata property order");
+                }
                 const descriptor = (object, name) => {
                     const desc = Object.getOwnPropertyDescriptor(object, name);
                     return `${desc && desc.value}:${desc && desc.enumerable}`;

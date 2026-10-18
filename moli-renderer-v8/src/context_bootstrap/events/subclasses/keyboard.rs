@@ -2,10 +2,11 @@ use super::super::ui::{UiEventInit, initialize_legacy_ui_event};
 use super::*;
 use crate::webidl;
 use moli_webapi_declare::WebApiObject;
+use webidl::WebIdlDictionarySerialize;
 
 /// Own KeyboardEventInit members, including the legacy code members.
 #[derive(webidl::WebIdlDictionary)]
-#[webidl(prefix = "KeyboardEventInit")]
+#[webidl(prefix = "KeyboardEventInit", snapshot)]
 struct KeyboardEventInitMembers {
     #[webidl(default = 0)]
     char_code: u32,
@@ -76,39 +77,17 @@ pub(super) fn parse_keyboard_event_init<'s>(
     }
 }
 
-#[derive(WebApiObject)]
-#[webapi(plain, data_properties, enumerable)]
-struct KeyboardEventInitDeclaration<'scope> {
-    key: v8::Local<'scope, v8::String>,
-    code: v8::Local<'scope, v8::String>,
-    location: u32,
-    char_code: u32,
-    key_code: u32,
-    repeat: bool,
-    is_composing: bool,
-}
-
 pub(super) fn initialize_keyboard_event<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     event: v8::Local<'s, v8::Object>,
     parsed: KeyboardEventInit<'s>,
 ) {
     parsed.ui.initialize(scope, event);
-    let key = v8_string_from_utf16_units(scope, &parsed.keyboard.key.0).expect("KeyboardEvent key");
-    let code =
-        v8_string_from_utf16_units(scope, &parsed.keyboard.code.0).expect("KeyboardEvent code");
     parsed.modifiers.initialize(scope, event);
-    KeyboardEventInitDeclaration::new(
-        key,
-        code,
-        parsed.keyboard.location,
-        parsed.keyboard.char_code,
-        parsed.keyboard.key_code,
-        parsed.keyboard.repeat,
-        parsed.keyboard.is_composing,
-    )
-    .initialize(scope, event)
-    .expect("KeyboardEvent init declaration should initialize");
+    parsed
+        .keyboard
+        .initialize_snapshot(scope, event)
+        .expect("KeyboardEvent state should initialize");
 }
 
 #[derive(webidl::WebIdlArgs)]

@@ -3,6 +3,7 @@ use crate::util::{callback_data_index_value, get_private_value};
 use crate::web_api_interfaces;
 use crate::webidl;
 use moli_webapi_declare::{WebApiFunctionTemplate, WebApiObject};
+use webidl::WebIdlDictionarySerialize;
 
 const TOUCH_IDENTIFIER_SLOT: &str = "__lmTouchIdentifier";
 const TOUCH_TARGET_SLOT: &str = "__lmTouchTarget";
@@ -26,35 +27,6 @@ const TOUCH_EVENT_ALT_KEY_SLOT: &str = "__lmTouchEventAltKey";
 const TOUCH_EVENT_META_KEY_SLOT: &str = "__lmTouchEventMetaKey";
 const TOUCH_EVENT_CTRL_KEY_SLOT: &str = "__lmTouchEventCtrlKey";
 const TOUCH_EVENT_SHIFT_KEY_SLOT: &str = "__lmTouchEventShiftKey";
-
-#[derive(WebApiObject)]
-#[webapi(interface = web_api_interfaces::Touch)]
-struct TouchObjectDeclaration<'scope> {
-    #[webapi(slot = TOUCH_IDENTIFIER_SLOT)]
-    identifier: f64,
-    #[webapi(slot = TOUCH_TARGET_SLOT)]
-    target: v8::Local<'scope, v8::Object>,
-    #[webapi(slot = TOUCH_SCREEN_X_SLOT)]
-    screen_x: f64,
-    #[webapi(slot = TOUCH_SCREEN_Y_SLOT)]
-    screen_y: f64,
-    #[webapi(slot = TOUCH_CLIENT_X_SLOT)]
-    client_x: f64,
-    #[webapi(slot = TOUCH_CLIENT_Y_SLOT)]
-    client_y: f64,
-    #[webapi(slot = TOUCH_PAGE_X_SLOT)]
-    page_x: f64,
-    #[webapi(slot = TOUCH_PAGE_Y_SLOT)]
-    page_y: f64,
-    #[webapi(slot = TOUCH_RADIUS_X_SLOT)]
-    radius_x: f64,
-    #[webapi(slot = TOUCH_RADIUS_Y_SLOT)]
-    radius_y: f64,
-    #[webapi(slot = TOUCH_ROTATION_ANGLE_SLOT)]
-    rotation_angle: f64,
-    #[webapi(slot = TOUCH_FORCE_SLOT)]
-    force: f64,
-}
 
 #[derive(WebApiFunctionTemplate)]
 #[webapi(interface = web_api_interfaces::Touch)]
@@ -171,31 +143,43 @@ struct TouchListItemArgs {
 }
 
 #[derive(webidl::WebIdlDictionary)]
-#[webidl(prefix = "TouchInit")]
+#[webidl(prefix = "TouchInit", snapshot)]
 struct TouchInitMembers<'s> {
     #[webidl(required)]
+    #[webidl(snapshot_slot = TOUCH_IDENTIFIER_SLOT)]
     identifier: i32,
     #[webidl(required, interface = web_api_interfaces::EventTarget)]
+    #[webidl(snapshot_slot = TOUCH_TARGET_SLOT)]
     target: v8::Local<'s, v8::Object>,
     #[webidl(converter = "double", default = 0.0)]
+    #[webidl(snapshot_slot = TOUCH_SCREEN_X_SLOT)]
     screen_x: f64,
     #[webidl(converter = "double", default = 0.0)]
+    #[webidl(snapshot_slot = TOUCH_SCREEN_Y_SLOT)]
     screen_y: f64,
     #[webidl(converter = "double", default = 0.0)]
+    #[webidl(snapshot_slot = TOUCH_CLIENT_X_SLOT)]
     client_x: f64,
     #[webidl(converter = "double", default = 0.0)]
+    #[webidl(snapshot_slot = TOUCH_CLIENT_Y_SLOT)]
     client_y: f64,
     #[webidl(converter = "double", default = 0.0)]
+    #[webidl(snapshot_slot = TOUCH_PAGE_X_SLOT)]
     page_x: f64,
     #[webidl(converter = "double", default = 0.0)]
+    #[webidl(snapshot_slot = TOUCH_PAGE_Y_SLOT)]
     page_y: f64,
     #[webidl(converter = "double", default = 0.0)]
+    #[webidl(snapshot_slot = TOUCH_RADIUS_X_SLOT)]
     radius_x: f64,
     #[webidl(converter = "double", default = 0.0)]
+    #[webidl(snapshot_slot = TOUCH_RADIUS_Y_SLOT)]
     radius_y: f64,
     #[webidl(converter = "double", default = 0.0)]
+    #[webidl(snapshot_slot = TOUCH_ROTATION_ANGLE_SLOT)]
     rotation_angle: f64,
     #[webidl(converter = "double", default = 0.0)]
+    #[webidl(snapshot_slot = TOUCH_FORCE_SLOT)]
     force: f64,
 }
 
@@ -338,22 +322,8 @@ pub(in crate::context_bootstrap) fn touch_constructor_callback<'s>(
         }
     };
 
-    TouchObjectDeclaration::new(
-        f64::from(init.identifier),
-        init.target,
-        init.screen_x,
-        init.screen_y,
-        init.client_x,
-        init.client_y,
-        init.page_x,
-        init.page_y,
-        init.radius_x,
-        init.radius_y,
-        init.rotation_angle,
-        init.force,
-    )
-    .bind_into(scope, touch)
-    .expect("Touch declaration should bind into constructed object");
+    init.initialize_snapshot(scope, touch).expect("Touch state");
+    web_api_interfaces::initialize(scope, touch, "Touch").expect("Touch brand");
 
     rv.set(touch.into());
 }

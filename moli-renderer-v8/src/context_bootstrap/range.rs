@@ -15,5 +15,5 @@ pub(super) use object::{
     range_boundary_container_object, range_boundary_offset, range_is_collapsed,
     range_native_record_handle, set_range_boundary,
 };
-pub(super) use static_storage::initialize_static_range_object;
+pub(super) use static_storage::{StaticRangeInitMembers, initialize_static_range_object};
 pub(super) use validation::{child_index, range_node_length, range_validate_boundary_point};

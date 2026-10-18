@@ -62,3 +62,20 @@ impl<'s, T: webidl::WebIdlDictionary<'s>> webidl::WebIdlConverter<'s> for Dictio
         }
     }
 }
+
+impl webidl::WebIdlSnapshotValue for Text {
+    const SNAPSHOT_KIND: webidl::SnapshotKind = webidl::SnapshotKind::Scalar;
+}
+
+impl<T: webidl::WebIdlDictionarySnapshot> webidl::WebIdlSnapshotValue for Dictionary<T> {
+    const SNAPSHOT_KIND: webidl::SnapshotKind =
+        webidl::SnapshotKind::Dictionary(&T::SNAPSHOT_SCHEMA);
+}
+
+impl<'s, T: webidl::WebIdlDictionarySerialize<'s>> WebApiValue<'s> for Dictionary<T> {
+    fn to_v8_value(&self, scope: &mut v8::PinScope<'s, '_>) -> Option<v8::Local<'s, v8::Value>> {
+        self.0
+            .to_js_snapshot(scope, webidl::SnapshotPrototype::Ordinary)
+            .map(Into::into)
+    }
+}

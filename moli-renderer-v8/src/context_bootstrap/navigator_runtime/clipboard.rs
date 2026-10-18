@@ -8,6 +8,7 @@ use crate::{
 };
 use anyhow::{Result, anyhow};
 use moli_webapi_declare::{WebApiFunctionTemplate, WebApiObject};
+use webidl::WebIdlDictionarySerialize;
 
 const CLIPBOARD_ITEM_DATA_SLOT: &str = "__moliClipboardItemData";
 const CLIPBOARD_ITEM_RAW_DATA_SLOT: &str = "__moliClipboardItemRawData";
@@ -48,9 +49,6 @@ struct ClipboardItemObjectDeclaration<'scope> {
 
     #[webapi(slot = CLIPBOARD_ITEM_TYPES_SLOT)]
     types: v8::Local<'scope, v8::Array>,
-
-    #[webapi(slot = CLIPBOARD_ITEM_PRESENTATION_STYLE_SLOT)]
-    presentation_style: String,
 }
 
 #[derive(Default, WebApiFunctionTemplate)]
@@ -74,9 +72,10 @@ struct ClipboardItemConstructorDeclaration {
 }
 
 #[derive(Default, webidl::WebIdlDictionary)]
-#[webidl(prefix = "ClipboardItemOptions")]
+#[webidl(prefix = "ClipboardItemOptions", snapshot)]
 struct ClipboardItemOptions {
     #[webidl(converter = "enum", default = PresentationStyle::Unspecified)]
+    #[webidl(snapshot_slot = CLIPBOARD_ITEM_PRESENTATION_STYLE_SLOT)]
     presentation_style: PresentationStyle,
 }
 
@@ -230,14 +229,12 @@ fn initialize_clipboard_item<'s>(
         }
     }
     let _ = types.set_integrity_level(scope, v8::IntegrityLevel::Frozen);
-    ClipboardItemObjectDeclaration::new(
-        data,
-        raw_data,
-        types,
-        presentation_style.as_str().to_owned(),
-    )
-    .initialize(scope, object)
-    .is_ok()
+    ClipboardItemOptions { presentation_style }
+        .initialize_snapshot(scope, object)
+        .is_some()
+        && ClipboardItemObjectDeclaration::new(data, raw_data, types)
+            .initialize(scope, object)
+            .is_ok()
 }
 
 fn build_clipboard_item<'s>(
@@ -249,7 +246,6 @@ fn build_clipboard_item<'s>(
         v8::Object::new(scope),
         v8::Object::new(scope),
         v8::Array::new(scope, 0),
-        presentation_style.as_str().to_owned(),
     )
     .bind(scope)
     .ok()?;

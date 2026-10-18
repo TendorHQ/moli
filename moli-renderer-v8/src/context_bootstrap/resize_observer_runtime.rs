@@ -9,6 +9,7 @@ use crate::webidl;
 use entry::ResizeObserverEntryData;
 pub(super) use entry::install_resize_observer_entry_template_bindings;
 use moli_webapi_declare::WebApiObject;
+use webidl::WebIdlDictionarySerialize;
 
 #[derive(WebApiObject)]
 #[webapi(interface = web_api_interfaces::ResizeObserver)]
@@ -34,8 +35,6 @@ struct ResizeObserverObjectDeclaration<'s> {
 struct ResizeObserverObservedRecordDeclaration<'scope> {
     #[webapi(slot = RESIZE_OBSERVER_RECORD_TARGET_SLOT)]
     target: v8::Local<'scope, v8::Object>,
-    #[webapi(slot = RESIZE_OBSERVER_RECORD_BOX_SLOT)]
-    observed_box: String,
 }
 
 #[derive(webidl::WebIdlArgs)]
@@ -74,16 +73,6 @@ enum ResizeObserverBoxOptions {
     DevicePixelContentBox,
 }
 
-impl ResizeObserverBoxOptions {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::ContentBox => "content-box",
-            Self::BorderBox => "border-box",
-            Self::DevicePixelContentBox => "device-pixel-content-box",
-        }
-    }
-}
-
 const RESIZE_OBSERVER_RECORD_TARGET_SLOT: &str = "__moliResizeObserverRecordTarget";
 const RESIZE_OBSERVER_RECORD_BOX_SLOT: &str = "__moliResizeObserverRecordBox";
 const RESIZE_OBSERVER_RECORD_LAST_INLINE_SIZE_SLOT: &str =
@@ -91,9 +80,10 @@ const RESIZE_OBSERVER_RECORD_LAST_INLINE_SIZE_SLOT: &str =
 const RESIZE_OBSERVER_RECORD_LAST_BLOCK_SIZE_SLOT: &str = "__moliResizeObserverRecordLastBlockSize";
 
 #[derive(Default, webidl::WebIdlDictionary)]
-#[webidl(prefix = "ResizeObserverOptions")]
+#[webidl(prefix = "ResizeObserverOptions", snapshot)]
 struct ResizeObserverOptions {
     #[webidl(name = "box", converter = "enum", default = ResizeObserverBoxOptions::ContentBox)]
+    #[webidl(snapshot_slot = RESIZE_OBSERVER_RECORD_BOX_SLOT)]
     observed_box: ResizeObserverBoxOptions,
 }
 
@@ -470,12 +460,12 @@ fn build_observed_record<'s>(
     target: v8::Local<'s, v8::Object>,
     observed_box: ResizeObserverBoxOptions,
 ) -> v8::Local<'s, v8::Object> {
-    let record = ResizeObserverObservedRecordDeclaration {
-        target,
-        observed_box: observed_box.as_str().to_owned(),
-    }
-    .bind(scope)
-    .expect("ResizeObserver observed record declaration should bind");
+    let record = ResizeObserverObservedRecordDeclaration { target }
+        .bind(scope)
+        .expect("ResizeObserver observed record declaration should bind");
+    ResizeObserverOptions { observed_box }
+        .initialize_snapshot(scope, record)
+        .expect("ResizeObserver options");
     reset_resize_observer_last_reported_size(scope, record);
     record
 }
@@ -485,8 +475,9 @@ fn set_observed_record_box<'s>(
     record: v8::Local<'s, v8::Object>,
     observed_box: ResizeObserverBoxOptions,
 ) {
-    let value = v8str(scope, observed_box.as_str());
-    set_private_value(scope, record, RESIZE_OBSERVER_RECORD_BOX_SLOT, value.into());
+    ResizeObserverOptions { observed_box }
+        .initialize_snapshot(scope, record)
+        .expect("ResizeObserver options");
     reset_resize_observer_last_reported_size(scope, record);
 }
 

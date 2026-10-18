@@ -5,6 +5,7 @@ use crate::{
     webidl,
 };
 use moli_webapi_declare::{WebApiFunctionTemplate, WebApiObject};
+use webidl::WebIdlDictionarySerialize;
 
 const TEXT_ENCODER_ENCODING_SLOT: &str = "__lmTextEncoderEncoding";
 const TEXT_DECODER_ENCODING_SLOT: &str = "__lmTextDecoderEncoding";
@@ -43,10 +44,6 @@ struct TextEncoderPrototypeDeclaration {
 struct TextDecoderObjectDeclaration {
     #[webapi(slot = TEXT_DECODER_ENCODING_SLOT)]
     encoding: String,
-    #[webapi(slot = TEXT_DECODER_FATAL_SLOT)]
-    fatal: bool,
-    #[webapi(slot = TEXT_DECODER_IGNORE_BOM_SLOT)]
-    ignore_bom: bool,
 }
 
 #[derive(WebApiFunctionTemplate)]
@@ -113,11 +110,13 @@ struct TextDecoderConstructorArgs {
 }
 
 #[derive(Default, webidl::WebIdlDictionary)]
-#[webidl(prefix = "TextDecoderOptions")]
+#[webidl(prefix = "TextDecoderOptions", snapshot)]
 struct TextDecoderOptions {
     #[webidl(default = false)]
+    #[webidl(snapshot_slot = TEXT_DECODER_FATAL_SLOT)]
     fatal: bool,
     #[webidl(name = "ignoreBOM", default = false)]
+    #[webidl(snapshot_slot = TEXT_DECODER_IGNORE_BOM_SLOT)]
     ignore_bom: bool,
 }
 
@@ -315,7 +314,11 @@ pub(in crate::context_bootstrap) fn text_decoder_constructor_callback<'s>(
     let fatal = parsed.options.fatal;
     let ignore_bom = parsed.options.ignore_bom;
     init_text_decoder_state(scope, args.this(), encoding, fatal, ignore_bom);
-    TextDecoderObjectDeclaration::new(encoding_name, fatal, ignore_bom)
+    parsed
+        .options
+        .initialize_snapshot(scope, args.this())
+        .expect("TextDecoder options");
+    TextDecoderObjectDeclaration::new(encoding_name)
         .initialize(scope, args.this())
         .expect("TextDecoder declaration should initialize object");
     rv.set(args.this().into());

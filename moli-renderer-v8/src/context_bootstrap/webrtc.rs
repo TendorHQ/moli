@@ -74,7 +74,7 @@ const RTC_DATA_CHANNEL_VALUE_SLOTS: &[&str] = &[
 #[webapi(interface = web_api_interfaces::RTCPeerConnection)]
 struct RtcPeerConnectionObjectDeclaration<'scope> {
     #[webapi(slot = RTC_PEER_CONNECTION_CONFIGURATION_SLOT)]
-    configuration: v8::Local<'scope, v8::Object>,
+    configuration: configuration::ConfigurationSnapshot<'scope>,
     #[webapi(slot = RTC_PEER_CONNECTION_SIGNALING_STATE_SLOT)]
     signaling_state: v8::Local<'scope, v8::String>,
     #[webapi(slot = RTC_PEER_CONNECTION_ICE_GATHERING_STATE_SLOT)]

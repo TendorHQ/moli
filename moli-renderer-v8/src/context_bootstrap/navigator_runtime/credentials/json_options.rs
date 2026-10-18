@@ -8,6 +8,7 @@ mod encode;
 mod schema;
 
 use crate::webidl;
+use webidl::{SnapshotPrototype, WebIdlDictionarySerialize};
 
 use super::value::Dictionary;
 use schema::{CreationJson, RequestJson};
@@ -34,7 +35,11 @@ pub(super) fn parse_creation<'s>(
     let Some(parsed) = webidl::parse_args::<CreationArgs>(scope, &args) else {
         return;
     };
-    if let Some(result) = encode::creation(scope, &parsed.options.0) {
+    if let Some(result) = parsed
+        .options
+        .0
+        .to_js_snapshot(scope, SnapshotPrototype::Ordinary)
+    {
         rv.set(result.into());
     }
 }
@@ -47,7 +52,11 @@ pub(super) fn parse_request<'s>(
     let Some(parsed) = webidl::parse_args::<RequestArgs>(scope, &args) else {
         return;
     };
-    if let Some(result) = encode::request(scope, &parsed.options.0) {
+    if let Some(result) = parsed
+        .options
+        .0
+        .to_js_snapshot(scope, SnapshotPrototype::Ordinary)
+    {
         rv.set(result.into());
     }
 }

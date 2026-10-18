@@ -1,16 +1,13 @@
-use crate::web_api_interfaces;
 use std::collections::BTreeMap;
 
 use crate::context_bootstrap::{initialize_event_object, mark_event_trusted};
 use crate::network::ResourceRequestClient;
 use crate::subresource_integrity::integrity_metadata_hashes;
-use crate::util::v8_string;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use moli_crypto::DigestAlgorithm;
 use moli_fetch::{
     Request, RequestCredentialsMode, RequestMode, RequestRedirectMode, RequestResourceType,
 };
-use moli_webapi_declare::WebApiObject;
 use percent_encoding::percent_decode_str;
 use serde_json::json;
 use url::Url;
@@ -191,29 +188,6 @@ pub(crate) struct ContentSecurityPolicyViolationEventFields<'a> {
     pub(crate) status_code: i32,
 }
 
-#[derive(WebApiObject)]
-#[webapi(
-    interface = web_api_interfaces::SecurityPolicyViolationEvent,
-    data_properties,
-    enumerable
-)]
-pub(crate) struct ContentSecurityPolicyViolationEventDeclaration<'scope> {
-    #[webapi(data_property = "documentURI")]
-    document_uri: v8::Local<'scope, v8::String>,
-    referrer: v8::Local<'scope, v8::String>,
-    #[webapi(data_property = "blockedURI")]
-    blocked_uri: v8::Local<'scope, v8::String>,
-    effective_directive: v8::Local<'scope, v8::String>,
-    violated_directive: v8::Local<'scope, v8::String>,
-    original_policy: v8::Local<'scope, v8::String>,
-    disposition: v8::Local<'scope, v8::String>,
-    source_file: v8::Local<'scope, v8::String>,
-    sample: v8::Local<'scope, v8::String>,
-    line_number: u32,
-    column_number: u32,
-    status_code: u16,
-}
-
 impl<'a> ContentSecurityPolicyViolationEventFields<'a> {
     pub(crate) fn from_url_violation(violation: &'a ContentSecurityPolicyUrlViolation) -> Self {
         Self {
@@ -237,7 +211,6 @@ pub(crate) fn create_security_policy_violation_event<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     fields: &ContentSecurityPolicyViolationEventFields<'_>,
 ) -> Option<v8::Local<'s, v8::Object>> {
-    let declaration = security_policy_violation_event_declaration(scope, fields)?;
     let event = crate::context_bootstrap::new_event_state(scope);
     initialize_event_object(scope, event, "securitypolicyviolation", true, false);
     event.set(
@@ -245,40 +218,11 @@ pub(crate) fn create_security_policy_violation_event<'s>(
         crate::util::v8str(scope, "composed").into(),
         v8::Boolean::new(scope, true).into(),
     )?;
-    declaration.initialize(scope, event).ok()?;
+    crate::context_bootstrap::initialize_native_security_policy_violation_event(
+        scope, event, fields,
+    )?;
     mark_event_trusted(scope, event);
     crate::context_bootstrap::new_event_wrapper(scope, event)
-}
-
-fn security_policy_violation_event_declaration<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    fields: &ContentSecurityPolicyViolationEventFields<'_>,
-) -> Option<ContentSecurityPolicyViolationEventDeclaration<'s>> {
-    let document_uri = v8_string(scope, fields.document_uri)?;
-    let referrer = v8_string(scope, fields.referrer)?;
-    let blocked_uri = v8_string(scope, fields.blocked_uri)?;
-    let effective_directive = v8_string(scope, fields.effective_directive)?;
-    let violated_directive = v8_string(scope, fields.violated_directive)?;
-    let original_policy = v8_string(scope, fields.original_policy)?;
-    let disposition = v8_string(scope, fields.disposition.as_str())?;
-    let source_file = v8_string(scope, fields.source_file)?;
-    let sample = v8_string(scope, fields.sample)?;
-    Some(ContentSecurityPolicyViolationEventDeclaration {
-        document_uri,
-        referrer,
-        blocked_uri,
-        effective_directive,
-        violated_directive,
-        original_policy,
-        disposition,
-        source_file,
-        sample,
-        // Native locations use zero when unavailable. Synthetic events enter
-        // this shared state with their already converted unsigned IDL values.
-        line_number: fields.line_number.try_into().unwrap_or_default(),
-        column_number: fields.column_number.try_into().unwrap_or_default(),
-        status_code: fields.status_code.try_into().unwrap_or_default(),
-    })
 }
 
 pub(crate) fn content_security_policy_headers(headers: &[(String, Vec<u8>)]) -> Vec<String> {

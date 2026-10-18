@@ -20,6 +20,7 @@ use crate::web_api_interfaces;
 use crate::webidl;
 use moli_webapi_declare::WebApiObject;
 use url::Url;
+use webidl::WebIdlDictionarySerialize;
 
 const NAVIGATE_EVENT_SYNTHETIC_SLOT: &str = "__lmNavigateEventSynthetic";
 const NAVIGATE_EVENT_INTERCEPTED_SLOT: &str = "__lmNavigateEventIntercepted";
@@ -171,17 +172,6 @@ struct InterestEventInitDeclaration<'scope> {
 }
 
 #[derive(WebApiObject)]
-#[webapi(plain)]
-struct ToggleEventStateDeclaration<'scope> {
-    #[webapi(data_property = "oldState", readonly, dont_delete)]
-    old_state: String,
-    #[webapi(data_property = "newState", readonly, dont_delete)]
-    new_state: String,
-    #[webapi(data_property, readonly, dont_delete)]
-    source: v8::Local<'scope, v8::Value>,
-}
-
-#[derive(WebApiObject)]
 #[webapi(plain, data_properties, enumerable)]
 struct PopStateEventInitDeclaration<'scope> {
     state: v8::Local<'scope, v8::Value>,
@@ -189,18 +179,9 @@ struct PopStateEventInitDeclaration<'scope> {
     has_ua_visual_transition: bool,
 }
 
-#[derive(WebApiObject)]
-#[webapi(plain, data_properties, enumerable)]
-struct HashChangeEventInitDeclaration {
-    #[webapi(data_property = "oldURL")]
-    old_url: String,
-    #[webapi(data_property = "newURL")]
-    new_url: String,
-}
-
 /// Members are declared in Web IDL lexicographic order.
 #[derive(Default, webidl::WebIdlDictionary)]
-#[webidl(prefix = "HashChangeEventInit")]
+#[webidl(prefix = "HashChangeEventInit", snapshot)]
 struct HashChangeEventInitMembers {
     #[webidl(name = "newURL", default = "", converter = "usv_string")]
     new_url: String,
@@ -214,19 +195,12 @@ struct PageTransitionEventOwnInitDeclaration {
     persisted: bool,
 }
 
-#[derive(WebApiObject)]
-#[webapi(plain, data_properties, enumerable)]
-struct PromiseRejectionEventInitDeclaration<'scope> {
-    promise: v8::Local<'scope, v8::Value>,
-    reason: v8::Local<'scope, v8::Value>,
-}
-
 #[derive(webidl::WebIdlDictionary)]
-#[webidl(prefix = "PromiseRejectionEventInit")]
+#[webidl(prefix = "PromiseRejectionEventInit", snapshot)]
 struct PromiseRejectionEventInitMembers<'s> {
     #[webidl(required)]
     promise: v8::Local<'s, v8::Object>,
-    #[webidl(converter = "raw")]
+    #[webidl(converter = "raw", snapshot_default = v8::undefined(scope).into())]
     reason: Option<v8::Local<'s, v8::Value>>,
 }
 
@@ -255,19 +229,22 @@ struct NavigateEventInitDeclaration<'scope> {
 }
 
 #[derive(webidl::WebIdlDictionary)]
-#[webidl(prefix = "ToggleEventInit")]
+#[webidl(prefix = "ToggleEventInit", snapshot)]
 struct ToggleEventInitMembers<'s> {
     #[webidl(default = "")]
+    #[webidl(snapshot_attributes = v8::PropertyAttribute::READ_ONLY | v8::PropertyAttribute::DONT_DELETE | v8::PropertyAttribute::DONT_ENUM)]
     old_state: String,
     #[webidl(default = "")]
+    #[webidl(snapshot_attributes = v8::PropertyAttribute::READ_ONLY | v8::PropertyAttribute::DONT_DELETE | v8::PropertyAttribute::DONT_ENUM)]
     new_state: String,
-    #[webidl(converter = "raw")]
+    #[webidl(converter = "raw", snapshot_default = v8::null(scope).into())]
+    #[webidl(snapshot_attributes = v8::PropertyAttribute::READ_ONLY | v8::PropertyAttribute::DONT_DELETE | v8::PropertyAttribute::DONT_ENUM)]
     source: Option<v8::Local<'s, v8::Value>>,
 }
 
 #[derive(Default, webidl::WebIdlDictionary)]
-#[webidl(prefix = "StorageEventInit")]
-pub(super) struct StorageEventInitMembers<'s> {
+#[webidl(prefix = "StorageEventInit", snapshot)]
+pub(in crate::context_bootstrap::events) struct StorageEventInitMembers<'s> {
     #[webidl(inherit)]
     base: EventInit,
     #[webidl(nullable, converter = "raw")]
@@ -280,6 +257,27 @@ pub(super) struct StorageEventInitMembers<'s> {
     storage_area: Option<StorageReference<'s>>,
     #[webidl(default = "", converter = "usv_string")]
     url: String,
+}
+
+impl<'s> StorageEventInitMembers<'s> {
+    pub(in crate::context_bootstrap::events) fn from_native(
+        key: Option<&[u16]>,
+        old_value: Option<&[u16]>,
+        new_value: Option<&[u16]>,
+        url: &str,
+        storage_area: Option<v8::Local<'s, v8::Value>>,
+    ) -> Self {
+        Self {
+            base: EventInit::default(),
+            key: key.map(|value| webidl::DomString16(value.to_vec())),
+            old_value: old_value.map(|value| webidl::DomString16(value.to_vec())),
+            new_value: new_value.map(|value| webidl::DomString16(value.to_vec())),
+            url: url.to_owned(),
+            storage_area: storage_area
+                .and_then(|value| value.try_into().ok())
+                .map(StorageReference),
+        }
+    }
 }
 
 impl StorageEventInitMembers<'_> {
@@ -429,15 +427,9 @@ pub(in crate::context_bootstrap::events::subclasses) fn initialize_storage_event
     event: v8::Local<'s, v8::Object>,
     parsed: StorageEventInitMembers<'s>,
 ) {
-    crate::context_bootstrap::events::define_storage_event_properties_utf16(
-        scope,
-        event,
-        parsed.key.as_ref().map(|value| value.0.as_slice()),
-        parsed.old_value.as_ref().map(|value| value.0.as_slice()),
-        parsed.new_value.as_ref().map(|value| value.0.as_slice()),
-        &parsed.url,
-        parsed.storage_area.map(|value| value.0.into()),
-    );
+    parsed
+        .initialize_snapshot(scope, event)
+        .expect("StorageEvent state");
 }
 
 pub(in crate::context_bootstrap::events::subclasses) fn initialize_input_event<'s>(
@@ -483,8 +475,8 @@ pub(in crate::context_bootstrap::events::subclasses) fn initialize_hash_change_e
         }
         None => HashChangeEventInitMembers::default(),
     };
-    HashChangeEventInitDeclaration::new(parsed.old_url, parsed.new_url)
-        .initialize(scope, event)
+    parsed
+        .initialize_snapshot(scope, event)
         .expect("HashChangeEvent init declaration should initialize");
     true
 }
@@ -521,9 +513,7 @@ pub(in crate::context_bootstrap::events::subclasses) fn initialize_toggle_event<
             source: None,
         },
     };
-    let source = parsed.source.unwrap_or_else(|| v8::null(scope).into());
-    let _ = ToggleEventStateDeclaration::new(parsed.old_state, parsed.new_state, source)
-        .initialize(scope, event);
+    let _ = parsed.initialize_snapshot(scope, event);
     true
 }
 
@@ -551,9 +541,8 @@ pub(in crate::context_bootstrap::events::subclasses) fn initialize_promise_rejec
             return false;
         }
     };
-    let reason = parsed.reason.unwrap_or_else(|| v8::undefined(scope).into());
-    PromiseRejectionEventInitDeclaration::new(parsed.promise.into(), reason)
-        .initialize(scope, event)
+    parsed
+        .initialize_snapshot(scope, event)
         .expect("PromiseRejectionEvent init declaration should initialize");
     true
 }

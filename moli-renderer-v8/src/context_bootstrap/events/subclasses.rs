@@ -23,7 +23,10 @@ pub(in crate::context_bootstrap) use pointer::{
     pointer_event_get_coalesced_events_callback, pointer_event_get_predicted_events_callback,
 };
 
-pub(in crate::context_bootstrap::events) use data::initialize_navigate_event_methods;
+pub(in crate::context_bootstrap::events) use data::{
+    StorageEventInitMembers, initialize_navigate_event_methods,
+};
 
 pub(crate) use error::construct_original_error_event;
 pub(in crate::context_bootstrap) use keyboard::keyboard_event_init_callback;
+pub(crate) use security_policy::initialize_native_security_policy_violation_event;

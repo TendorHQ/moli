@@ -4,7 +4,7 @@ use crate::{
 };
 
 #[derive(Default, webidl::WebIdlDictionary)]
-#[webidl(prefix = "EventInit")]
+#[webidl(prefix = "EventInit", snapshot)]
 pub(in crate::context_bootstrap) struct EventInit {
     #[webidl(default = false)]
     pub(in crate::context_bootstrap) bubbles: bool,

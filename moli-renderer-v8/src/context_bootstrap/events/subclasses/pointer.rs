@@ -2,16 +2,19 @@ use super::*;
 use moli_webapi_declare::WebApiObject;
 
 use crate::webidl;
+use webidl::WebIdlDictionarySerialize;
 
 const POINTER_EVENT_COALESCED_EVENTS_SLOT: &str = "__moliPointerEventCoalescedEvents";
 const POINTER_EVENT_PREDICTED_EVENTS_SLOT: &str = "__moliPointerEventPredictedEvents";
 
 #[derive(Default, webidl::WebIdlDictionary)]
-#[webidl(prefix = "PointerEventInit")]
+#[webidl(prefix = "PointerEventInit", snapshot)]
 struct PointerEventSequences<'scope> {
     #[webidl(sequence, interface = crate::web_api_interfaces::PointerEvent, brand_check = is_pointer_event_sequence_item, default = Vec::new())]
+    #[webidl(snapshot_slot = POINTER_EVENT_COALESCED_EVENTS_SLOT)]
     coalesced_events: Vec<v8::Local<'scope, v8::Object>>,
     #[webidl(sequence, interface = crate::web_api_interfaces::PointerEvent, brand_check = is_pointer_event_sequence_item, default = Vec::new())]
+    #[webidl(snapshot_slot = POINTER_EVENT_PREDICTED_EVENTS_SLOT)]
     predicted_events: Vec<v8::Local<'scope, v8::Object>>,
 }
 
@@ -279,20 +282,6 @@ fn pointer_event_angle_init<'s>(
     Ok(angles)
 }
 
-fn store_pointer_event_sequence<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    slot: &'static str,
-    entries: &[v8::Local<'s, v8::Object>],
-) {
-    let entries = entries
-        .iter()
-        .map(|entry| v8::Local::<v8::Value>::from(*entry))
-        .collect::<Vec<_>>();
-    let values = v8::Array::new_with_elements(scope, &entries);
-    set_private_value(scope, event, slot, values.into());
-}
-
 fn pointer_event_sequence_copy<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     event: v8::Local<'s, v8::Object>,
@@ -503,17 +492,8 @@ pub(in crate::context_bootstrap::events::subclasses) fn initialize_pointer_event
     .initialize(scope, event)
     .expect("PointerEvent tail init declaration should initialize");
     define_mouse_event_related_target(scope, event, related_target);
-    store_pointer_event_sequence(
-        scope,
-        event,
-        POINTER_EVENT_COALESCED_EVENTS_SLOT,
-        &sequences.coalesced_events,
-    );
-    store_pointer_event_sequence(
-        scope,
-        event,
-        POINTER_EVENT_PREDICTED_EVENTS_SLOT,
-        &sequences.predicted_events,
-    );
+    sequences
+        .initialize_snapshot(scope, event)
+        .expect("PointerEvent sequences");
     true
 }

@@ -1,5 +1,6 @@
 use crate::webidl;
 use moli_webapi_declare::WebApiObject;
+use webidl::WebIdlDictionarySerialize;
 
 fn nullable_window_value<'s>(
     scope: &mut v8::PinScope<'s, '_>,
@@ -12,8 +13,10 @@ fn nullable_window_value<'s>(
 
 /// Own UIEventInit members, including legacy which, in dictionary order.
 #[derive(Default, webidl::WebIdlDictionary)]
-#[webidl(prefix = "UIEventInit")]
-struct UiEventInitMembers<'s> {
+#[webidl(prefix = "UIEventInit", snapshot)]
+pub(super) struct UiEventInit<'s> {
+    #[webidl(inherit)]
+    base: super::EventInit,
     #[webidl(default = 0)]
     detail: i32,
     #[webidl(nullable, interface = crate::web_api_interfaces::Window, brand_check = crate::context_bootstrap::is_window_receiver)]
@@ -22,29 +25,9 @@ struct UiEventInitMembers<'s> {
     which: u32,
 }
 
-#[derive(Default)]
-pub(super) struct UiEventInit<'s> {
-    flags: (bool, bool, bool),
-    members: UiEventInitMembers<'s>,
-}
-
-impl<'s> webidl::WebIdlDictionary<'s> for UiEventInit<'s> {
-    fn parse_dictionary(
-        scope: &mut v8::PinScope<'s, '_>,
-        object: v8::Local<'s, v8::Object>,
-    ) -> Result<Self, webidl::WebIdlError> {
-        // Read inherited members before own members. Derived dictionaries
-        // delegate here so each observable getter runs once, base-first.
-        Ok(Self {
-            flags: super::init::parse_event_init(scope, Some(object))?,
-            members: webidl::parse_dictionary_object(scope, object)?,
-        })
-    }
-}
-
 impl<'s> UiEventInit<'s> {
     pub(super) fn event_flags(&self) -> (bool, bool, bool) {
-        self.flags
+        (self.base.bubbles, self.base.cancelable, self.base.composed)
     }
 
     pub(super) fn initialize(
@@ -52,19 +35,9 @@ impl<'s> UiEventInit<'s> {
         scope: &mut v8::PinScope<'s, '_>,
         event: v8::Local<'s, v8::Object>,
     ) {
-        let view = nullable_window_value(scope, self.members.view);
-        UiEventState::new(view, self.members.detail, self.members.which)
-            .initialize(scope, event)
+        self.initialize_snapshot(scope, event)
             .expect("UIEvent state should initialize");
     }
-}
-
-#[derive(WebApiObject)]
-#[webapi(plain, data_properties, enumerable)]
-struct UiEventState<'s> {
-    view: v8::Local<'s, v8::Value>,
-    detail: i32,
-    which: u32,
 }
 
 #[derive(WebApiObject)]
