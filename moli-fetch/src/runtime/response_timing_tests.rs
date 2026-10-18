@@ -177,6 +177,7 @@ async fn html_response_timing_records_terminal_failures() -> Result<()> {
 #[tokio::test]
 async fn html_response_timing_finishes_bodyless_responses_at_headers() -> Result<()> {
     for (method, headers) in [
+        ("GET", "HTTP/1.1 101 Switching Protocols\r\n"),
         ("GET", "HTTP/1.1 204 No Content\r\n"),
         ("GET", "HTTP/1.1 205 Reset Content\r\n"),
         ("GET", "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n"),
@@ -327,4 +328,57 @@ async fn html_declared_body_completion_precedes_delivery_of_the_last_chunk() -> 
         assert_eq!(cancel.cancel_if_response_pending(), !complete);
     }
     Ok(())
+}
+
+#[test]
+fn switching_protocols_timing_is_final_in_every_collector() {
+    for interim in [false, true] {
+        for mode in ["buffered", "html", "raw"] {
+            let cancel = FetchCancelHandle::new();
+            let mut handler = match mode {
+                "buffered" => {
+                    FetchTransferHandler::new_buffered(ResponseCollector::new(Some(cancel.clone())))
+                }
+                "html" => {
+                    let (start_tx, _start_rx) = oneshot::channel();
+                    let (body_tx, _body_rx) = mpsc::unbounded_channel();
+                    FetchTransferHandler::new_streaming(StreamingResponseCollector::new(
+                        new_shared_browser_cookie_store(),
+                        start_tx,
+                        body_tx,
+                        cancel.clone(),
+                    ))
+                }
+                "raw" => {
+                    let (start_tx, _start_rx) = oneshot::channel();
+                    let (body_tx, _body_rx) = mpsc::unbounded_channel();
+                    FetchTransferHandler::new_raw_streaming(RawStreamingResponseCollector::new(
+                        new_shared_browser_cookie_store(),
+                        start_tx,
+                        body_tx,
+                        cancel.clone(),
+                    ))
+                }
+                _ => unreachable!(),
+            };
+            if interim {
+                assert!(handler.header(b"HTTP/1.1 103 Early Hints\r\n"));
+                assert!(cancel.response_timing().response_started_at().is_none());
+            }
+            assert!(handler.header(b"HTTP/1.1 101 Switching Protocols\r\n"));
+            let timing = cancel.response_timing();
+            assert!(
+                timing.response_started_at().is_some(),
+                "{mode}: 101 must be final"
+            );
+            assert_eq!(
+                timing.first_interim_response_started_at().is_some(),
+                interim,
+                "{mode}"
+            );
+            if let Some(first_interim) = timing.first_interim_response_started_at() {
+                assert!(first_interim <= timing.response_started_at().unwrap());
+            }
+        }
+    }
 }

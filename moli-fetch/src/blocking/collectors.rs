@@ -1078,7 +1078,7 @@ impl Handler for ResponseCollector {
             self.status_text = Some(parsed.status_text);
             self.body.clear();
             if let Some(progress) = &self.response_progress {
-                if parsed.status < 200 {
+                if is_interim_response_status(parsed.status) {
                     progress.mark_interim_response_started();
                 } else {
                     progress.mark_response_started();
@@ -1155,7 +1155,7 @@ impl Handler for StreamingResponseCollector {
             self.declared_identity_body_length = None;
             self.response_too_large = false;
             self.cookie_set_reports.clear();
-            if self.status < 200 {
+            if is_interim_response_status(self.status) {
                 self.response_progress.mark_interim_response_started();
             } else {
                 self.response_progress.mark_response_started();
@@ -1233,10 +1233,10 @@ impl Handler for RawStreamingResponseCollector {
             self.response_bytes_received = 0;
             self.response_too_large = false;
             self.cookie_set_reports.clear();
-            if self.status >= 200 {
-                self.response_progress.mark_response_started();
-            } else {
+            if is_interim_response_status(self.status) {
                 self.response_progress.mark_interim_response_started();
+            } else {
+                self.response_progress.mark_response_started();
             }
             return true;
         }
