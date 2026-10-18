@@ -1928,6 +1928,7 @@ impl RuntimeOwner {
             return;
         }
 
+        job.response_progress.commit();
         let cache_body_writer = {
             let streaming = easy
                 .get_mut()
@@ -2828,6 +2829,11 @@ impl FetchTransferHandler {
 
 impl Handler for FetchTransferHandler {
     fn write(&mut self, data: &[u8]) -> std::result::Result<usize, WriteError> {
+        if !data.is_empty()
+            && let Some(timing) = self.response_progress()
+        {
+            timing.mark_response_body_received();
+        }
         match &mut self.response {
             FetchResponseCollector::Buffered(collector) => collector.write(data),
             FetchResponseCollector::Streaming(collector) => collector.write(data),
@@ -2981,6 +2987,7 @@ fn complete_cached_streaming_html_job(
     let final_url = match Url::parse(&final_url) {
         Ok(final_url) => final_url,
         Err(error) => {
+            job.response_progress.commit();
             if let Some(started_tx) = job.started_tx {
                 let _ = started_tx.send(Err(anyhow!(
                     "failed to parse cached response final url: {error}"
@@ -2993,6 +3000,7 @@ fn complete_cached_streaming_html_job(
         }
     };
 
+    let response_timing = job.response_progress.mark_cached_response_available();
     if let Some(started_tx) = job.started_tx {
         let _ = started_tx.send(Ok(StreamingHtmlResponseStart {
             status_text: metadata.status_text,
@@ -3014,6 +3022,7 @@ fn complete_cached_streaming_html_job(
     } else {
         Ok(())
     };
+    response_timing.finish();
     let _ = job.completion_tx.send(completion);
 }
 
@@ -3698,6 +3707,7 @@ fn fail_streaming_job_with_easy(
         &job.request.redirect_chain,
         error,
     );
+    job.response_progress.commit();
     if let Some(easy) = easy.as_mut()
         && let Some(streaming) = easy.get_mut().streaming_mut()
     {

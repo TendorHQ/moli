@@ -186,6 +186,7 @@ pub struct StreamingResponseCollector {
     max_response_size: Option<usize>,
     response_too_large: bool,
     response_bytes_received: usize,
+    declared_identity_body_length: Option<usize>,
     cache_body_writer: Option<HttpCacheBodyWriter>,
     cache_plan: Option<StreamingCachePlan>,
     started: bool,
@@ -301,6 +302,7 @@ impl StreamingResponseCollector {
             max_response_size: None,
             response_too_large: false,
             response_bytes_received: 0,
+            declared_identity_body_length: None,
             cache_body_writer: None,
             cache_plan: None,
             started: false,
@@ -342,6 +344,7 @@ impl StreamingResponseCollector {
         self.max_response_size = max_response_size;
         self.response_too_large = false;
         self.response_bytes_received = 0;
+        self.declared_identity_body_length = None;
         self.cache_body_writer = cache_body_writer;
         self.cache_plan = None;
         self.started = false;
@@ -503,6 +506,7 @@ impl StreamingResponseCollector {
             self.client_hint_restart_requested = true;
             return false;
         }
+        self.declared_identity_body_length = identity_encoded_content_length(&self.headers);
         // Create the cache writer only after final response headers prove the
         // response is cacheable.
         self.maybe_create_cache_body_writer();
@@ -547,6 +551,11 @@ impl StreamingResponseCollector {
             .is_some()
         {
             return;
+        }
+        if self.declared_identity_body_length == Some(0)
+            || response_body_ends_at_headers(self.status)
+        {
+            self.response_progress.commit();
         }
         self.started = true;
         if let Some(start_tx) = self.start_tx.take() {
@@ -1116,6 +1125,10 @@ impl Handler for StreamingResponseCollector {
         }
 
         self.response_bytes_received += data.len();
+        if self.started && self.declared_identity_body_length == Some(self.response_bytes_received)
+        {
+            self.response_progress.commit();
+        }
         self.write_cache_body_bytes(data);
         self.stream_body_bytes(data);
         if self.cancel_handle.is_cancelled() {
@@ -1139,6 +1152,7 @@ impl Handler for StreamingResponseCollector {
             self.status_text = Some(parsed.status_text);
             self.negotiated_http_version = parsed.version;
             self.response_bytes_received = 0;
+            self.declared_identity_body_length = None;
             self.response_too_large = false;
             self.cookie_set_reports.clear();
             if self.status < 200 {

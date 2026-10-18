@@ -76,3 +76,255 @@ async fn html_redirect_timing_belongs_to_the_final_transfer() -> Result<()> {
     server.join().expect("server thread")?;
     Ok(())
 }
+
+#[tokio::test]
+async fn html_response_timing_finishes_without_consumer_polling() -> Result<()> {
+    for (framing, body) in [
+        ("Content-Length: 4", b"body".as_slice()),
+        (
+            "Transfer-Encoding: chunked",
+            b"4\r\nbody\r\n0\r\n\r\n".as_slice(),
+        ),
+    ] {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+        let url = format!("http://{}/timed", listener.local_addr()?);
+        let (release_body, ready) = std_mpsc::sync_channel(1);
+        let server = thread::spawn(move || -> std::io::Result<()> {
+            let (mut stream, _) = listener.accept()?;
+            read_request(&mut stream)?;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\n{framing}\r\nConnection: close\r\n\r\n"
+            )?;
+            ready.recv_timeout(Duration::from_secs(5)).unwrap();
+            stream.write_all(body)?;
+            Ok(())
+        });
+        let (_owner, cancel, pending) =
+            submit_html_request(&FetchConfig::default(), Request::get(&url)?);
+        let mut response = pending.into_response().await?;
+        let headers = cancel.response_timing();
+        assert!(headers.response_started_at().is_some());
+        assert!(headers.response_end_at().is_none());
+        release_body.send(())?;
+        // Keep the consumer's executor occupied while native threads finish.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !cancel.response_completion_is_committed() {
+            anyhow::ensure!(
+                Instant::now() < deadline,
+                "HTML transfer did not record completion"
+            );
+            thread::sleep(Duration::from_millis(1));
+        }
+        let native = cancel.response_timing();
+        assert!(native.body_bytes_received());
+        assert!(native.response_started_at().unwrap() <= native.response_end_at().unwrap());
+        assert!(cancel.response_completion_is_committed());
+        assert!(!cancel.cancel_if_response_pending());
+        let mut text = String::new();
+        while let Some(chunk) = response.next_chunk().await {
+            text.push_str(&chunk);
+        }
+        response.finish().await?;
+        assert_eq!(text, "body");
+        assert_eq!(cancel.response_timing(), native);
+        server.join().expect("server thread")?;
+    }
+    Ok(())
+}
+
+fn read_request(stream: &mut std::net::TcpStream) -> std::io::Result<()> {
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    let mut request = Vec::new();
+    let mut byte = [0];
+    while !request.ends_with(b"\r\n\r\n") {
+        stream.read_exact(&mut byte)?;
+        request.extend_from_slice(&byte);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn html_response_timing_records_terminal_failures() -> Result<()> {
+    for bytes in [
+        b"".as_slice(),
+        b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\npart".as_slice(),
+    ] {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+        let url = format!("http://{}/failure", listener.local_addr()?);
+        let server = thread::spawn(move || -> std::io::Result<()> {
+            let (mut stream, _) = listener.accept()?;
+            read_request(&mut stream)?;
+            stream.write_all(bytes)?;
+            Ok(())
+        });
+        let (_owner, cancel, pending) =
+            submit_html_request(&FetchConfig::default(), Request::get(&url)?);
+        match pending.into_response().await {
+            Ok(mut response) => assert!(response.finish().await.is_err()),
+            Err(_) => assert!(bytes.is_empty()),
+        }
+        let timing = cancel.response_timing();
+        assert_eq!(timing.response_started_at().is_some(), !bytes.is_empty());
+        assert!(timing.response_end_at().is_some());
+        assert!(cancel.response_completion_is_committed());
+        assert!(!cancel.cancel_if_response_pending());
+        server.join().expect("server thread")?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn html_response_timing_finishes_bodyless_responses_at_headers() -> Result<()> {
+    for (method, headers) in [
+        ("GET", "HTTP/1.1 204 No Content\r\n"),
+        ("GET", "HTTP/1.1 205 Reset Content\r\n"),
+        ("GET", "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n"),
+        ("HEAD", "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n"),
+    ] {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+        let url = format!("http://{}/empty", listener.local_addr()?);
+        let (release, ready) = std_mpsc::sync_channel(1);
+        let server = thread::spawn(move || -> std::io::Result<()> {
+            let (mut stream, _) = listener.accept()?;
+            read_request(&mut stream)?;
+            write!(stream, "{headers}Connection: close\r\n\r\n")?;
+            ready.recv_timeout(Duration::from_secs(5)).unwrap();
+            Ok(())
+        });
+        let request = Request::new(method, &url, None, Vec::new())?;
+        let (_owner, cancel, pending) = submit_html_request(&FetchConfig::default(), request);
+        let mut response = pending.into_response().await?;
+        tokio::time::timeout(Duration::from_secs(5), response.finish()).await??;
+        let timing = cancel.response_timing();
+        assert!(timing.response_end_at().is_some(), "{method}: {headers}");
+        assert!(timing.response_started_at().unwrap() <= timing.response_end_at().unwrap());
+        assert!(!timing.body_bytes_received());
+        assert!(!cancel.cancel_if_response_pending());
+        release.send(())?;
+        server.join().expect("server thread")?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn html_response_timing_preserves_cancellation_before_body_completion() -> Result<()> {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let url = format!("http://{}/cancel", listener.local_addr()?);
+    let (release, ready) = std_mpsc::sync_channel(1);
+    let server = thread::spawn(move || -> std::io::Result<()> {
+        let (mut stream, _) = listener.accept()?;
+        read_request(&mut stream)?;
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\npart")?;
+        ready.recv_timeout(Duration::from_secs(5)).unwrap();
+        Ok(())
+    });
+    let (_owner, cancel, pending) =
+        submit_html_request(&FetchConfig::default(), Request::get(&url)?);
+    let mut response = pending.into_response().await?;
+    assert_eq!(response.next_chunk().await.as_deref(), Some("part"));
+    assert!(cancel.response_timing().response_end_at().is_none());
+    assert!(cancel.cancel_if_response_pending());
+    assert!(
+        tokio::time::timeout(Duration::from_secs(5), response.finish())
+            .await?
+            .is_err()
+    );
+    assert!(cancel.response_timing().response_end_at().is_some());
+    assert!(!cancel.response_completion_is_committed());
+    release.send(())?;
+    server.join().expect("server thread")?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn html_cached_response_timing_does_not_invent_network_observations() -> Result<()> {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let url = format!("http://{}/cache", listener.local_addr()?);
+    let cache_dir = std::env::temp_dir().join(format!(
+        "moli-html-timing-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos(),
+    ));
+    let server = thread::spawn(move || -> std::io::Result<()> {
+        let (mut stream, _) = listener.accept()?;
+        read_request(&mut stream)?;
+        stream.write_all(b"HTTP/1.1 200 OK\r\nCache-Control: max-age=600\r\nContent-Length: 4\r\nConnection: close\r\n\r\nbody")?;
+        Ok(())
+    });
+    let mut config = FetchConfig::default();
+    config.set_http_cache_dir(Some(cache_dir.display().to_string()));
+    let (owner, _, pending) = submit_html_request(&config, Request::get(&url)?);
+    pending.into_response().await?.finish().await?;
+    server.join().expect("server thread")?;
+
+    let pending = owner.handle().submit_html_stream(Request::get(&url)?)?;
+    let cancel = pending.cancel_handle.clone();
+    let mut response = pending.into_response().await?;
+    assert!(response.from_cache);
+    let mut text = String::new();
+    while let Some(chunk) = response.next_chunk().await {
+        text.push_str(&chunk);
+    }
+    response.finish().await?;
+    assert_eq!(text, "body");
+    let timing = cancel.response_timing();
+    assert!(timing.request_started_at().is_none());
+    assert!(timing.first_interim_response_started_at().is_none());
+    assert!(!timing.body_bytes_received());
+    assert!(timing.response_started_at().is_some());
+    assert!(timing.response_started_at().unwrap() <= timing.response_end_at().unwrap());
+    assert!(!cancel.cancel_if_response_pending());
+    drop(owner);
+    std::fs::remove_dir_all(cache_dir)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn html_declared_body_completion_precedes_delivery_of_the_last_chunk() -> Result<()> {
+    for (encoding_headers, complete) in [
+        (b"".as_slice(), true),
+        (b"Content-Encoding: gzip\r\n".as_slice(), false),
+        (b"Transfer-Encoding: chunked\r\n".as_slice(), false),
+    ] {
+        let cancel = FetchCancelHandle::new();
+        let (start_tx, _start_rx) = oneshot::channel();
+        let (body_tx, mut body_rx) = mpsc::unbounded_channel();
+        let mut collector = StreamingResponseCollector::new(
+            new_shared_browser_cookie_store(),
+            start_tx,
+            body_tx,
+            cancel.clone(),
+        );
+        collector.begin_request(
+            None,
+            Url::parse("http://example.test/body")?,
+            NetworkCookieRequestContext::top_level_navigation("GET"),
+            None,
+            true,
+            Vec::new(),
+            None,
+        );
+        assert!(collector.header(b"HTTP/1.1 200 OK\r\n"));
+        assert!(collector.header(b"Content-Length: 4\r\n"));
+        if !encoding_headers.is_empty() {
+            assert!(collector.header(encoding_headers));
+        }
+        assert!(collector.header(b"\r\n"));
+        assert_eq!(collector.write(b"bo").unwrap(), 2);
+        assert_eq!(body_rx.try_recv()?.as_str(), "bo");
+        assert!(cancel.response_timing().response_end_at().is_none());
+        assert_eq!(collector.write(b"dy").unwrap(), 2);
+        assert_eq!(body_rx.try_recv()?.as_str(), "dy");
+        // Decoded or chunked lengths cannot be compared with Content-Length.
+        assert_eq!(
+            cancel.response_timing().response_end_at().is_some(),
+            complete
+        );
+        assert_eq!(cancel.cancel_if_response_pending(), !complete);
+    }
+    Ok(())
+}
