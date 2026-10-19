@@ -235,7 +235,7 @@ pub(in crate::worker) fn spawn_worker_fetch_network(
                             }
                             Err(error) => (Err(format!("fetch: {error}")), None),
                         }
-                    } else if !allow_headers_first {
+                    } else if !allow_headers_first || !request_metadata.integrity.is_empty() {
                         // Worker fetch still resolves after the full response, but ordinary
                         // transfers can keep their body in the same chunked/pooled carrier that
                         // CDP Network capture uses instead of forcing a single buffered Response.
@@ -2518,6 +2518,7 @@ pub(in crate::worker) fn worker_response_from_body(
         redirected: false,
         redirect_chain: Vec::new(),
         from_cache: false,
+        cache_state: Default::default(),
         negotiated_http_version: None,
     })
 }
@@ -2893,6 +2894,7 @@ pub(in crate::worker) fn drain_worker_fetch_completion_result(
                         response_headers: response_head.headers.clone(),
                         response_body,
                         response_from_cache: response_head.from_cache,
+                        response_cache_state: response_head.cache_state,
                     })
                 } else {
                     None
@@ -2927,6 +2929,7 @@ pub(in crate::worker) fn drain_worker_fetch_completion_result(
                         response_headers: response_head.headers.clone(),
                         response_body: response_body.clone(),
                         from_cache: response_head.from_cache,
+                        cache_state: response_head.cache_state,
                     };
                     pending.paused_response = Some(PausedWorkerSubresourceResponse {
                         head: response_head,
@@ -2999,6 +3002,40 @@ pub(in crate::worker) fn drain_worker_fetch_completion_result(
                     return;
                 }
             };
+            let response_filter = crate::network_host::network_response_filter(
+                &pending.document_url,
+                &response_head,
+                pending.request_mode,
+            );
+            if !pending.request_metadata.integrity.is_empty() {
+                let body = match &response {
+                    WorkerFetchResponse::Materialized(response) => {
+                        Ok(std::borrow::Cow::Borrowed(response.body_bytes()))
+                    }
+                    WorkerFetchResponse::Streamed { body, .. } => {
+                        body.try_bytes().map_err(|error| {
+                            format!("fetch: failed to read integrity response body: {error}")
+                        })
+                    }
+                };
+                let validation = body.and_then(|bytes| {
+                    crate::network_host::validate_fetch_response_integrity(
+                        &pending.request_metadata.integrity,
+                        &pending.request_method,
+                        response_head.status,
+                        response_filter.is_none_or(|filter| filter.is_readable()),
+                        &bytes,
+                    )
+                });
+                if let Err(message) = validation {
+                    record_worker_fetch_failure(&state.borrow(), &pending, message.clone());
+                    let reason = v8_string(scope, &message)
+                        .map(|message| v8::Exception::type_error(scope, message))
+                        .unwrap_or_else(|| v8::undefined(scope).into());
+                    let _ = resolver.reject(scope, reason);
+                    return;
+                }
+            }
             if opaque_response_blocked {
                 record_worker_fetch_failure(
                     &state.borrow(),

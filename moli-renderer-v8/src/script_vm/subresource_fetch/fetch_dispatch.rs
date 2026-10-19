@@ -10,6 +10,7 @@ impl ScriptVm {
         request_body: Option<String>,
         response_status_text: Option<String>,
         skip_fetch_security_validation: bool,
+        response_filter: Option<AsyncSubresourceFetchResponseFilter>,
         network_error_text: Option<String>,
         result: std::result::Result<crate::protocol_types::NavigationResponse, String>,
     ) -> Result<()> {
@@ -43,6 +44,12 @@ impl ScriptVm {
                         pending.policy_context,
                     )?;
                 }
+                validate_pending_window_fetch_integrity(
+                    &pending,
+                    &request_method,
+                    &response,
+                    response_filter.as_ref(),
+                )?;
                 Ok(response)
             })
         } else {
@@ -434,6 +441,7 @@ impl ScriptVm {
                     request_body,
                     response_status_text,
                     skip_fetch_security_validation,
+                    response_filter,
                     network_error_text,
                     result,
                 )
@@ -550,6 +558,9 @@ impl ScriptVm {
                         Err(violation) => return Err(violation.into_message()),
                     }
                 }
+                validate_pending_window_fetch_integrity(
+                    &pending, &request_method, &response, response_filter.as_ref(),
+                )?;
                 Ok(response)
             });
             trace_async_subresource_stage(
@@ -641,6 +652,15 @@ impl ScriptVm {
                         trace_fields,
                         record_started,
                     );
+                    let fetch_resource_entry = if let PendingSubresourceContinuation::Fetch(fetch) = &pending.continuation {
+                        let head = response.head();
+                        let filter = response_filter.or_else(|| crate::network_host::network_response_filter(
+                            &pending.request_origin, &head, pending.request_mode,
+                        ));
+                        Some(fetch.timing.response(&pending.info.url, &pending.request_origin, &head,
+                            !opaque_response_blocked && filter.is_none_or(|filter| filter.is_readable()),
+                            response.body_bytes().len()))
+                    } else { None };
                     let mut observable_response = response;
                     if matches!(
                         pending.info.resource_type,
@@ -657,6 +677,10 @@ impl ScriptVm {
                         moli_trace::cdp_runtime_trace_enabled().then(Instant::now);
                     match pending.continuation {
                         PendingSubresourceContinuation::Fetch(fetch) => {
+                            if let Some(entry) = fetch_resource_entry {
+                                crate::context_bootstrap::record_resource_performance_entry(scope, entry);
+                            }
+
                             let resolver = fetch
                                 .into_resolver()
                                 .expect("detached keepalive completion is handled before V8 entry");
@@ -854,6 +878,9 @@ impl ScriptVm {
                         moli_trace::cdp_runtime_trace_enabled().then(Instant::now);
                     match pending.continuation {
                         PendingSubresourceContinuation::Fetch(fetch) => {
+                            crate::context_bootstrap::record_resource_performance_entry(
+                                scope, fetch.timing.failure(&pending.info.url),
+                            );
                             let resolver = fetch
                                 .into_resolver()
                                 .expect("detached keepalive failure is handled before V8 entry");

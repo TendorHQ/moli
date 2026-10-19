@@ -312,6 +312,7 @@ fn register_pending_window_fetch_for_test(
         fetch_context,
         v8::Global::new(scope, resolver),
         keepalive,
+        String::new(),
         connect_policy,
         csp_report_context,
         Some(cancel_handle.clone()),
@@ -376,6 +377,7 @@ fn register_pending_window_fetch_for_test(
                             redirected: false,
                             redirect_chain: Vec::new(),
                             from_cache: false,
+                            cache_state: Default::default(),
                             negotiated_http_version: None,
                         },
                         network_request_headers: None,
@@ -475,6 +477,7 @@ fn register_pending_window_fetch_with_connect_policy_for_test(
         fetch_context,
         v8::Global::new(scope, resolver),
         keepalive,
+        String::new(),
         crate::document_runtime::DocumentConnectPolicySnapshot::from_policy_container(&policy),
         csp_report_context,
         Some(cancel_handle.clone()),
@@ -2271,4 +2274,6 @@ mod file_reader_handlers;
 
 mod streams_sync_protocol;
 
+mod fetch_integrity;
+mod fetch_resource_timing;
 mod performance_user_timing;
