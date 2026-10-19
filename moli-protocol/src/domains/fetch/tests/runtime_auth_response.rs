@@ -7,6 +7,7 @@ use crate::automation::{
     DevToolsRequestId, DevToolsSessionId, DevToolsTargetId, FrontendProtocol,
 };
 use crate::testing::drain_scheduler_events_like_scheduler;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 
 fn is_fetch_event_for_request(message: &serde_json::Value, method: &str, request_id: &str) -> bool {
     message["method"] == json!(method)
@@ -208,8 +209,8 @@ async fn runtime_fetch_subresource_intercept_response_pauses_after_response_unti
     ctx.expect_result(
         386,
         json!({
-            "body": "fetch-response-stage",
-            "base64Encoded": false
+            "body": BASE64_STANDARD.encode("fetch-response-stage"),
+            "base64Encoded": true
         }),
         Some("SID-1"),
     );
@@ -870,8 +871,8 @@ async fn runtime_xhr_subresource_intercept_response_pauses_after_response_until_
     ctx.expect_result(
         393,
         json!({
-            "body": "xhr-response-stage",
-            "base64Encoded": false
+            "body": BASE64_STANDARD.encode("xhr-response-stage"),
+            "base64Encoded": true
         }),
         Some("SID-1"),
     );

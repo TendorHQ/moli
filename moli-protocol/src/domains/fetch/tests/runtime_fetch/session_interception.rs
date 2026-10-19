@@ -1,4 +1,5 @@
 use super::*;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn runtime_local_fetch_and_xhr_bypass_request_and_response_interception() {
@@ -584,7 +585,7 @@ async fn attached_session_fetch_response_stage_body_commands_use_session_owner()
     .await;
     ctx.expect_result(
         35_923,
-        json!({ "body": "attached fetch body", "base64Encoded": false }),
+        json!({ "body": BASE64_STANDARD.encode("attached fetch body"), "base64Encoded": true }),
         Some("SID-attached"),
     );
 
@@ -816,7 +817,7 @@ async fn multiple_fetch_sessions_chain_subresource_response_stage_pauses() {
     .await;
     ctx.expect_result(
         35_945,
-        json!({ "body": "multi response body", "base64Encoded": false }),
+        json!({ "body": BASE64_STANDARD.encode("multi response body"), "base64Encoded": true }),
         Some("SID-attached"),
     );
 

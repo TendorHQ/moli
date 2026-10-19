@@ -82,10 +82,9 @@ fn get_response_body_without_transfer_command_output_plan(
 }
 
 fn encode_response_body(bytes: Vec<u8>) -> (String, bool) {
-    match String::from_utf8(bytes) {
-        Ok(body) => (body, false),
-        Err(error) => (BASE64_STANDARD.encode(error.into_bytes()), true),
-    }
+    // Chromium returns interception bytes as Base64 even for text responses.
+    // Clients can pass the body directly back to Fetch.fulfillRequest.
+    (BASE64_STANDARD.encode(bytes), true)
 }
 
 fn response_body_command_output_plan(bytes: Vec<u8>) -> CommandOutputPlan {
@@ -193,14 +192,15 @@ mod tests {
     use super::encode_response_body;
 
     #[test]
-    fn encode_response_body_preserves_utf8_and_base64_encodes_binary() {
+    fn encode_response_body_uses_base64_for_text_binary_and_empty_responses() {
         assert_eq!(
             encode_response_body(b"hello".to_vec()),
-            ("hello".to_owned(), false)
+            ("aGVsbG8=".to_owned(), true)
         );
         assert_eq!(
             encode_response_body(vec![0, 255, b'a']),
             ("AP9h".to_owned(), true)
         );
+        assert_eq!(encode_response_body(Vec::new()), (String::new(), true));
     }
 }

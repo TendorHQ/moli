@@ -1,4 +1,5 @@
 use super::*;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn worker_fetch_request_stage_pauses_until_continue_request_then_resolves_promise() {
@@ -2608,7 +2609,7 @@ fetch('/worker-auth')
     .await;
     ctx.expect_result(
         37_727,
-        json!({ "body": "auth required", "base64Encoded": false }),
+        json!({ "body": BASE64_STANDARD.encode("auth required"), "base64Encoded": true }),
         Some("SID-1"),
     );
 

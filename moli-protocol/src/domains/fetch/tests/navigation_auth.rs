@@ -6,6 +6,7 @@ use crate::automation::{
     DevToolsNetworkInterceptId, DevToolsNetworkInterceptPattern, DevToolsNetworkInterceptPhase,
     DevToolsRequestId, DevToolsSessionId, DevToolsTargetId, FrontendProtocol,
 };
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn continue_with_auth_retries_navigation_with_basic_credentials() {
@@ -1139,7 +1140,7 @@ async fn run_navigation_cdp_fetch_then_bidi_network_auth_required_terminal(
             .await;
             ctx.expect_result(
                 73_105,
-                json!({ "body": "auth required", "base64Encoded": false }),
+                json!({ "body": BASE64_STANDARD.encode("auth required"), "base64Encoded": true }),
                 Some("SID-fetch"),
             );
 

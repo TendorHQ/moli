@@ -1067,8 +1067,8 @@ async fn continue_request_with_intercept_response_pauses_after_response_until_co
     ctx.expect_result(
         323,
         json!({
-            "body": "<!doctype html><html><body><main>response-stage</main></body></html>",
-            "base64Encoded": false
+            "body": BASE64_STANDARD.encode("<!doctype html><html><body><main>response-stage</main></body></html>"),
+            "base64Encoded": true
         }),
         Some("SID-1"),
     );
@@ -1101,6 +1101,108 @@ async fn continue_request_with_intercept_response_pauses_after_response_until_co
     assert_eq!(ctx.take_one()["method"], "Page.loadEventFired");
     assert_eq!(ctx.take_one()["method"], "Page.frameStoppedLoading");
 
+    server.abort();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn preload_navigations_can_round_trip_intercepted_text_through_fulfill_request() {
+    const HTML: &str = "<!doctype html><meta charset=utf-8><body><main></main><p>中文 🦀</p><script>document.querySelector('main').textContent = globalThis.preloadMarker || 'missing';</script>";
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new().route("/page", get(|| async { axum::response::Html(HTML) })),
+        )
+        .await
+        .unwrap();
+    });
+    let url = format!("http://{addr}/page");
+    let mut ctx = TestContext::new();
+    with_loaded_http_document(&mut ctx, &url, "SID-1", "TID-1").await;
+    ctx.enable_page_events_for_test(Some("SID-1"));
+    ctx.sent.clear();
+    for (id, method, params) in [
+        (1, "Fetch.enable", json!({})),
+        (
+            2,
+            "Page.addScriptToEvaluateOnNewDocument",
+            json!({"source": "globalThis.preloadMarker = 'preloaded';"}),
+        ),
+    ] {
+        ctx.process_async(json!({
+            "id": id, "method": method, "sessionId": "SID-1", "params": params
+        }))
+        .await;
+        assert!(take_response_by_id(&mut ctx, id)["error"].is_null());
+    }
+
+    for navigation_id in [10, 20] {
+        ctx.sent.clear();
+        ctx.process_async(json!({
+            "id": navigation_id,
+            "method": "Page.navigate",
+            "sessionId": "SID-1",
+            "params": {"url": format!("{url}?navigation={navigation_id}")}
+        }))
+        .await;
+        let paused = take_main_document_request_pause(&mut ctx).await;
+        let request_id = paused["params"]["requestId"].clone();
+        ctx.process_async(json!({
+            "id": navigation_id + 1,
+            "method": "Fetch.continueRequest",
+            "sessionId": "SID-1",
+            "params": {"requestId": request_id, "interceptResponse": true}
+        }))
+        .await;
+        ctx.expect_result(navigation_id + 1, json!({}), Some("SID-1"));
+        wait_until_scheduler_message(&mut ctx, "response-stage pause", |message| {
+            message["method"] == "Fetch.requestPaused"
+                && message["params"]["responseStatusCode"] == 200
+        })
+        .await;
+        let paused = take_main_document_response_pause(&mut ctx);
+        ctx.process_async(json!({
+            "id": navigation_id + 2,
+            "method": "Fetch.getResponseBody",
+            "sessionId": "SID-1",
+            "params": {"requestId": request_id}
+        }))
+        .await;
+        let body = take_response_by_id(&mut ctx, navigation_id + 2);
+        assert_eq!(body["result"]["base64Encoded"], true);
+        assert_eq!(
+            BASE64_STANDARD
+                .decode(body["result"]["body"].as_str().unwrap())
+                .unwrap(),
+            HTML.as_bytes()
+        );
+
+        // Patchright's init-script interception forwards this body as Base64.
+        ctx.process_async(json!({
+            "id": navigation_id + 3,
+            "method": "Fetch.fulfillRequest",
+            "sessionId": "SID-1",
+            "params": {
+                "requestId": request_id,
+                "responseCode": 200,
+                "responseHeaders": paused["params"]["responseHeaders"],
+                "body": body["result"]["body"]
+            }
+        }))
+        .await;
+        ctx.expect_result(navigation_id + 3, json!({}), Some("SID-1"));
+        assert!(take_response_by_id(&mut ctx, navigation_id)["error"].is_null());
+        wait_until_frame_stopped_loading(&mut ctx, "TID-1").await;
+        assert!(
+            ctx.sent
+                .iter()
+                .any(|message| { message["method"] == "Page.domContentEventFired" })
+        );
+        let html = loaded_page_html_for_test(&mut ctx).await;
+        assert!(html.contains("<main>preloaded</main>"), "{html}");
+        assert!(html.contains("中文 🦀"), "{html}");
+    }
     server.abort();
 }
 
