@@ -481,6 +481,11 @@ jobs:
           uv run --project moli-cdp-smoke --no-sync playwright install --with-deps chromium
       - name: Run full CDP smoke on Chromium
         run: |
+          # Page.crash deliberately kills a renderer. Host core dumps can delay
+          # Target.targetCrashed and keep the browser's inherited log pipes open.
+          ulimit -c
+          cat /proc/sys/kernel/core_pattern
+          ulimit -c 0
           uv run --project moli-cdp-smoke --no-sync moli-cdp-smoke \
             --browser chromium --jobs 4 --output-dir target/smoke/cdp-chromium-ci
       - name: Upload Chromium diagnostics
