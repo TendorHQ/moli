@@ -129,7 +129,9 @@ pub(crate) fn log_request_completion(
 pub(crate) struct ResponseCollector {
     body: Vec<u8>,
     headers: Vec<(String, Vec<u8>)>,
+    status: u16,
     status_text: Option<String>,
+    header_terminated: bool,
     max_response_size: Option<usize>,
     response_too_large: bool,
     cancel_handle: Option<FetchCancelHandle>,
@@ -157,7 +159,9 @@ impl ResponseCollector {
         }
         self.body.clear();
         self.headers.clear();
+        self.status = 0;
         self.status_text = None;
+        self.header_terminated = false;
         self.max_response_size = max_response_size;
         self.response_too_large = false;
     }
@@ -172,6 +176,10 @@ impl ResponseCollector {
 
     pub(crate) fn body(&self) -> &[u8] {
         &self.body
+    }
+
+    pub(crate) fn header_terminated(&self) -> bool {
+        self.header_terminated
     }
 }
 
@@ -1070,12 +1078,30 @@ impl Handler for ResponseCollector {
         let line = line.trim_end_matches(['\r', '\n']);
 
         if line.is_empty() {
+            if is_interim_response_status(self.status) {
+                return true;
+            }
+            let is_redirect = matches!(self.status, 301 | 302 | 303 | 307 | 308)
+                && self.headers.iter().any(|(name, _)| name == "location");
+            if is_redirect {
+                // Redirect owners consume only the head. Leave other statuses
+                // to libcurl: even a bodyless 2xx can be an auth probe before
+                // libcurl resends the actual upload.
+                self.header_terminated = true;
+                return false;
+            }
+            self.response_too_large = self.max_response_size.is_some_and(|limit| {
+                identity_encoded_content_length(&self.headers).is_some_and(|length| length > limit)
+            });
             return !self.response_too_large;
         }
 
         if let Some(parsed) = parse_http_response_status_line(data) {
             self.headers.clear();
+            self.status = parsed.status;
             self.status_text = Some(parsed.status_text);
+            self.header_terminated = false;
+            self.response_too_large = false;
             self.body.clear();
             if let Some(progress) = &self.response_progress {
                 if is_interim_response_status(parsed.status) {
@@ -1091,20 +1117,6 @@ impl Handler for ResponseCollector {
             return true;
         };
         name.make_ascii_lowercase();
-
-        if name == "content-length"
-            && self
-                .max_response_size
-                .zip(
-                    std::str::from_utf8(&value)
-                        .ok()
-                        .and_then(|value| value.parse::<usize>().ok()),
-                )
-                .is_some_and(|(limit, content_length)| content_length > limit)
-        {
-            self.response_too_large = true;
-            return false;
-        }
 
         self.headers.push((name, value));
         true
