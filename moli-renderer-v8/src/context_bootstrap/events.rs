@@ -317,7 +317,7 @@ pub(super) use base::{
     event_target_getter_function, event_type_getter_function, set_event_dispatch_fields,
     set_event_initialized,
 };
-pub(in crate::context_bootstrap) use init::{EventInit, parse_event_init};
+pub(in crate::context_bootstrap) use init::EventInit;
 pub(super) use kind::EventSubclassKind;
 pub(super) use methods::{
     event_cancel_bubble_getter_function, event_cancel_bubble_setter_function,
