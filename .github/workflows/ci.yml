@@ -457,7 +457,6 @@ jobs:
     needs: [resolve-refs]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    container: rust:1.96.1-bookworm
     steps:
       - uses: actions/checkout@v4
         with:
@@ -481,10 +480,9 @@ jobs:
           uv run --project moli-cdp-smoke --no-sync playwright install --with-deps chromium
       - name: Run full CDP smoke on Chromium
         run: |
-          # Page.crash deliberately kills a renderer. Host core dumps can delay
-          # Target.targetCrashed and keep the browser's inherited log pipes open.
-          ulimit -c
-          cat /proc/sys/kernel/core_pattern
+          # Piped core handlers ignore ulimit, and can block Page.crash teardown.
+          # This hosted VM belongs to this job; use file cores so the limit applies.
+          sudo sysctl -w kernel.core_pattern=core
           ulimit -c 0
           uv run --project moli-cdp-smoke --no-sync moli-cdp-smoke \
             --browser chromium --jobs 4 --output-dir target/smoke/cdp-chromium-ci
