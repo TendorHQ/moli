@@ -22,6 +22,40 @@ from moli_cdp_smoke.supervisor import (
 
 
 class SupervisorWorkerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_scenario_is_reported_when_worker_has_no_top_level_error(self) -> None:
+        job = WorkerJob(group=GROUPS_BY_NAME["browser-semantics"], attempt=1, repeat=1)
+        for worker_error in (None, "worker traceback takes precedence"):
+            with self.subTest(worker_error=worker_error), tempfile.TemporaryDirectory() as temporary:
+                payload = {
+                    "ok": False,
+                    "group": "browser-semantics",
+                    "results": [{
+                        "name": "cdp_contract_event_source_runtime_and_network",
+                        "ok": False,
+                        "errorType": "SmokeError",
+                        "error": "timed out waiting for EventSource Network terminal",
+                    }],
+                }
+                if worker_error is not None:
+                    payload["error"] = worker_error
+
+                def fake_argv(_: WorkerJob, result_path: Path) -> list[str]:
+                    return [sys.executable, "-c", (
+                        "from pathlib import Path; import sys; "
+                        f"Path(sys.argv[1]).write_text({json.dumps(payload)!r}); "
+                        "print('later scenario passed'); sys.exit(1)"
+                    ), str(result_path)]
+
+                with patch("moli_cdp_smoke.supervisor._worker_argv", fake_argv):
+                    outcome = await _run_worker_job(job, Path(temporary), 5)
+                self.assertEqual(outcome.status, "failed")
+                if worker_error is not None:
+                    self.assertEqual(outcome.error, worker_error)
+                else:
+                    self.assertIn("cdp_contract_event_source_runtime_and_network", outcome.error)
+                    self.assertIn("SmokeError", outcome.error)
+                    self.assertIn("timed out waiting for EventSource", outcome.error)
+
     async def test_worker_result_is_read_from_its_isolated_file(self) -> None:
         group = GROUPS_BY_NAME["protocol"]
         job = WorkerJob(group=group, attempt=1, repeat=1)

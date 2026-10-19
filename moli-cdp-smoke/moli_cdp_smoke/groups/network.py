@@ -321,37 +321,42 @@ async def _verify_fetch_network_events(state: SmokeState) -> None:
     observed_fetch = await page.evaluate("async () => await fetch('/api-continue').then(response => response.json())")
     assert_equal(observed_fetch.get("routeHeader"), None, "unrouted fetch should reach fixture server")
 
-    def saw_fetch_events() -> bool:
-        events = subresource_events[fetch_network_start:]
-        request = _find_request(events, "Fetch", f"{fixture}/api-continue")
-        request_id = request and request["params"].get("requestId")
-        if not request_id:
-            return False
-        matching_indices = {
-            method: next(
-                (
-                    index
-                    for index, event in enumerate(events)
-                    if event["method"] == method and event["params"].get("requestId") == request_id
-                ),
-                None,
-            )
-            for method in ("Network.responseReceived", "Network.dataReceived", "Network.loadingFinished")
-        }
-        response_index = matching_indices["Network.responseReceived"]
-        data_index = matching_indices["Network.dataReceived"]
-        finished_index = matching_indices["Network.loadingFinished"]
-        if response_index is None or data_index is None or finished_index is None:
-            return False
-        data_params = events[data_index]["params"]
-        return bool(
-            response_index < data_index < finished_index
-            and data_params.get("dataLength", 0) > 0
-            and data_params.get("encodedDataLength", 0) > 0
-        )
+    await wait_until(
+        lambda: _completed_request_id(
+            subresource_events[fetch_network_start:], "Fetch", f"{fixture}/api-continue"
+        ) is not None,
+        "Fetch Network events",
+    )
+    events = subresource_events[fetch_network_start:]
+    request_id = _completed_request_id(events, "Fetch", f"{fixture}/api-continue")
+    if request_id is None:
+        raise SmokeError("completed Fetch request disappeared from the event trace")
+    state.record("fetch_network_events", {
+        "requestId": request_id,
+        **_fetch_network_event_summary(events, request_id),
+    })
 
-    await wait_until(saw_fetch_events, "Fetch Network events")
-    state.record("fetch_network_events")
+
+def _fetch_network_event_summary(events: list[dict[str, Any]], request_id: str) -> dict[str, Any]:
+    matching = [event for event in events if event["params"].get("requestId") == request_id]
+    methods = [event["method"] for event in matching]
+    assert_equal(methods[:2], ["Network.requestWillBeSent", "Network.responseReceived"], "Fetch Network start order")
+    assert_equal(methods[-1:], ["Network.loadingFinished"], "Fetch Network terminal")
+    data_events = matching[2:-1]
+    assert_equal({event["method"] for event in data_events}, {"Network.dataReceived"}, "Fetch Network data order")
+    totals = {"dataLength": 0, "encodedDataLength": 0}
+    for event in data_events:
+        for key in totals:
+            value = event["params"].get(key)
+            if type(value) is not int or value < 0:
+                raise SmokeError(f"invalid Fetch Network {key}: {event}")
+            totals[key] += value
+    # Chromium can deliver decoded bytes first, then flush encoded byte counts
+    # in a later dataReceived event whose dataLength is zero. Neither counter
+    # has to be positive in the first chunk; the completed nonempty body does.
+    if any(value <= 0 for value in totals.values()):
+        raise SmokeError(f"nonempty Fetch Network body must report positive byte totals: {matching}")
+    return {"eventMethods": methods, **totals}
 
 
 async def _verify_xhr_network_events(state: SmokeState) -> None:

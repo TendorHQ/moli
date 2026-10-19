@@ -1358,7 +1358,7 @@ async def _event_source_runtime_and_network(state: SmokeState) -> dict[str, Any]
     async with _isolated_page(state) as (_context, page, cdp):
         events = attach_cdp_event_collector(
             cdp,
-            ["Network.requestWillBeSent", "Network.responseReceived", "Network.loadingFinished"],
+            ["Network.requestWillBeSent", "Network.responseReceived", "Network.loadingFinished", "Network.loadingFailed"],
         )
         await cdp.send("Network.enable")
         await page.goto(f"{state.fixture}/plain", wait_until="load", timeout=10_000)
@@ -1402,32 +1402,38 @@ async def _event_source_runtime_and_network(state: SmokeState) -> dict[str, Any]
         request_id = response_event["params"]["requestId"]
         await wait_until(
             lambda: any(
-                event["method"] == "Network.loadingFinished"
+                event["method"] in ("Network.loadingFinished", "Network.loadingFailed")
                 and event["params"].get("requestId") == request_id
                 for event in events
             ),
-            "EventSource Network.loadingFinished",
-        )
-        event_methods = [
-            event["method"]
-            for event in events
-            if event["params"].get("requestId") == request_id
-        ]
-        assert_equal(
-            event_methods,
-            [
-                "Network.requestWillBeSent",
-                "Network.responseReceived",
-                "Network.loadingFinished",
-            ],
-            "EventSource Network event order",
+            "EventSource Network terminal after close()",
         )
         return {
             "runtime": runtime_value,
             "requestId": request_id,
             "resourceType": response_event["params"]["type"],
-            "eventMethods": event_methods,
+            **_event_source_network_summary(events, request_id),
         }
+
+
+def _event_source_network_summary(events: list[dict[str, Any]], request_id: str) -> dict[str, Any]:
+    matching = [event for event in events if event["params"].get("requestId") == request_id]
+    methods = [event["method"] for event in matching]
+    terminal = matching[-1] if matching else {}
+    terminal_method = terminal.get("method")
+    if terminal_method not in ("Network.loadingFinished", "Network.loadingFailed"):
+        raise SmokeError(f"EventSource close() has no Network terminal: {matching}")
+    assert_equal(
+        methods,
+        ["Network.requestWillBeSent", "Network.responseReceived", terminal_method],
+        "EventSource Network event order",
+    )
+    # close() races the finite fixture's EOF. If EOF has not committed yet,
+    # Chromium reports the intentional cancellation instead of successful EOF.
+    if terminal_method == "Network.loadingFailed":
+        assert_equal(terminal["params"].get("errorText"), "net::ERR_ABORTED", "EventSource close() error")
+        assert_equal(terminal["params"].get("canceled"), True, "EventSource close() cancellation")
+    return {"eventMethods": methods, "terminal": terminal}
 
 
 async def _http_cache_event_and_reuse(state: SmokeState) -> dict[str, Any]:

@@ -81,6 +81,22 @@ The `network` and `multi-context` groups require the encoded Fetch body and flag
 then independently verify the original page-visible text after continuation.
 Their Network body and `IO.read` stream assertions retain their own contracts.
 
+The Fetch byte-counter and EventSource-close contracts were probed on 2026-10-20
+with Playwright 1.58.0's pinned Chrome for Testing 145.0.7632.6 and local HTTP
+fixtures. Of 150 ordinary 45-byte JSON fetches, one reported `dataReceived`
+counters `(45, 0)` followed by `(0, 45)`; 146 of 150 gzip responses split their
+decoded and encoded counters similarly. The `network` group therefore checks
+the totals over all data events, their nonnegative lengths, and their order
+between the response and successful terminal. A finite SSE response completed
+with `loadingFinished`, while a response with a withheld trailing chunk ended
+with `loadingFailed`, `net::ERR_ABORTED`, and `canceled: true` when the message
+handler called `close()`. The EventSource scenario accepts those two outcomes
+and still rejects other errors, wrong order, and duplicate terminals. The same
+probe against the Moli release produced both SSE terminals, with its Fetch byte
+counters delivered together. Run
+`--browser chromium --group network --group browser-semantics --repeat 20 --jobs 4`
+to exercise both groups with fresh browser processes.
+
 The default `cdp-ordering` group locks down Renderer native and Inspector wire
 publication order. It pipelines Page trees/layout, DOMSnapshot, DOM queries and
 objects, CSS, AX, and a native backend error before `Runtime.enable`; stylesheet

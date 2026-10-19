@@ -307,7 +307,9 @@ async def _run_worker_job(
     else:
         status = "failed"
         worker_error = payload.get("error")
-        error = str(worker_error) if worker_error else f"worker exited with {exit_code}"
+        error = str(worker_error) if worker_error else (
+            _coverage_error(job, payload) or f"worker exited with {exit_code}"
+        )
 
     outcome = WorkerOutcome(
         job=job,
