@@ -25,6 +25,16 @@ observed, but it does not replace the executable probe when one can be run. If
 Chromium cannot be tested, document that limitation explicitly instead of
 presenting an inferred expectation as verified behavior.
 
+The `Fetch.getResponseBody` text encoding was calibrated on 2026-10-19 against
+Debian `/usr/bin/chromium` 145.0.7632.116. A fresh page enabled `Network` and
+`Fetch` with `requestStage: "Response"`, navigated to a local UTF-8 HTML fixture,
+and read its paused body before continuing the response. Chromium returned
+Base64 with `base64Encoded: true`; reading the completed request through
+`Network.getResponseBody` returned the original text with `base64Encoded: false`.
+The `network` and `multi-context` groups require the encoded Fetch body and flag,
+then independently verify the original page-visible text after continuation.
+Their Network body and `IO.read` stream assertions retain their own contracts.
+
 The default `cdp-ordering` group locks down Renderer native and Inspector wire
 publication order. It pipelines Page trees/layout, DOMSnapshot, DOM queries and
 objects, CSS, AX, and a native backend error before `Runtime.enable`; stylesheet

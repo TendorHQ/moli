@@ -828,8 +828,12 @@ async def _verify_response_stage_xhr_get_response_body(state: SmokeState) -> Non
             raise SmokeError(f"missing response-stage XHR networkId: {paused}")
 
         body = await state.cdp.send("Fetch.getResponseBody", {"requestId": request_id})
-        assert_equal(body.get("body"), "response-stage body", "XHR response-stage Fetch.getResponseBody body")
-        assert_equal(body.get("base64Encoded"), False, "XHR response-stage Fetch.getResponseBody encoding")
+        assert_equal(
+            body.get("body"),
+            base64.b64encode(b"response-stage body").decode("ascii"),
+            "XHR response-stage Fetch.getResponseBody body",
+        )
+        assert_equal(body.get("base64Encoded"), True, "XHR response-stage Fetch.getResponseBody encoding")
 
         await state.cdp.send("Fetch.continueResponse", {"requestId": request_id})
         await wait_until(
@@ -1613,8 +1617,12 @@ async def _verify_fetch_auth_response_stage(state: SmokeState) -> None:
         )
 
         body_result = await state.cdp.send("Fetch.getResponseBody", {"requestId": request_id})
-        assert_equal(body_result.get("base64Encoded"), False, "Fetch auth response-stage body encoding")
-        assert_equal(body_result.get("body"), "authenticated fetch", "Fetch auth response-stage paused body")
+        assert_equal(body_result.get("base64Encoded"), True, "Fetch auth response-stage body encoding")
+        assert_equal(
+            body_result.get("body"),
+            base64.b64encode(b"authenticated fetch").decode("ascii"),
+            "Fetch auth response-stage paused body",
+        )
 
         await state.cdp.send("Fetch.continueResponse", {"requestId": request_id})
         await wait_until(

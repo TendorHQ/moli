@@ -644,10 +644,10 @@ async def run_multi_context_popup_response_stage_body_owner_state_smoke(
 
         body_a = await _send_cdp(cdp_a, "Fetch.getResponseBody", {"requestId": request_id_a})
         body_b = await _send_cdp(cdp_b, "Fetch.getResponseBody", {"requestId": request_id_b})
-        assert_equal(body_a.get("body"), "response-stage body", "context A popup Fetch.getResponseBody")
-        assert_equal(body_b.get("body"), "response-stage body", "context B popup Fetch.getResponseBody")
-        assert_equal(body_a.get("base64Encoded"), False, "context A popup Fetch.getResponseBody encoding")
-        assert_equal(body_b.get("base64Encoded"), False, "context B popup Fetch.getResponseBody encoding")
+        assert_equal(body_a.get("body"), RESPONSE_STAGE_BODY_BASE64, "context A popup Fetch.getResponseBody")
+        assert_equal(body_b.get("body"), RESPONSE_STAGE_BODY_BASE64, "context B popup Fetch.getResponseBody")
+        assert_equal(body_a.get("base64Encoded"), True, "context A popup Fetch.getResponseBody encoding")
+        assert_equal(body_b.get("base64Encoded"), True, "context B popup Fetch.getResponseBody encoding")
 
         if fetch_a.done() or fetch_b.done():
             raise SmokeError("popup response-stage fetch completed before continueResponse")
