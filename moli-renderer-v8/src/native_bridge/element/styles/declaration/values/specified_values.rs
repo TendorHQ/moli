@@ -1,10 +1,6 @@
 use super::*;
 
 pub(crate) fn css_animation_start_applies(runtime: &JsContextHost, handle: DomHandle) -> bool {
-    // This is a yes/no predicate for queuing animationstart, not a computed-style
-    // value read. Resolve active animation names once and scan keyframes for the
-    // small property subset Moli models instead of rewalking stylesheets once
-    // per supported property.
     if !runtime
         .dom_host()
         .node(handle)
@@ -13,27 +9,35 @@ pub(crate) fn css_animation_start_applies(runtime: &JsContextHost, handle: DomHa
         return false;
     }
 
-    let read = ComputedStyleRead::new(runtime, handle);
-    let resolution = read.resolution_context();
-    let names = active_css_animation_names_with_resolution(runtime, handle, resolution);
-    if names.is_empty() {
-        return false;
-    }
+    ComputedStyleRead::new(runtime, handle).css_animation_start_applies()
+}
 
-    let Some(document) = stylesheet_source_document_for_handle(runtime, handle) else {
-        return false;
-    };
-    for source in effective_raw_stylesheet_sources(
-        runtime,
-        document,
-        false,
-        resolution.computation.viewport(),
-    ) {
-        if keyframe_has_supported_animation_values(&source.serialized_css_text(), &names) {
-            return true;
+impl ComputedStyleRead<'_> {
+    pub(in crate::native_bridge::element) fn css_animation_start_applies(&self) -> bool {
+        let resolution = self.resolution_context();
+        let names =
+            active_css_animation_names_with_resolution(self.runtime, self.handle, resolution);
+        if names.is_empty() {
+            return false;
         }
+
+        let Some(document) = stylesheet_source_document_for_handle(self.runtime, self.handle)
+        else {
+            return false;
+        };
+        for source in effective_raw_stylesheet_sources(
+            self.runtime,
+            document,
+            false,
+            resolution.computation.viewport(),
+        ) {
+            let rules = source_keyframe_rule_snapshots(&source, &names);
+            if keyframe_rule_snapshots_have_supported_animation_values(&rules, &names, 0) {
+                return true;
+            }
+        }
+        false
     }
-    false
 }
 
 pub(super) fn active_css_animation_midpoint_px_with_resolution(
@@ -144,9 +148,8 @@ fn active_css_animation_property_values_with_resolution(
         false,
         resolution.computation.viewport(),
     ) {
-        if let Some(values) =
-            keyframe_property_values(&source.serialized_css_text(), &names, property)
-        {
+        let rules = source_keyframe_rule_snapshots(&source, &names);
+        if let Some(values) = keyframe_rule_snapshots_property_values(&rules, &names, property, 0) {
             return Some(values);
         }
     }
@@ -227,6 +230,68 @@ fn ident_is_animation_shorthand_keyword(value: &str) -> bool {
     )
 }
 
+/// Installed stylesheets already own a parsed rule tree. Project only matching
+/// keyframes: serializing and reparsing the complete stylesheet for every
+/// animated element can block unrelated script and network tasks for many
+/// seconds on pages with loading skeletons (issue #1698).
+fn source_keyframe_rule_snapshots(
+    source: &StyloStylesheetSource,
+    animation_names: &[String],
+) -> Vec<moli_css_parse::CssRuleSnapshot> {
+    let Some(stylesheet) = source.parsed_stylesheet() else {
+        return moli_css_parse::parse_stylesheet_rule_snapshots_with_stylo(
+            &source.serialized_css_text(),
+        );
+    };
+    let guard = stylesheet.shared_lock.read();
+    let contents = stylesheet.contents.read_with(&guard);
+    let mut snapshots = Vec::new();
+    collect_native_keyframe_rule_snapshots(
+        &contents.rules.read_with(&guard).0,
+        &guard,
+        animation_names,
+        0,
+        &mut snapshots,
+    );
+    snapshots
+}
+
+fn collect_native_keyframe_rule_snapshots(
+    rules: &[style::stylesheets::CssRule],
+    guard: &style::shared_lock::SharedRwLockReadGuard<'_>,
+    animation_names: &[String],
+    depth: usize,
+    snapshots: &mut Vec<moli_css_parse::CssRuleSnapshot>,
+) {
+    if depth > KEYFRAME_NESTING_DEPTH_LIMIT {
+        return;
+    }
+    for rule in rules {
+        match rule {
+            style::stylesheets::CssRule::Keyframes(keyframes)
+                if animation_names.iter().any(|name| {
+                    name.eq_ignore_ascii_case(keyframes.read_with(guard).name.as_atom())
+                }) =>
+            {
+                snapshots.push(moli_css_parse::css_rule_snapshot_from_native_with_stylo(
+                    rule, guard,
+                ));
+            }
+            style::stylesheets::CssRule::Media(_) | style::stylesheets::CssRule::Supports(_) => {
+                collect_native_keyframe_rule_snapshots(
+                    rule.children(guard),
+                    guard,
+                    animation_names,
+                    depth + 1,
+                    snapshots,
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+#[cfg(test)]
 pub(super) fn keyframe_property_values(
     css_text: &str,
     animation_names: &[String],
@@ -238,6 +303,7 @@ pub(super) fn keyframe_property_values(
 
 pub(super) const KEYFRAME_NESTING_DEPTH_LIMIT: usize = 32;
 
+#[cfg(test)]
 pub(super) fn keyframe_has_supported_animation_values(
     css_text: &str,
     animation_names: &[String],
