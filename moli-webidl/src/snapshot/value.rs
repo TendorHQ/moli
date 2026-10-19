@@ -77,6 +77,7 @@ wrapper_snapshot!(
     crate::UnsignedShort,
     crate::ClampedUnsignedShort,
     crate::LongLong,
+    crate::ClampedLongLong,
     crate::UnsignedLongLong,
     crate::EnforceRangeLongLong,
     crate::DomString,

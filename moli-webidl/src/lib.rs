@@ -121,11 +121,12 @@ pub mod __private {
 }
 pub use traits::{ParseOutcome, WebIdlArguments, WebIdlConverter, WebIdlDictionary, WebIdlEnum};
 pub use types::{
-    Boolean, BufferSource, ByteString, ClampedUnsignedShort, Dictionary, DomString, DomString16,
-    Double, EnforceRangeLong, EnforceRangeUnsignedLong, EnforceRangeUnsignedLongLong, EnumValue,
-    EventListenerOptions, InterfaceObject, InterfaceOptions, Long, LongLong, Octet, Record,
-    Sequence, Short, StringOptions, UnrestrictedDouble, UnrestrictedFloat, UnsignedLong,
-    UnsignedLongLong, UnsignedShort, UsvString,
+    Boolean, BufferSource, ByteString, ClampedLongLong, ClampedUnsignedShort, Dictionary,
+    DomString, DomString16, Double, EnforceRangeLong, EnforceRangeUnsignedLong,
+    EnforceRangeUnsignedLongLong, EnumValue, EventListenerOptions, InterfaceObject,
+    InterfaceOptions, Long, LongLong, Octet, Record, Sequence, Short, StringOptions,
+    UnrestrictedDouble, UnrestrictedFloat, UnsignedLong, UnsignedLongLong, UnsignedShort,
+    UsvString,
 };
 
 /// Restricted WebIDL float represented as a finite binary32 value.
