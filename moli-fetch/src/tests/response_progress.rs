@@ -44,8 +44,9 @@ async fn buffered_auth_finishes_null_body_probe_before_resending_upload() -> Res
 }
 
 #[tokio::test]
-async fn buffered_auth_redirects_retire_body_at_headers() -> Result<()> {
-    for use_callback in [false, true] {
+async fn redirect_transports_retire_body_at_headers() -> Result<()> {
+    for (authenticate, use_callback) in [(false, false), (false, true), (true, false), (true, true)]
+    {
         for handling in [
             RequestRedirectHandling::Follow,
             RequestRedirectHandling::FollowByCaller,
@@ -55,31 +56,34 @@ async fn buffered_auth_redirects_retire_body_at_headers() -> Result<()> {
             let listener = TcpListener::bind("127.0.0.1:0").await?;
             let url = format!("http://{}/start", listener.local_addr()?);
             let server = tokio::spawn(async move {
-                let (mut challenge, _) = listener.accept().await?;
-                assert!(
-                    read_request_head(&mut challenge)
-                        .await?
-                        .starts_with("GET /start ")
-                );
-                challenge
-                    .write_all(
-                        concat!(
-                            "HTTP/1.1 401 Unauthorized\r\n",
-                            "WWW-Authenticate: Digest realm=\"test\", nonce=\"nonce\", qop=\"auth\"\r\n",
-                            "Content-Length: 0\r\n",
-                            "Connection: close\r\n\r\n",
+                if authenticate {
+                    let (mut challenge, _) = listener.accept().await?;
+                    assert!(
+                        read_request_head(&mut challenge)
+                            .await?
+                            .starts_with("GET /start ")
+                    );
+                    challenge
+                        .write_all(
+                            concat!(
+                                "HTTP/1.1 401 Unauthorized\r\n",
+                                "WWW-Authenticate: Digest realm=\"test\", nonce=\"nonce\", qop=\"auth\"\r\n",
+                                "Content-Length: 0\r\n",
+                                "Connection: close\r\n\r\n",
+                            )
+                            .as_bytes(),
                         )
-                        .as_bytes(),
-                    )
-                    .await?;
-                drop(challenge);
+                        .await?;
+                    drop(challenge);
+                }
                 let (mut redirect, _) = listener.accept().await?;
                 let authenticated = read_request_head(&mut redirect).await?;
                 assert!(authenticated.starts_with("GET /start "));
-                assert!(
+                assert_eq!(
                     authenticated
                         .to_ascii_lowercase()
-                        .contains("authorization: digest ")
+                        .contains("authorization: digest "),
+                    authenticate
                 );
                 redirect
                     .write_all(
@@ -113,14 +117,15 @@ async fn buffered_auth_redirects_retire_body_at_headers() -> Result<()> {
             let client = FetchClient::new(&config, new_shared_browser_cookie_store());
             let parent = FetchCancelHandle::new();
             let child = parent.child_for_subrequest();
-            let request = Request::get(&url)?
-                .with_redirect_handling(handling)
-                .with_auth(RequestAuth {
+            let mut request = Request::get(&url)?.with_redirect_handling(handling);
+            if authenticate {
+                request = request.with_auth(RequestAuth {
                     target: RequestAuthTarget::Server,
                     scheme: RequestAuthScheme::Digest,
                     username: "user".to_owned(),
                     password: "pass".to_owned(),
                 });
+            }
             let response = tokio::time::timeout(Duration::from_secs(5), async {
                 if use_callback {
                     let (tx, rx) = oneshot::channel();
@@ -134,7 +139,10 @@ async fn buffered_auth_redirects_retire_body_at_headers() -> Result<()> {
                     client.fetch_with_cancel(request, child.clone()).await
                 }
             })
-            .await??;
+            .await?
+            .with_context(|| {
+                format!("{handling:?}, auth={authenticate}, callback={use_callback}")
+            })?;
             parent.adopt_response_progress(&child);
             if handling == RequestRedirectHandling::Follow {
                 assert_eq!(response.status, 200);
