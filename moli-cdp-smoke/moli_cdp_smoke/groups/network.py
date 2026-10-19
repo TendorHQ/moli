@@ -7,7 +7,8 @@ from typing import Any, Awaitable
 
 from . import SmokeState
 from ..assertions import SmokeError, assert_equal, wait_until
-from ..helpers import attach_cdp_event_collector, evaluate_xhr
+from ..config import is_moli_browser
+from ..helpers import isolated_network_page, read_io_to_eof, attach_cdp_event_collector, evaluate_xhr
 
 
 BODY_TAKEN_CONTINUE_RESPONSE_ERROR = "Unable to continue request as is after body is taken"
@@ -144,9 +145,9 @@ async def run_page_network_group(state: SmokeState) -> None:
     await _verify_response_stage_fetch_body_stream(state)
     await _verify_response_stage_fetch_binary_body(state)
     await _verify_response_stage_fetch_binary_body_stream(state)
-    await _verify_fetch_auth_challenge(state)
-    await _verify_fetch_auth_cancel(state)
-    await _verify_fetch_auth_response_stage(state)
+    for scenario in [_verify_fetch_auth_challenge, _verify_fetch_auth_cancel, _verify_fetch_auth_response_stage]:
+        async with isolated_network_page(state) as isolated:
+            await scenario(isolated)
     await _verify_redirect_chain_network_events(state)
     await _verify_parser_script_network_events(state)
     await _verify_parser_stylesheet_network_events(state)
@@ -927,32 +928,36 @@ async def _verify_response_stage_fetch_body_stream(state: SmokeState) -> None:
         stream_handle = stream.get("stream")
         if not isinstance(stream_handle, str) or not stream_handle:
             raise SmokeError(f"missing Fetch.takeResponseBodyAsStream handle: {stream}")
-        offset_chunk = await state.cdp.send(
-            "IO.read", {"handle": stream_handle, "offset": 9, "size": 5}
-        )
-        assert_equal(
-            offset_chunk.get("base64Encoded"),
-            False,
-            "Fetch response-stage stream offset chunk encoding",
-        )
-        assert_equal(offset_chunk.get("data"), "stage", "Fetch response-stage stream offset chunk")
-        assert_equal(offset_chunk.get("eof"), False, "Fetch response-stage stream offset chunk eof")
         first_chunk = await state.cdp.send(
-            "IO.read", {"handle": stream_handle, "offset": 0, "size": 8}
+            "IO.read", {"handle": stream_handle, "size": 8}
         )
         assert_equal(first_chunk.get("base64Encoded"), False, "Fetch response-stage stream first chunk encoding")
         assert_equal(first_chunk.get("data"), "response", "Fetch response-stage stream first chunk")
         assert_equal(first_chunk.get("eof"), False, "Fetch response-stage stream first chunk eof")
-        tail_chunk = await state.cdp.send("IO.read", {"handle": stream_handle})
+        if is_moli_browser():
+            offset_chunk = await state.cdp.send(
+                "IO.read", {"handle": stream_handle, "offset": 9, "size": 5}
+            )
+            assert_equal(
+                offset_chunk.get("base64Encoded"),
+                False,
+                "Fetch response-stage stream offset chunk encoding",
+            )
+            assert_equal(offset_chunk.get("data"), "stage", "Fetch response-stage stream offset chunk")
+            assert_equal(offset_chunk.get("eof"), False, "Fetch response-stage stream offset chunk eof")
+            reset = await state.cdp.send("IO.read", {"handle": stream_handle, "offset": 0, "size": 8})
+            assert_equal(reset, first_chunk, "Moli buffered stream supports seeking back to the first chunk")
+        tail_chunk = await read_io_to_eof(state.cdp, stream_handle)
         assert_equal(tail_chunk.get("base64Encoded"), False, "Fetch response-stage stream tail encoding")
         assert_equal(tail_chunk.get("data"), "-stage body", "Fetch response-stage stream tail chunk")
         assert_equal(tail_chunk.get("eof"), True, "Fetch response-stage stream tail eof")
 
-        await _expect_cdp_error(
-            state.cdp.send("Fetch.continueResponse", {"requestId": request_id}),
-            BODY_TAKEN_CONTINUE_RESPONSE_ERROR,
-            "Fetch response-stage stream continueResponse after body taken",
-        )
+        if is_moli_browser():
+            await _expect_cdp_error(
+                state.cdp.send("Fetch.continueResponse", {"requestId": request_id}),
+                BODY_TAKEN_CONTINUE_RESPONSE_ERROR,
+                "Fetch response-stage stream continueResponse after body taken",
+            )
         await state.cdp.send(
             "Fetch.fulfillRequest",
             {
@@ -979,7 +984,7 @@ async def _verify_response_stage_fetch_body_stream(state: SmokeState) -> None:
         await state.cdp.send("IO.close", {"handle": stream_handle})
         await _expect_cdp_error(
             state.cdp.send("IO.read", {"handle": stream_handle}),
-            "StreamHandleNotFound",
+            "StreamHandleNotFound" if is_moli_browser() else "Invalid stream handle",
             "Fetch response-stage stream read after close",
         )
         stream_handle = None
@@ -1146,16 +1151,17 @@ async def _verify_response_stage_fetch_binary_body_stream(state: SmokeState) -> 
         stream_handle = stream.get("stream")
         if not isinstance(stream_handle, str) or not stream_handle:
             raise SmokeError(f"missing binary Fetch.takeResponseBodyAsStream handle: {stream}")
-        chunk = await state.cdp.send("IO.read", {"handle": stream_handle})
+        chunk = await read_io_to_eof(state.cdp, stream_handle)
         assert_equal(chunk.get("base64Encoded"), True, "Fetch binary response-stage stream encoding")
         assert_equal(chunk.get("data"), "AP9h", "Fetch binary response-stage stream base64 body")
         assert_equal(chunk.get("eof"), True, "Fetch binary response-stage stream eof")
 
-        await _expect_cdp_error(
-            state.cdp.send("Fetch.continueResponse", {"requestId": request_id}),
-            BODY_TAKEN_CONTINUE_RESPONSE_ERROR,
-            "Fetch binary response-stage stream continueResponse after body taken",
-        )
+        if is_moli_browser():
+            await _expect_cdp_error(
+                state.cdp.send("Fetch.continueResponse", {"requestId": request_id}),
+                BODY_TAKEN_CONTINUE_RESPONSE_ERROR,
+                "Fetch binary response-stage stream continueResponse after body taken",
+            )
         await state.cdp.send(
             "Fetch.fulfillRequest",
             {
@@ -1836,6 +1842,8 @@ async def _verify_chromium_resource_type_network_matrix(state: SmokeState) -> No
         "/chromium-resource-xhr.bin": (base64.b64encode(b"\x00\xffmoli-xhr").decode("ascii"), True),
     }
     for path, (expected_body, expected_base64) in expected_bodies.items():
+        if path.endswith(".vtt") and not is_moli_browser():
+            expected_body, expected_base64 = base64.b64encode(expected_body.encode()).decode(), True
         body = await state.cdp.send("Network.getResponseBody", {"requestId": request_ids[path]})
         assert_equal(body.get("base64Encoded"), expected_base64, f"{path} Network.getResponseBody encoding")
         assert_equal(body.get("body"), expected_body, f"{path} Network.getResponseBody body")
@@ -1938,19 +1946,43 @@ async def _verify_blocked_websocket_events(state: SmokeState) -> None:
     page = state.page
     fixture = state.fixture
     subresource_events = state.subresource_events
-    blocked_ws_url = fixture.replace("http:", "ws:", 1) + "/ws-blocked"
+    blocked_ws_url = fixture.replace("http:", "ws:", 1) + "/ws-echo"
     blocked_ws_start = len(subresource_events)
+    socket_events = attach_cdp_event_collector(state.cdp, [
+        "Network.webSocketCreated", "Network.webSocketHandshakeResponseReceived",
+        "Network.webSocketFrameReceived", "Network.webSocketClosed",
+    ])
     await state.cdp.send("Network.setBlockedURLs", {"urls": [blocked_ws_url + "*"]})
     blocked_ws_result = await page.evaluate(
         """async url => await new Promise(resolve => {
-          const socket = new WebSocket(url);
+          const socket = new WebSocket(url, 'smoke');
           const timer = setTimeout(() => { socket.close(); resolve(`timeout:${socket.readyState}`); }, 5000);
-          socket.onopen = () => { clearTimeout(timer); resolve('open'); };
+          socket.onopen = () => { socket.close(); clearTimeout(timer); resolve('open'); };
           socket.onerror = () => { clearTimeout(timer); resolve(`error:${socket.readyState}`); };
           socket.onclose = event => { clearTimeout(timer); resolve(`close:${event.code}:${event.wasClean}`); };
         })""",
         blocked_ws_url,
     )
+    if not is_moli_browser():
+        assert_equal(blocked_ws_result, "open", "Chromium setBlockedURLs does not block WebSocket handshakes")
+        await wait_until(lambda: any(e["method"] == "Network.webSocketHandshakeResponseReceived"
+                                    and e["params"].get("response", {}).get("status") == 101
+                                    for e in socket_events), "Chromium WebSocket handshake event")
+        created = next((e for e in socket_events if e["method"] == "Network.webSocketCreated"
+                        and e["params"].get("url") == blocked_ws_url), None)
+        if created is None:
+            raise SmokeError(f"missing Chromium WebSocket identity: {socket_events}")
+        request_id = created["params"]["requestId"]
+        assert_equal(any(e["method"] == "Network.webSocketHandshakeResponseReceived"
+                         and e["params"].get("requestId") == request_id
+                         and e["params"].get("response", {}).get("status") == 101
+                         for e in socket_events), True, "Chromium WebSocket handshake succeeded")
+        assert_equal(any(e["params"].get("requestId") == request_id
+                         for e in subresource_events[blocked_ws_start:]), False,
+                     "WebSocket uses its own Network event family")
+        await state.cdp.send("Network.setBlockedURLs", {"urls": []})
+        state.record("blocked_websocket_network_events", {"policy": "chromium-websocket-exclusion"})
+        return
     if blocked_ws_result == "open" or str(blocked_ws_result).startswith("timeout:"):
         raise SmokeError(f"blocked WebSocket should fail, got {blocked_ws_result}")
 

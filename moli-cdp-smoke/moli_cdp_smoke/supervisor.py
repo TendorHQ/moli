@@ -26,6 +26,8 @@ class WorkerJob:
     attempt: int
     repeat: int
     endpoint: str | None = None
+    browser: str | None = None
+    chromium_bin: str | None = None
 
     @property
     def label(self) -> str:
@@ -51,6 +53,7 @@ class WorkerOutcome:
     scenario_count: int
     endpoint: str | None = None
     error: str | None = None
+    browser: dict[str, Any] | None = None
 
     @property
     def passed(self) -> bool:
@@ -71,6 +74,8 @@ class WorkerOutcome:
             payload["error"] = self.error
         if self.endpoint:
             payload["endpoint"] = self.endpoint
+        if self.browser:
+            payload["browser"] = self.browser
         return payload
 
 
@@ -141,6 +146,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="List available groups as JSON and exit.",
     )
+    parser.add_argument("--browser", choices=("moli", "chromium"), help="Managed browser engine (default: moli).")
+    parser.add_argument("--chromium-bin", help="Override the locked Playwright Chromium executable.")
     return parser.parse_args(argv)
 
 
@@ -161,6 +168,10 @@ def _worker_argv(job: WorkerJob, result_path: Path) -> list[str]:
     ]
     if job.endpoint:
         argv.extend(("--endpoint", job.endpoint))
+    if job.browser:
+        argv.extend(("--browser", job.browser))
+    if job.chromium_bin:
+        argv.extend(("--chromium-bin", job.chromium_bin))
     return argv
 
 
@@ -168,7 +179,7 @@ def _worker_environment() -> dict[str, str]:
     env = clear_proxy_env(os.environ)
     env[INHERIT_PROCESS_GROUP_ENV] = "1"
     # The supervisor already persists worker stdout/stderr in the artifact
-    # directory. Stream each worker's Moli child logs into that same file so a
+    # directory. Stream each worker's browser logs into that same file so a
     # process-level timeout does not destroy the only copy of the renderer
     # diagnostics held in the worker's memory.
     env[TRACE_BACKGROUND_PROCESS_ENV] = "1"
@@ -186,6 +197,32 @@ def _read_worker_payload(result_path: Path) -> tuple[dict[str, Any] | None, str 
     if not isinstance(payload, dict):
         return None, "worker result root is not an object"
     return payload, None
+
+
+def _coverage_error(job: WorkerJob, payload: dict[str, Any]) -> str | None:
+    results = payload.get("results")
+    if not isinstance(results, list) or not results:
+        return "worker executed no scenarios"
+    for result in results:
+        if (
+            not isinstance(result, dict)
+            or result.get("ok") is not True
+            or result.get("applicable") is False
+            or "not_applicable" in str(result.get("name", ""))
+        ):
+            return f"worker did not validate scenario: {result}"
+    if job.browser:
+        identity = payload.get("browser") or {}
+        if identity.get("engine") != job.browser:
+            return f"worker browser mismatch: requested {job.browser}, got {identity}"
+        launches = payload.get("browserLaunches") or []
+        if not job.endpoint and not launches:
+            return "managed worker published no browser process evidence"
+        if any(launch.get("engine") != job.browser for launch in launches):
+            return f"worker mixed browser engines: {launches}"
+        if any((launch.get("browser") or {}).get("engine") != job.browser for launch in launches):
+            return "worker did not verify every launched browser's discovery identity"
+    return None
 
 
 async def _wait_for_worker(
@@ -265,8 +302,8 @@ async def _run_worker_job(
         status = "crashed"
         error = f"worker reported the wrong group: {payload.get('group')!r}"
     elif exit_code == 0 and payload.get("ok") is True:
-        status = "passed"
-        error = None
+        error = _coverage_error(job, payload)
+        status = "failed" if error else "passed"
     else:
         status = "failed"
         worker_error = payload.get("error")
@@ -282,6 +319,7 @@ async def _run_worker_job(
         scenario_count=scenario_count,
         endpoint=endpoint,
         error=error,
+        browser=payload.get("browser") if payload else None,
     )
     print(
         f"[moli-cdp-supervisor] {status.upper()} {job.label} "
@@ -317,6 +355,8 @@ async def run_supervisor(args: argparse.Namespace) -> tuple[int, dict[str, Any]]
             attempt=attempt,
             repeat=args.repeat,
             endpoint=args.endpoint.rstrip("/") if args.endpoint else None,
+            browser=args.browser or ("moli" if args.endpoint is None else None),
+            chromium_bin=args.chromium_bin,
         )
         for group in selection.groups
         for attempt in range(1, args.repeat + 1)
@@ -373,6 +413,7 @@ async def run_supervisor(args: argparse.Namespace) -> tuple[int, dict[str, Any]]
         "timeoutSeconds": args.timeout,
         "repeat": args.repeat,
         "externalEndpoint": args.endpoint,
+        "browser": args.browser or ("external" if args.endpoint else "moli"),
         "outputDirectory": str(output_dir),
         "groups": [outcome.summary() for outcome in outcomes],
     }

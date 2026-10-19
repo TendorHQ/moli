@@ -6,7 +6,7 @@ import json
 import urllib.request
 from typing import Any
 
-from ..assertions import SmokeError, assert_equal, record, record_contract
+from ..assertions import SmokeError, assert_equal, record, record_contract, wait_until
 from ..png_image import DecodedPng, decode_png
 from ..raw_cdp import RawCdpClient, connect_raw_cdp, discover_websocket_url
 
@@ -525,18 +525,15 @@ async def run_action_window_group(
     results: list[dict[str, Any]],
 ) -> None:
     websocket_url = await discover_websocket_url(endpoint)
-    if not websocket_url.endswith("/devtools/browser/moli-browser"):
-        record(
-            results,
-            "raw_cdp_action_window_moli_policy_not_applicable",
-            {"engine": "chromium", "applicable": False},
-        )
-        return
+    is_moli = websocket_url.endswith("/devtools/browser/moli-browser")
 
     client = await connect_raw_cdp(endpoint)
     context_id: str | None = None
     try:
         context_id, session_id = await _open_target(client)
+        if not is_moli:
+            await _run_chromium_action_window(client, session_id, fixture, results)
+            return
         await _run_deadline_contract(client, session_id, fixture, results)
         await _run_overflow_container_contract(client, session_id, fixture, results)
         await _run_capture_barrier_contract(client, session_id, fixture, results)
@@ -552,3 +549,60 @@ async def run_action_window_group(
             except Exception:
                 pass
         await client.websocket.close()
+
+
+async def _run_chromium_action_window(
+    client: RawCdpClient, session: str, fixture: str, results: list[dict[str, Any]],
+) -> None:
+    async def value(expression: str) -> Any:
+        return await _evaluate_json(client, session, "JSON.stringify(" + expression + ")")
+
+    async def equals(expression: str, expected: Any) -> None:
+        async def ready() -> bool:
+            return await value(expression) == expected
+        await wait_until(ready, f"Chromium {expression} == {expected!r}")
+
+    await _reset_witness(fixture)
+    await _navigate(client, session, f"{fixture}/action-window-deadline")
+    await _capture_png(client, session)
+    await _wait_for_intersections(client, session, [False])
+    intersections = [False]
+    for delta, position, visible in [(100, 100, True), (-100, 0, False), (100, 100, True)]:
+        await _dispatch_wheel(client, session, delta)
+        await equals("scrollY", position)
+        intersections.append(visible)
+        await _wait_for_intersections(client, session, intersections)
+    log = [f"{phase}:{delta}" for delta in [100, -100, 100] for phase in ["event", "microtask"]]
+    await equals("__actionWindowWheelLog", log)
+    record(results, "raw_cdp_action_window_chromium_live_events", {"wheelLog": log, "ioLog": intersections})
+
+    await _navigate(client, session, f"{fixture}/action-window-overflow")
+    await _capture_png(client, session)
+    await _dispatch_wheel(client, session, 60, x=50, y=50)
+    await equals("[scroller.scrollLeft,scroller.scrollTop]", [0, 60])
+    await _dispatch_wheel(client, session, 0, delta_x=45, x=50, y=50)
+    await equals("[scroller.scrollLeft,scroller.scrollTop]", [45, 60])
+    assert_equal(await value("[scrollX,scrollY,__actionWindowOverflowDeltas]"),
+                 [0, 0, [[0, 60], [45, 0]]], "Chromium overflow wheel axes")
+    record(results, "raw_cdp_action_window_chromium_overflow_axes")
+
+    await _reset_witness(fixture)
+    await _navigate(client, session, f"{fixture}/action-window-capture")
+    assert_equal((await _capture_png(client, session)).pixel(10, 10), (255, 255, 255, 255), "Chromium initial capture")
+    for index, (delta, color) in enumerate([(10, (255, 0, 0, 255)), (20, (0, 255, 0, 255))], 1):
+        await _dispatch_wheel(client, session, delta)
+        await _wait_for_witness(fixture, index)
+        assert_equal((await _capture_png(client, session)).pixel(10, 10), color, "Chromium capture after wheel")
+    await equals("scrollY", 30)
+    assert_equal(await value("__actionWindowCaptureDeltas"), [10, 20], "Chromium capture deltas")
+    record(results, "raw_cdp_action_window_chromium_capture")
+
+    await _navigate(client, session, f"{fixture}/action-window-replacement")
+    await _capture_png(client, session)
+    await _dispatch_wheel(client, session, 10)
+    await equals("__actionWindowRetiredDeltas", [10])
+    for delta in [20, 30]:
+        await _dispatch_wheel(client, session, delta)
+    await equals("__actionWindowReplacementDeltas", [20, 30])
+    assert_equal(await value("__actionWindowRetiredDeltas"), [10], "retired Document gets no later wheel")
+    record(results, "raw_cdp_action_window_chromium_document_replacement")

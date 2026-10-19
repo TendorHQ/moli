@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..assertions import SmokeError, assert_equal, record
+from ..config import is_moli_browser
 from ..raw_cdp import RawCdpClient, connect_raw_cdp
 
 
@@ -519,7 +520,7 @@ async def _javascript_dialog_protocol_shape(
     )
     assert_equal(
         params.get("hasBrowserHandler"),
-        False,
+        not is_moli_browser(),
         "raw Page.javascriptDialogOpening native browser handler",
     )
     if not isinstance(params.get("frameId"), str) or not params["frameId"]:

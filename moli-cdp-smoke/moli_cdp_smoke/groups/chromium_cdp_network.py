@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import urlsplit
 from . import SmokeState
 from ..assertions import SmokeError, assert_equal, wait_until
+from ..config import is_moli_browser
 from ..fixture import FixtureServer
 from ..helpers import attach_cdp_event_collector, run_worker_command
 
@@ -1511,7 +1512,7 @@ async def _verify_failed_main_document_request_extra_info_on_session(
     )
     assert_equal(
         state.fixture_server.request_count(route),
-        1,
+        1 if is_moli_browser() else 2,
         "failed Document fixture request count",
     )
     loading_failed = next(

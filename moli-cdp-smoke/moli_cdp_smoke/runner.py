@@ -78,11 +78,14 @@ from .groups.xhr_sync_semantics import run_xhr_sync_semantics_group
 from .helpers import attach_cdp_event_collector
 from .progress import await_with_progress
 from .serve import (
-    MoliServe,
-    start_moli_serve,
-    stop_moli_serve,
+    BROWSER_ENV,
+    BROWSER_LAUNCHES,
+    BrowserProcess,
+    browser_identity,
+    start_browser,
+    stop_browser,
     wait_for_cdp_server,
-    wait_for_moli_endpoint,
+    wait_for_browser_endpoint,
 )
 from .state import SmokeState
 
@@ -94,7 +97,7 @@ RawGroupRunner = Callable[[str, str, list[dict[str, Any]]], Awaitable[None]]
 ExternalGroupRunner = Callable[[str, str, list[dict[str, Any]]], Awaitable[None]]
 PageGroupRunner = Callable[[SmokeState], Awaitable[None]]
 BrowserGroupRunner = Callable[[Any, str, list[dict[str, Any]]], Awaitable[None]]
-ProcessGroupRunner = Callable[[str, str, list[dict[str, Any]], MoliServe | None], Awaitable[None]]
+ProcessGroupRunner = Callable[[str, str, list[dict[str, Any]], BrowserProcess | None], Awaitable[None]]
 
 
 @dataclass(frozen=True)
@@ -664,6 +667,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--endpoint",
         help="Use an existing HTTP CDP endpoint instead of starting moli serve.",
     )
+    parser.add_argument("--browser", choices=("moli", "chromium"))
+    parser.add_argument("--chromium-bin", help="Override the locked Playwright Chromium executable.")
     parser.add_argument(
         "--result",
         type=Path,
@@ -704,10 +709,15 @@ async def async_main(argv: list[str] | None = None) -> int:
     selected_group = selection.groups[0]
     fixture = FixtureServer()
     fixture_started = False
-    serve: MoliServe | None = None
+    serve: BrowserProcess | None = None
     results: list[dict[str, Any]] = []
     endpoint: str | None = None
     failures: list[str] = []
+    identity: dict[str, Any] | None = None
+    BROWSER_LAUNCHES.clear()
+    os.environ[BROWSER_ENV] = args.browser or "moli"
+    if args.chromium_bin:
+        os.environ["CHROMIUM_BIN"] = args.chromium_bin
     try:
         fixture.start()
         fixture_started = True
@@ -718,17 +728,19 @@ async def async_main(argv: list[str] | None = None) -> int:
             port = int(port_env) if port_env else 0
             if port < 0 or port > 65535 or (port == 0 and port_env is not None):
                 raise RuntimeError(f"invalid MOLI_CDP_PORT: {port_env}")
-            serve = await start_moli_serve(
+            serve = await start_browser(
                 port,
                 extra_args=("--scrollbars",)
-                if selected_group.name in {"classic-scrollbar", "iframe-input"}
+                if args.browser != "chromium" and selected_group.name in {"classic-scrollbar", "iframe-input"}
                 else (),
             )
-            endpoint = await wait_for_moli_endpoint(serve)
+            endpoint = await wait_for_browser_endpoint(serve)
         if endpoint is None:
             raise RuntimeError("CDP endpoint was not initialized")
         if serve is None:
             await wait_for_cdp_server(endpoint, serve)
+        identity = await browser_identity(endpoint, args.browser or ("moli" if serve else None))
+        os.environ[BROWSER_ENV] = identity["engine"]
         for current_group in selection.process_groups:
             await _await_group(
                 current_group,
@@ -749,7 +761,7 @@ async def async_main(argv: list[str] | None = None) -> int:
         failures.append("".join(traceback.format_exception(error)))
     finally:
         try:
-            await stop_moli_serve(serve)
+            await stop_browser(serve)
         except Exception as error:
             failures.append("".join(traceback.format_exception(error)))
         if fixture_started:
@@ -764,6 +776,8 @@ async def async_main(argv: list[str] | None = None) -> int:
         "group": selected_group.name,
         "endpoint": endpoint,
         "fixture": fixture.url,
+        "browser": identity,
+        "browserLaunches": BROWSER_LAUNCHES,
         "results": results,
     }
     if failures:

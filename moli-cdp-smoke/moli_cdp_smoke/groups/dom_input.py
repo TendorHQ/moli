@@ -9,6 +9,7 @@ from playwright.async_api import Error as PlaywrightError, expect
 
 from . import SmokeState
 from ..helpers import capture_layout
+from ..config import is_moli_browser
 from ..assertions import SmokeError, assert_equal, wait_until
 from ..progress import await_with_progress
 
@@ -395,11 +396,13 @@ async def run_locator_input_workflows(state: SmokeState) -> None:
     )
     assert_equal(form_state, {"checked": True, "radio": "b", "select": "two"}, "checkbox/radio/select state")
 
-    await _expect_drag_interception_boundary(
-        page.locator("#drag").drag_to(page.locator("#drop"), timeout=1_000),
-        "Playwright locator.drag_to drag interception boundary",
-    )
-    assert_equal(await page.text_content("#drop"), "drop", "unsupported drag/drop does not dispatch")
+    drag = page.locator("#drag").drag_to(page.locator("#drop"), timeout=1_000)
+    if is_moli_browser():
+        await _expect_drag_interception_boundary(drag, "Moli drag interception boundary")
+        assert_equal(await page.text_content("#drop"), "drop", "unsupported drag/drop does not dispatch")
+    else:
+        await drag
+        assert_equal(await page.text_content("#drop"), "dragged-value", "Chromium drag/drop dispatches")
     state.record("locator_input_workflows")
 
 
@@ -2038,9 +2041,32 @@ async def run_touch_input_workflows(state: SmokeState) -> None:
     cdp = state.cdp
 
     async def expect_invalid_params(method: str, params: dict[str, object]) -> None:
+        if not is_moli_browser() and (
+            params.get("modifiers") == 256 or params.get("button") == "middle"
+        ):
+            assert_equal(await cdp.send(method, params), {}, "Chromium accepts this input range")
+            return
         error = await _expect_playwright_error(cdp.send(method, params))
-        if "InvalidParams" not in error:
-            raise SmokeError(f"{method}: expected InvalidParams, got: {error}")
+        expected = "InvalidParams"
+        if not is_moli_browser():
+            expected = "Invalid parameters"
+            event_type = str(params.get("type", ""))
+            if event_type[:1].isupper():
+                expected = f"Unexpected event type '{event_type}'"
+            elif params.get("gestureSourceType") == "Touch":
+                expected = "Unknown gestureSourceType"
+            elif event_type == "mouseWheel":
+                expected = "'deltaX' and 'deltaY' are expected for mouseWheel event"
+            elif params.get("force") == 2:
+                expected = "'force' should be in the range of [0,1]"
+            elif method == "Input.dispatchTouchEvent":
+                expected = {
+                    "touchStart": "TouchStart and TouchMove must have at least one touch point." if not params.get("touchPoints") else "All or none of the provided TouchPoints must supply ids.",
+                    "touchCancel": "TouchCancel must not have any touch points.",
+                    "touchEnd": "Must send a TouchStart first to start a new touch.",
+                }.get(event_type, expected)
+        if expected not in error:
+            raise SmokeError(f"{method}: expected {expected!r}, got: {error}")
 
     await page.evaluate(
         """html => {

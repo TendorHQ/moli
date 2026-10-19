@@ -9,7 +9,7 @@ from ..assertions import SmokeError, assert_equal, record
 from ..jpeg_image import jpeg_dimensions
 from ..png_image import decode_png
 from ..raw_cdp import RawCdpClient, connect_raw_cdp, discover_websocket_url
-from ..serve import start_moli_serve, stop_moli_serve, wait_for_moli_endpoint
+from ..serve import start_moli_serve, stop_browser, wait_for_browser_endpoint
 
 
 SCREENSHOT_UNSUPPORTED = (
@@ -649,7 +649,7 @@ async def _run_default_mock_boundary(
     results: list[dict[str, Any]],
 ) -> None:
     serve = await start_moli_serve(layout=False)
-    endpoint = await wait_for_moli_endpoint(serve)
+    endpoint = await wait_for_browser_endpoint(serve)
     client: RawCdpClient | None = None
     target_id: str | None = None
     try:
@@ -715,4 +715,4 @@ async def _run_default_mock_boundary(
                 except Exception:
                     pass
             await client.websocket.close()
-        await stop_moli_serve(serve)
+        await stop_browser(serve)

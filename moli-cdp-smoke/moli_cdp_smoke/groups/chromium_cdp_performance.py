@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any
 from . import SmokeState
+from ..config import is_moli_browser
 from ..assertions import SmokeError, assert_equal, wait_until
 from ..helpers import attach_cdp_event_collector
 
@@ -144,8 +145,10 @@ async def _verify_cpu_throttling_capability_multiple_pages_sample(state: SmokeSt
             error = await _send_cdp_expect_optional_error(
                 cdp, "Emulation.setCPUThrottlingRate", {"rate": rate}
             )
-            if not error or "CPU throttling is not supported" not in str(error):
+            if is_moli_browser() and (not error or "CPU throttling is not supported" not in str(error)):
                 raise SmokeError(f"CPU rate {rate} should report unsupported: {error}")
+            if not is_moli_browser():
+                assert_equal(error, None, "Chromium accepts CPU throttling")
             for neutral_rate in [1.0, 0.5, 0.0, -1.0]:
                 result = await cdp.send("Emulation.setCPUThrottlingRate", {"rate": neutral_rate})
                 assert_equal(result, {}, f"CPU rate {neutral_rate} disables throttling")
@@ -207,8 +210,10 @@ async def _verify_profiler_after_rejected_cpu_throttling_sample(state: SmokeStat
         error = await _send_cdp_expect_optional_error(
             state.cdp, "Emulation.setCPUThrottlingRate", {"rate": 4.0}
         )
-        if not error or "CPU throttling is not supported" not in str(error):
+        if is_moli_browser() and (not error or "CPU throttling is not supported" not in str(error)):
             raise SmokeError(f"CPU throttling while profiling should report unsupported: {error}")
+        if not is_moli_browser():
+            assert_equal(error, None, "Chromium accepts CPU throttling while profiling")
         burn = await state.cdp.send(
             "Runtime.evaluate",
             {
@@ -236,6 +241,7 @@ async def _verify_profiler_after_rejected_cpu_throttling_sample(state: SmokeStat
         profile_result = await state.cdp.send("Profiler.stop")
     finally:
         await state.cdp.send("Profiler.disable")
+        await state.cdp.send("Emulation.setCPUThrottlingRate", {"rate": 1})
 
     profile = profile_result.get("profile") or {}
     nodes = profile.get("nodes") or []

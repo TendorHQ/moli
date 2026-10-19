@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import unittest
+import os
+import tempfile
+import sys
+from pathlib import Path
 from unittest.mock import patch
 
 from moli_cdp_smoke.assertions import SmokeError
@@ -10,6 +14,23 @@ from moli_cdp_smoke.groups.target_lifecycle import (
 
 
 class TargetLifecycleTests(unittest.TestCase):
+    def test_profile_startup_files_do_not_mask_transport_resource_leaks(self) -> None:
+        baseline = {"fds": 100, "profileFileFds": 40, "eventpoll": 5, "eventfd": 8, "threads": 40}
+        current = dict(baseline, fds=141, profileFileFds=80)
+        assert_resources_bounded(baseline, current)
+        for change in ({"fds": 149}, {"eventpoll": 8}, {"eventfd": 11}, {"threads": 43}):
+            with self.subTest(change=change), self.assertRaises(SmokeError):
+                assert_resources_bounded(baseline, dict(current, **change))
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "requires Linux /proc")
+    def test_profile_file_fds_are_counted_separately_and_total_is_retained(self) -> None:
+        with tempfile.TemporaryDirectory() as profile:
+            with (Path(profile) / "database").open("w"):
+                resources = process_resources(os.getpid(), profile)
+                self.assertEqual(resources["profileFileFds"], 1)
+                self.assertGreater(resources["fds"], resources["profileFileFds"])
+                self.assertEqual(process_resources(os.getpid())["profileFileFds"], 0)
+
     def test_resource_budget_is_fixed_not_proportional_to_iterations(self) -> None:
         baseline = {"fds": 24, "eventpoll": 7, "eventfd": 4, "threads": 20}
         assert_resources_bounded(baseline, baseline)

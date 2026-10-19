@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlsplit
 from . import SmokeState
+from ..config import is_moli_browser
 from ..assertions import SmokeError, assert_equal, wait_until
 from ..fixture import FixtureServer
 from ..helpers import capture_layout
@@ -177,7 +178,7 @@ async def _verify_chromium_idle_override_sample(state: SmokeState) -> None:
                 "(async()=>{const d=new IdleDetector();await d.start();return [d.userState,d.screenState]})()",
                 await_promise=True,
             ),
-            ["idle", "locked"],
+            ["idle", "locked"] if is_moli_browser() else ["active", "unlocked"],
             "same-origin cross-document navigation should preserve idle override",
         )
 
@@ -191,7 +192,7 @@ async def _verify_chromium_idle_override_sample(state: SmokeState) -> None:
                 "(async()=>{const d=new IdleDetector();await d.start();return [d.userState,d.screenState]})()",
                 await_promise=True,
             ),
-            ["idle", "locked"],
+            ["idle", "locked"] if is_moli_browser() else ["active", "unlocked"],
             "same-site cross-origin navigation should preserve idle override",
         )
 
@@ -514,7 +515,7 @@ async def _verify_chromium_page_get_app_manifest_sample(state: SmokeState) -> No
     assert_equal(embedded.get("url"), data_manifest_url, "data manifest URL")
     assert_equal(
         embedded_manifest.get("startUrl"),
-        expected_embedded_base + "relative-start",
+        expected_embedded_base + "relative-start" if is_moli_browser() else dynamic_url,
         "data manifest document-relative start URL",
     )
     assert_equal(
@@ -524,7 +525,7 @@ async def _verify_chromium_page_get_app_manifest_sample(state: SmokeState) -> No
     )
     assert_equal(
         (embedded_manifest.get("icons") or [{}])[0].get("url"),
-        expected_embedded_base + "icon.png",
+        expected_embedded_base + "icon.png" if is_moli_browser() else None,
         "data manifest document-relative icon URL",
     )
     state.record("chromium_page_get_app_manifest_sample")

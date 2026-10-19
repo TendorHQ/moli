@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
+from ..config import is_moli_browser
 from ..assertions import SmokeError, assert_equal, record
 from ..raw_cdp import RawCdpClient, connect_raw_cdp
 
@@ -284,7 +285,7 @@ async def _runtime_enable_stack_cost_probe(
         raise SmokeError(
             f"Runtime stack-cost probe returned invalid regression data: {probes}"
         ) from error
-    if ordered_r_squared[1] >= 0.5:
+    if is_moli_browser() and ordered_r_squared[1] >= 0.5:
         raise SmokeError(
             "Runtime.enable exposed a repeatable Error stack-depth timing slope: "
             f"{probes}"
@@ -292,6 +293,7 @@ async def _runtime_enable_stack_cost_probe(
     return {
         "probes": probes,
         "medianRSquared": ordered_r_squared[1],
+        "policy": "moli-stack-timing-privacy" if is_moli_browser() else "chromium-stack-timing-observation",
     }
 
 

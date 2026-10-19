@@ -7,10 +7,10 @@ from typing import Any
 
 from ..assertions import SmokeError, assert_equal, record
 from ..raw_cdp import RawCdpClient, connect_raw_cdp
-from ..serve import MoliServe
+from ..serve import BrowserProcess
 
 
-def process_resources(pid: int) -> dict[str, int] | None:
+def process_resources(pid: int, profile_dir: str | None = None) -> dict[str, int] | None:
     if not sys.platform.startswith("linux"):
         return None
     # Inspect only the managed server, not this client or other smoke workers.
@@ -24,6 +24,8 @@ def process_resources(pid: int) -> dict[str, int] | None:
             continue
     return {
         "fds": len(descriptors),
+        "profileFileFds": sum(value.startswith(profile_dir.rstrip("/") + "/")
+                              for value in descriptors.values()) if profile_dir else 0,
         "eventpoll": sum(value == "anon_inode:[eventpoll]" for value in descriptors.values()),
         "eventfd": sum(value == "anon_inode:[eventfd]" for value in descriptors.values()),
         "threads": len(list(Path(f"/proc/{pid}/task").iterdir())),
@@ -35,7 +37,14 @@ def assert_resources_bounded(baseline: dict[str, int], current: dict[str, int]) 
     # Permit a fixed amount of in-flight teardown/transport bookkeeping, never
     # a per-iteration allowance. The old +2 FD/page leak fails at the first batch.
     for key, allowance in (("fds", 8), ("eventpoll", 2), ("eventfd", 2), ("threads", 2)):
-        if current[key] > baseline[key] + allowance:
+        initial, observed = baseline[key], current[key]
+        if key == "fds":
+            # Chrome initializes profile database services after startup. These
+            # regular files are recorded separately from target/transport FDs.
+            # Moli supplies no profile path, so its all-FD budget is unchanged.
+            initial -= baseline.get("profileFileFds", 0)
+            observed -= current.get("profileFileFds", 0)
+        if observed > initial + allowance:
             raise SmokeError(f"target teardown leaked {key}: baseline={baseline}, current={current}")
 
 
@@ -114,9 +123,10 @@ class LifecycleProbe:
 
 
 async def run_target_lifecycle_group(
-    endpoint: str, fixture: str, results: list[dict[str, Any]], serve: MoliServe | None,
+    endpoint: str, fixture: str, results: list[dict[str, Any]], serve: BrowserProcess | None,
 ) -> None:
     pid = serve.process.pid if serve is not None else None
+    profile_dir = serve.data_dir if serve is not None and serve.engine == "chromium" else None
     client = await connect_raw_cdp(endpoint)
     probe = LifecycleProbe(client)
     try:
@@ -135,9 +145,10 @@ async def run_target_lifecycle_group(
             for index in range(4):
                 await probe.cycle(mode, index)
         await probe.navigate(f"{fixture}/plain?lifecycle-warmup")
-        baseline = process_resources(pid) if pid is not None else None
+        baseline = process_resources(pid, profile_dir) if pid is not None else None
         record(results, "target_lifecycle_baseline", {
             "pid": pid, "resources": baseline,
+            "fdBudget": "non-profile-fds" if profile_dir else "all-fds",
             "fdSampling": ("external-endpoint-without-owned-pid" if pid is None else
                            "linux-proc" if baseline is not None else "unavailable-on-this-platform"),
         })
@@ -145,7 +156,7 @@ async def run_target_lifecycle_group(
             for index in range(count):
                 await probe.cycle(mode, index)
                 if (index + 1) % 100 == 0 or index + 1 == count:
-                    current = process_resources(pid) if pid is not None else None
+                    current = process_resources(pid, profile_dir) if pid is not None else None
                     # Persist the observation before asserting, so a failed
                     # run retains the resource slope and exact failing batch.
                     record(results, "target_lifecycle_sample", {

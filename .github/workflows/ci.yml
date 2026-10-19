@@ -402,7 +402,8 @@ jobs:
 
   cdp-smoke:
     name: CDP smoke
-    needs: [resolve-refs, build-release-head]
+    needs: [resolve-refs, build-release-head, cdp-smoke-chromium]
+    if: ${{ !cancelled() && needs.resolve-refs.result == 'success' && needs.build-release-head.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     container: rust:1.96.1-bookworm
@@ -435,7 +436,12 @@ jobs:
         run: |
           export MOLI_BIN="$PWD/target/ci-bin/moli-release-head/moli"
           uv run --project moli-cdp-smoke --no-sync moli-cdp-smoke \
-            --jobs 4 --output-dir target/smoke/cdp-ci
+            --browser moli --jobs 4 --output-dir target/smoke/cdp-ci
+      - name: Require full Chromium smoke
+        if: ${{ always() }}
+        env:
+          CHROMIUM_SMOKE_RESULT: ${{ needs.cdp-smoke-chromium.result }}
+        run: test "$CHROMIUM_SMOKE_RESULT" = success
       - name: Upload diagnostics
         if: ${{ always() }}
         continue-on-error: true
@@ -443,6 +449,47 @@ jobs:
         with:
           name: cdp-smoke-diagnostics
           path: target/smoke/cdp-ci
+          if-no-files-found: warn
+          retention-days: 7
+
+  cdp-smoke-chromium:
+    name: CDP smoke (Chromium)
+    needs: [resolve-refs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: rust:1.96.1-bookworm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ needs.resolve-refs.outputs.head_sha }}
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: 0.11.14
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: moli-cdp-smoke/uv.lock
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: moli-cdp-smoke/package-lock.json
+      - name: Install dependencies and locked Chromium
+        run: |
+          uv sync --project moli-cdp-smoke --locked
+          npm ci --prefix moli-cdp-smoke
+          uv run --project moli-cdp-smoke --no-sync playwright install --with-deps chromium
+      - name: Run full CDP smoke on Chromium
+        run: |
+          uv run --project moli-cdp-smoke --no-sync moli-cdp-smoke \
+            --browser chromium --jobs 4 --output-dir target/smoke/cdp-chromium-ci
+      - name: Upload Chromium diagnostics
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cdp-smoke-chromium-diagnostics
+          path: target/smoke/cdp-chromium-ci
           if-no-files-found: warn
           retention-days: 7
 

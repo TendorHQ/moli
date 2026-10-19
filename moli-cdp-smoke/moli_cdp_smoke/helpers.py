@@ -1,7 +1,53 @@
 from __future__ import annotations
 
+import asyncio
 import base64
-from typing import Any
+from contextlib import asynccontextmanager
+from dataclasses import replace
+from typing import Any, AsyncIterator
+
+from .assertions import SmokeError
+from .state import SmokeState
+
+
+@asynccontextmanager
+async def isolated_network_page(state: SmokeState) -> AsyncIterator[SmokeState]:
+    # Auth caches belong to a browser context. Different challenge realms on
+    # the same path do not prevent Chromium from sending cached credentials.
+    context = await state.browser.new_context()
+    try:
+        page = await context.new_page()
+        cdp = await context.new_cdp_session(page)
+        events = attach_cdp_event_collector(cdp, [
+            "Network.requestWillBeSent", "Network.responseReceived", "Network.dataReceived",
+            "Network.loadingFinished", "Network.loadingFailed",
+        ])
+        await cdp.send("Network.enable")
+        await page.goto(state.fixture + "/plain", wait_until="load", timeout=10_000)
+        yield replace(state, context=context, page=page, cdp=cdp, subresource_events=events)
+    finally:
+        await context.close()
+
+
+async def read_io_to_eof(client: Any, handle: str) -> dict[str, Any]:
+    """Read through the explicit EOF marker, which can follow the last data chunk."""
+    data: list[bytes] = []
+    encoding: bool | None = None
+    async with asyncio.timeout(5):
+        while True:
+            chunk = await client.send("IO.read", {"handle": handle})
+            if not isinstance(chunk.get("data"), str) or not isinstance(chunk.get("eof"), bool):
+                raise SmokeError(f"invalid IO.read response: {chunk}")
+            current = chunk.get("base64Encoded", False)
+            if encoding is None and chunk["data"]:
+                encoding = current
+            if chunk["data"] and current != encoding:
+                raise SmokeError(f"IO.read changed encoding within a stream: {chunk}")
+            data.append(base64.b64decode(chunk["data"], validate=True) if current else chunk["data"].encode())
+            if chunk["eof"]:
+                body = b"".join(data)
+                return {"data": base64.b64encode(body).decode() if encoding else body.decode(),
+                        "base64Encoded": bool(encoding), "eof": True}
 
 
 async def capture_layout(page: Any) -> bytes:

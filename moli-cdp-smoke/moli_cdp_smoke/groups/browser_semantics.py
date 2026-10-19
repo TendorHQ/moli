@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Awaitable, Callable
 
 from ..assertions import SmokeError, assert_equal, record_contract, wait_until
+from ..config import is_moli_browser
 from ..helpers import attach_cdp_event_collector
 from ..progress import await_with_progress
 from ..state import SmokeState
@@ -978,30 +979,42 @@ async def _dom_mutation_events_and_edit_commands(state: SmokeState) -> dict[str,
                 cdp.send("DOM.requestNode", {"objectId": pi_object}),
             )
         )["nodeId"]
-        pi_rename_result, pi_rename_order = await send_and_require_events(
-            "DOM.setNodeName-processing-instruction",
-            "DOM.setNodeName",
-            {"nodeId": pi_node_id, "name": "xml"},
-            ["DOM.childNodeRemoved", "DOM.childNodeInserted"],
-        )
-        pi_rename_insert = next(
-            item
-            for item in pi_rename_order
-            if item.get("method") == "DOM.childNodeInserted"
-        )
-        assert_equal(
-            pi_rename_result["nodeId"],
-            pi_rename_insert["params"]["node"]["nodeId"],
-            "DOM.setNodeName processing-instruction node id",
-        )
-        assert_equal(
-            await step(
-                "Runtime.evaluate-processing-instruction-target",
-                page.evaluate("document.firstChild.target"),
-            ),
-            "xml",
-            "DOM.setNodeName processing-instruction xml target",
-        )
+        pi_rename_order = []
+        if is_moli_browser():
+            pi_rename_result, pi_rename_order = await send_and_require_events(
+                "DOM.setNodeName-processing-instruction",
+                "DOM.setNodeName",
+                {"nodeId": pi_node_id, "name": "xml"},
+                ["DOM.childNodeRemoved", "DOM.childNodeInserted"],
+            )
+            pi_rename_insert = next(
+                item
+                for item in pi_rename_order
+                if item.get("method") == "DOM.childNodeInserted"
+            )
+            assert_equal(
+                pi_rename_result["nodeId"],
+                pi_rename_insert["params"]["node"]["nodeId"],
+                "DOM.setNodeName processing-instruction node id",
+            )
+            assert_equal(
+                await step(
+                    "Runtime.evaluate-processing-instruction-target",
+                    page.evaluate("document.firstChild.target"),
+                ),
+                "xml",
+                "DOM.setNodeName processing-instruction xml target",
+            )
+        else:
+            try:
+                await cdp.send("DOM.setNodeName", {"nodeId": pi_node_id, "name": "xml"})
+            except Exception as error:
+                if "Node is not an Element" not in str(error):
+                    raise
+            else:
+                raise SmokeError("Chromium unexpectedly renamed a processing instruction")
+            assert_equal(await page.evaluate("document.firstChild.target"), "old-target",
+                         "rejected PI rename leaves the document unchanged")
 
         return {
             "runtimeOrder": [item["method"] for item in shallow_runtime_order],

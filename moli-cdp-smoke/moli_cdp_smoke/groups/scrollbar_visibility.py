@@ -7,12 +7,12 @@ import os
 from typing import Any
 from urllib.parse import quote
 
-from ..assertions import SmokeError, assert_equal, record
-from ..config import clear_proxy_env, moli_binary
+from ..assertions import SmokeError, assert_equal, record, wait_until
+from ..config import clear_proxy_env, is_moli_browser, moli_binary
 from ..png_image import decode_png
 from ..process import run_captured_process
 from ..raw_cdp import RawCdpClient, connect_raw_cdp
-from ..serve import start_moli_serve, stop_moli_serve, wait_for_moli_endpoint
+from ..serve import start_browser, start_moli_serve, stop_browser, wait_for_browser_endpoint
 from .layout_screenshot import _capture, _open_target, _response_for_id, _success, _wait_for_load
 
 
@@ -134,16 +134,22 @@ async def _assert_input(client: RawCdpClient, session: str, visible: bool) -> No
             "buttons": buttons, "clickCount": 1,
         }, session_id=session)
     await _capture(client, session)
+    async def click_settled() -> bool:
+        return await _evaluate(client, session, "[document.getElementById('scroller').scrollTop, clicks]") == ([20, []] if visible else [60, ["content"]])
+    await wait_until(click_settled, "native scrollbar click reaches its final scroll position")
     assert_equal(await _evaluate(client, session,
         "[document.getElementById('scroller').scrollTop, clicks]"),
         [20, []] if visible else [60, ["content"]],
         "native scrollbar hit or DOM content hit")
     await _evaluate(client, session, "document.getElementById('scroller').scrollTop = 0")
     await _capture(client, session)
+    async def wheel_settled() -> bool:
+        return await _evaluate(client, session, "document.getElementById('scroller').scrollTop") == 30
     await _success(client, "Input.dispatchMouseEvent", {
         "type": "mouseWheel", "x": 80, "y": 50, "deltaX": 0, "deltaY": 30,
     }, session_id=session)
     await _capture(client, session)
+    await wait_until(wheel_settled, "wheel scrolling reaches its final position")
     assert_equal(await _evaluate(client, session,
         "document.getElementById('scroller').scrollTop"), 30, "hidden and visible wheel scrolling")
 
@@ -151,6 +157,9 @@ async def _assert_input(client: RawCdpClient, session: str, visible: bool) -> No
 async def _assert_emulation(
     client: RawCdpClient, target: str, session: str, startup_visible: bool,
 ) -> None:
+    # The pinned Chromium build applies this setting on the next document;
+    # Moli also updates the existing document at the command reply.
+    emulated_visible = False if is_moli_browser() else startup_visible
     await _assert_snapshot(client, session, startup_visible)
     for params in [{}, {"hidden": "true"}]:
         message_id = await client.send("Emulation.setScrollbarsHidden", params, session_id=session)
@@ -159,8 +168,8 @@ async def _assert_emulation(
     await _assert_metrics(client, session, startup_visible)
     await _success(client, "Emulation.setScrollbarsHidden", {"hidden": True}, session_id=session)
     # Geometry is current at the command reply, before another output demand.
-    await _assert_metrics(client, session, False)
-    await _assert_snapshot(client, session, False)
+    await _assert_metrics(client, session, emulated_visible)
+    await _assert_snapshot(client, session, emulated_visible)
     other, peer = await _open_target(client, URL)
     try:
         await _assert_snapshot(client, peer, startup_visible)
@@ -168,9 +177,13 @@ async def _assert_emulation(
         await _success(client, "Target.closeTarget", {"targetId": other})
     _, _, seen = await _success(client, "Page.navigate", {"url": URL}, session_id=session)
     await _wait_for_load(client, session, seen)
-    assert_equal(await _evaluate(client, session, "firstClient"), 800, "hidden emulation before navigation scripts")
+    assert_equal(await _evaluate(client, session, "firstClient"), 800, "scrollbar emulation before navigation scripts")
     await _assert_snapshot(client, session, False)
     await _success(client, "Emulation.setScrollbarsHidden", {"hidden": False}, session_id=session)
+    if not is_moli_browser():
+        await _assert_metrics(client, session, False)
+        _, _, seen = await _success(client, "Page.navigate", {"url": URL}, session_id=session)
+        await _wait_for_load(client, session, seen)
     await _assert_metrics(client, session, startup_visible)
     await _assert_snapshot(client, session, startup_visible)
     await _success(client, "Emulation.setScrollbarsHidden", {"hidden": True}, session_id=session)
@@ -195,7 +208,7 @@ async def _serve_case(
     serve = await start_moli_serve(extra_args=args, env_overrides={"MOLI_SCROLLBARS": env_value})
     client: RawCdpClient | None = None
     try:
-        endpoint = await wait_for_moli_endpoint(serve)
+        endpoint = await wait_for_browser_endpoint(serve)
         client = await connect_raw_cdp(endpoint)
         target, session = await _open_target(client, URL)
         metrics = await _assert_snapshot(client, session, visible)
@@ -213,7 +226,7 @@ async def _serve_case(
             if client is not None:
                 await client.websocket.close()
         finally:
-            await stop_moli_serve(serve)
+            await stop_browser(serve)
 
 
 async def _fetch_case(
@@ -250,7 +263,7 @@ async def _layout_boundaries(results: list[dict[str, Any]]) -> None:
     )
     client: RawCdpClient | None = None
     try:
-        client = await connect_raw_cdp(await wait_for_moli_endpoint(serve))
+        client = await connect_raw_cdp(await wait_for_browser_endpoint(serve))
         target, session = await _open_target(client, REPRO_URL)
         message_id = await client.send("Emulation.setScrollbarsHidden", {"hidden": True}, session_id=session)
         response, _ = await _response_for_id(client, message_id)
@@ -263,7 +276,7 @@ async def _layout_boundaries(results: list[dict[str, Any]]) -> None:
             if client is not None:
                 await client.websocket.close()
         finally:
-            await stop_moli_serve(serve)
+            await stop_browser(serve)
 
     env = clear_proxy_env(os.environ)
     env.pop("MOLI_LAYOUT", None)
@@ -284,6 +297,25 @@ async def _layout_boundaries(results: list[dict[str, Any]]) -> None:
 async def run_scrollbar_visibility_group(
     endpoint: str, fixture: str, results: list[dict[str, Any]],
 ) -> None:
+    if not is_moli_browser():
+        for name, args, visible in [("default", (), True), ("hide-scrollbars", ("--hide-scrollbars",), False)]:
+            serve = await start_browser(extra_args=args)
+            client = None
+            try:
+                client = await connect_raw_cdp(await wait_for_browser_endpoint(serve))
+                target, session = await _open_target(client, URL)
+                metrics = await _assert_snapshot(client, session, visible)
+                record(results, "scrollbar_chromium_startup_" + name, {"visible": visible, "metrics": metrics})
+                await _assert_input(client, session, visible)
+                _, _, seen = await _success(client, "Page.navigate", {"url": URL}, session_id=session)
+                await _wait_for_load(client, session, seen)
+                await _assert_emulation(client, target, session, visible)
+                record(results, "scrollbar_chromium_input_and_emulation_" + name)
+            finally:
+                if client is not None:
+                    await client.websocket.close()
+                await stop_browser(serve)
+        return
     # Every startup case owns its process/environment; the caller's endpoint
     # cannot exercise CLI defaults or environment precedence.
     for name, args, env_value, visible in CASES:

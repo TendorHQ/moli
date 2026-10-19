@@ -6,6 +6,52 @@ The suite covers real CDP-client workflows: `connect_over_cdp`, concurrent brows
 
 ## Chromium Behavior Evidence
 
+CI runs the entire default group list twice: `CDP smoke` uses the HEAD Moli
+release and `CDP smoke (Chromium)` uses the Chromium revision bundled with the
+Playwright version in `uv.lock`. Both jobs select all default groups, including
+newly registered groups, without maintaining separate allowlists. The
+`chromium-cdp` group is a collection of protocol scenarios; its name alone does
+not identify the browser under test.
+The existing `CDP smoke` check also requires the Chromium job to succeed, so it
+cannot remain green when the Chromium suite fails.
+
+Each worker records the actual discovery version, engine, executable command,
+and PID for its managed browser and any nested browser launches. Chromium
+workers reject Moli server and CLI launches. Empty scenario lists, failed
+scenarios, and `not_applicable`/`applicable: false` results fail the supervisor.
+Use managed `--browser chromium` runs for the full oracle, including process
+resource sampling; sharing an external `--endpoint` does not provide the same
+process isolation or owned PID.
+
+Lifecycle artifacts retain total FDs for both engines. Chromium also records
+FDs for regular files inside its owned profile: delayed database initialization
+opens these independently of target churn. Its fixed FD budget covers the
+remaining descriptors; eventpoll, eventfd, and thread budgets remain separate.
+Moli's original all-FD budget is unchanged.
+
+The full-suite calibration on 2026-10-19 used Playwright 1.58.0's Chrome for
+Testing 145.0.7632.6, Node 24.15.0, fresh headless profiles, and local fixtures.
+The browser command disables the back/forward cache because the history
+scenarios explicitly test document requests and their response lifecycle.
+Authentication scenarios use fresh browser contexts to prevent cached Basic
+credentials from bypassing a later challenge. Worker Network events are
+collected from Worker sessions in Chromium and from the owning Page in Moli.
+
+Some existing scenarios test Moli policies or extensions. These keep explicit
+expectations for each engine; running all groups does not assert feature parity
+or identical scenario counts:
+
+| Boundary | Moli | Pinned Chromium |
+| --- | --- | --- |
+| Screen layout / wheel scheduling | Frozen layout and fixed action window | Live layout, per-event microtasks and observer updates |
+| Scrollbar startup / emulation | CLI/environment matrix; current document updates immediately | Default visible, `--hide-scrollbars`; emulation applies on navigation |
+| Locale/timezone across contexts | Shared process defaults and exclusive claims | Independent renderer defaults and claims |
+| Fetch body streams | Buffered seeking and explicit rejection of continuation after body take | Sequential reads; EOF may require a separate empty read |
+| WebSocket events and URL blocking | Extra generic request events, payload lengths, and WebSocket URL blocking | Dedicated WebSocket events and payload data; URL blocking excludes WebSockets |
+| Hosted file URLs | Capability error before navigation/interception | File navigation and interception; missing file returns `ERR_FILE_NOT_FOUND` |
+| Other capability boundaries | Stack timing privacy, unsupported drag/CPU throttling, PI rename extension | Observed stack timing, successful drag/throttling, rejected PI rename |
+| Response/manifest/idle details | Plaintext TextTrack bodies, document-relative data manifest URLs, same-site idle persistence | Base64 TextTrack bodies, data manifest URL fallbacks, cross-document idle reset |
+
 Any smoke assertion described as Chromium-compatible must be verified against a
 real Chromium binary. Do not infer observable behavior solely from the
 specification, Chromium source code, an existing Moli test, or intuition.
@@ -607,7 +653,7 @@ Near-term expansion order:
 
 ## Running
 
-Build moli from the repository root first:
+For Moli runs, build the binary from the repository root first:
 
 ```bash
 cargo build -p moli
@@ -627,15 +673,17 @@ uv run moli-cdp-smoke
 With no `--group`, the supervisor executes every raw, Playwright page, browser,
 and repository-managed external-client group, including `inspector-routing`
 and the pinned Puppeteer client. Every group runs in a separate worker process
-with its own Moli process, fixture server, HTTP cache, Playwright context, and
+with its own selected browser process, fixture server, cache/profile, Playwright context, and
 temporary directories. One failed or wedged group therefore cannot retain
 state or child processes for the next group.
 
 The default concurrency is one worker. Use bounded parallelism explicitly;
-CI runs the same unfiltered suite with four workers:
+CI runs the same unfiltered suite with four workers on both engines:
 
 ```bash
-uv run moli-cdp-smoke --jobs 4
+MOLI_BIN=../target/release/moli uv run moli-cdp-smoke --browser moli --jobs 4
+uv run playwright install --with-deps chromium
+uv run moli-cdp-smoke --browser chromium --jobs 4
 ```
 
 Each run writes `summary.json` plus one log and one result JSON per worker under
@@ -643,7 +691,7 @@ Each run writes `summary.json` plus one log and one result JSON per worker under
 `--timeout` to change the per-worker wall-clock limit. The worker also retains
 its own protocol-operation timeouts, so the wall limit is a final process-level
 safety boundary rather than the primary synchronization mechanism. Supervised
-worker logs include the live `moli serve` stdout/stderr stream, so the last
+worker logs include the live browser stdout/stderr stream, so the last
 renderer messages survive even when the supervisor terminates a wedged worker.
 For failed workers, the supervisor prints the saved error/traceback before the
 log tail, so CI output includes the cause even when the worker log only reports
@@ -782,13 +830,15 @@ MOLI_BIN=../target/release/moli uv run moli-cdp-smoke
 Useful environment variables:
 
 - `MOLI_BIN`: path to the `moli` binary under test.
+- `CHROMIUM_BIN` / `--chromium-bin`: optional executable override for
+  `--browser chromium`; otherwise use the locked Playwright browser.
 - `MOLI_CDP_PORT`: fixed CDP server port for single-worker debugging. By
   default every worker uses `--port 0` and reads the OS-selected endpoint from
   Moli's bound-listener log. A fixed port is rejected with parallel workers.
 - `MOLI_SMOKE_GROUPS`: comma-separated smoke group list. CLI `--group` takes precedence.
 - `MOLI_INSPECTOR_ROUTING_SCENARIOS`: comma-separated scenario names within the `inspector-routing` group.
 - `MOLI_SMOKE_TRACE=1`: print extra runner-side trace logs.
-- `MOLI_SMOKE_TRACE_BG=1`: print background `moli serve` logs when invoking a
+- `MOLI_SMOKE_TRACE_BG=1`: print background browser logs when invoking a
   worker directly. The supervisor enables this automatically because it
   persists each worker's combined output as a diagnostic artifact.
 - `NODE`: Node executable used by optional Node client groups. Defaults to `node`.
@@ -800,7 +850,8 @@ Useful environment variables:
 - `STAGEHAND_VERSION`: exact Stagehand version gate. Defaults to `3.7.0`.
 - `AGENT_BROWSER_BIN`: agent-browser CLI used by the optional external group. Defaults to `agent-browser` on `PATH`.
 
-This smoke connects to moli over CDP, so it does not need Playwright-managed browser binaries.
+Moli runs do not need Playwright-managed browser binaries. Chromium runs require
+the browser installed by the locked Playwright version, or an explicit override.
 The runner starts `moli serve` with `--layout --resource` so screenshot
 coverage uses the real renderer and the Chromium-derived Network matrix can
 observe every optional resource family, including images, audio, video, and

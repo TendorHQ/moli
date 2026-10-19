@@ -5,6 +5,7 @@ from contextlib import suppress
 from typing import Any
 
 from ..assertions import SmokeError, assert_equal, record_contract, wait_until
+from ..config import is_moli_browser
 from ..helpers import attach_cdp_event_collector
 from .multi_page_support import (
     MultiPageCase,
@@ -2248,6 +2249,8 @@ async def _network_profiles_are_target_local_with_shared_native_environment(
                 "timezone": "Europe/Paris",
             },
         ]
+        if not is_moli_browser():
+            expected_runtime_profiles[1].update(locale=baseline_runtime["locale"], timezone=baseline_runtime["timezone"])
         assert_equal(
             runtime_profiles,
             expected_runtime_profiles,
@@ -2312,10 +2315,10 @@ async def _network_profiles_are_target_local_with_shared_native_environment(
             "multi_page_network_and_emulation_profile_ownership",
             contract=(
                 "Headers and navigator identity are target-local. Date/Intl defaults "
-                "are process-wide; owner detach restores those defaults for every peer "
-                "without changing peer network/navigator policy."
+                "are process-wide in Moli and renderer-local in Chromium; owner detach "
+                "restores defaults without changing peer network/navigator policy."
             ),
-            source="Chromium single-renderer ICU defaults and target-local Network policy",
+            source="Measured Moli process-wide and Chromium renderer-local ICU ownership",
             commands=[
                 "Network.setExtraHTTPHeaders",
                 "Emulation.setUserAgentOverride",
