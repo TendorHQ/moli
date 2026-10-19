@@ -1,3 +1,4 @@
+mod open_url_encoding;
 use super::*;
 
 mod blob_mime;
