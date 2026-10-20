@@ -4,6 +4,27 @@ use moli_html2md::convert;
 use std::cell::Cell;
 use support::{Tree, rendered_html};
 
+struct Counted {
+    tree: Tree,
+    visits: Cell<usize>,
+}
+impl moli_html2md::Dom for Counted {
+    type NodeId = usize;
+    fn node_kind(&self, node: usize) -> moli_html2md::NodeKind<'_> {
+        self.visits.set(self.visits.get() + 1);
+        self.tree.node_kind(node)
+    }
+    fn first_child(&self, node: usize) -> Option<usize> {
+        self.tree.first_child(node)
+    }
+    fn next_sibling(&self, node: usize) -> Option<usize> {
+        self.tree.next_sibling(node)
+    }
+    fn attribute(&self, node: usize, name: &str) -> Option<&str> {
+        self.tree.attribute(node, name)
+    }
+}
+
 fn markdown(html: &str) -> String {
     let tree = Tree::parse(html);
     convert(&tree, tree.root)
@@ -46,26 +67,6 @@ fn standard_image_sources_are_not_overridden_by_filename_guesses() {
 
 #[test]
 fn nested_accessible_labels_do_not_rescan_the_whole_tree() {
-    struct Counted {
-        tree: Tree,
-        visits: Cell<usize>,
-    }
-    impl moli_html2md::Dom for Counted {
-        type NodeId = usize;
-        fn node_kind(&self, node: usize) -> moli_html2md::NodeKind<'_> {
-            self.visits.set(self.visits.get() + 1);
-            self.tree.node_kind(node)
-        }
-        fn first_child(&self, node: usize) -> Option<usize> {
-            self.tree.first_child(node)
-        }
-        fn next_sibling(&self, node: usize) -> Option<usize> {
-            self.tree.next_sibling(node)
-        }
-        fn attribute(&self, node: usize, name: &str) -> Option<&str> {
-            self.tree.attribute(node, name)
-        }
-    }
     let count = |depth| {
         let html = format!(
             "{}Readable terminal{}",
@@ -81,5 +82,39 @@ fn nested_accessible_labels_do_not_rescan_the_whole_tree() {
     };
     let small = count(100);
     let large = count(400);
+    assert!(large <= small * 5, "{small} -> {large}");
+}
+
+#[test]
+fn textarea_uses_its_content_not_a_nonstandard_value_attribute() {
+    for value in ["unrelated", ""] {
+        let result = markdown(&format!(
+            "<div title='Group'><textarea value='{value}'>Authored text</textarea></div>"
+        ));
+        assert!(result.contains("Authored text"), "{result}");
+        assert!(!result.contains("unrelated"), "{result}");
+    }
+}
+
+#[test]
+fn accessible_label_queries_remain_linear_with_large_unreadable_branches() {
+    let count = |depth| {
+        let branch = "<svg><path d='M0 0'/><path d='M1 1'/></svg>".repeat(20);
+        let html = format!(
+            "{}{}{}",
+            format!("<span aria-label='Fallback'>{branch}").repeat(depth),
+            branch,
+            "</span>".repeat(depth)
+        );
+        let dom = Counted {
+            tree: Tree::parse(&html),
+            visits: Cell::new(0),
+        };
+        let result = convert(&dom, dom.tree.root);
+        assert_eq!(result.matches("Fallback").count(), 1, "{result}");
+        dom.visits.get()
+    };
+    let small = count(30);
+    let large = count(120);
     assert!(large <= small * 5, "{small} -> {large}");
 }
