@@ -211,37 +211,6 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
         if let Some(table) = self.tables.last_mut() {
             table.visit_element(tag);
         }
-        let tooltip = self
-            .dom
-            .attribute(node, "data-toggle")
-            .is_some_and(|value| value.eq_ignore_ascii_case("tooltip"));
-        let tooltip_fallback =
-            if tooltip && !subtree_has_content(self.dom, node, self.options.max_depth - depth) {
-                self.dom
-                    .attribute(node, "data-original-title")
-                    .filter(|value| !value.trim().is_empty())
-            } else {
-                None
-            };
-        if tooltip && self.dom.attribute(node, "title").is_some() {
-            self.writer().boundary(1);
-            self.tasks.push(Task::ChoiceBoundary);
-        }
-        if tag == "i"
-            && self.dom.first_child(node).is_none()
-            && self.dom.attribute(node, "class").is_some_and(|class| {
-                class.split_ascii_whitespace().any(|token| {
-                    let token = token.to_ascii_lowercase();
-                    matches!(
-                        token.as_str(),
-                        "check" | "fa-check" | "icon-check" | "bi-check"
-                    )
-                })
-            })
-        {
-            self.writer().text("✓");
-            return;
-        }
         match tag {
             "head" | "script" | "style" | "noscript" | "template" => return,
             "title" if !self.in_svg => return,
@@ -369,19 +338,13 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
                 self.writer().boundary(2);
                 self.tasks.push(Task::Boundary);
             }
-            _ if quote_container(tag, self.dom.attribute(node, "class")) => {
-                self.capture();
-                self.tasks.push(Task::EndQuote);
-            }
             _ if is_block(tag) => {
                 self.writer().boundary(2);
                 self.tasks.push(Task::Boundary);
             }
             _ => {}
         }
-        if let Some(value) = tooltip_fallback {
-            self.writer().text(value);
-        } else if let Some(label) = crate::content::fallback_text(self.dom, node)
+        if let Some(label) = crate::content::fallback_text(self.dom, node)
             && !subtree_has_content(self.dom, node, self.options.max_depth - depth)
         {
             self.writer().text(&label);
@@ -570,18 +533,6 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
         block.push_str(&fence);
         self.writer().block(block.into(), 2, 2);
     }
-}
-
-fn quote_container(tag: &str, class: Option<&str>) -> bool {
-    matches!(tag, "div" | "section" | "article" | "aside")
-        && class.is_some_and(|class| {
-            class.split_ascii_whitespace().any(|token| {
-                matches!(
-                    token.to_ascii_lowercase().as_str(),
-                    "quote" | "quoteblock" | "quote-block" | "quoted-text"
-                )
-            })
-        })
 }
 
 fn subtree_has_content<D: Dom + ?Sized>(dom: &D, root: D::NodeId, limit: usize) -> bool {

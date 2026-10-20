@@ -589,16 +589,6 @@ fn empty_accessible_element_retains_its_declared_text() {
 }
 
 #[test]
-fn conventional_quote_container_retains_quote_semantics() {
-    let result = markdown(
-        "<div class='quoteblock selected'>Earlier statement.</div><p>Current reply.</p>",
-        false,
-    );
-    assert!(result.contains("> Earlier statement."), "{result}");
-    assert!(result.contains("Current reply."), "{result}");
-}
-
-#[test]
 fn quote_classes_do_not_replace_list_or_table_semantics() {
     let list = markdown(
         "<ul class='quote'><li>First</li><li>Second</li></ul>",
@@ -611,35 +601,6 @@ fn quote_classes_do_not_replace_list_or_table_semantics() {
     ));
     assert!(table.contains("<table>"), "{table}");
     assert!(table.contains("<td>Ada</td>"), "{table}");
-}
-
-#[test]
-fn tooltip_trigger_retains_its_reader_facing_detail() {
-    let result = markdown(
-        "<p>Paid Orientation <span data-toggle='tooltip' data-original-title='$100/day'>Details</span></p>",
-        false,
-    );
-    assert_eq!(result, "Paid Orientation Details");
-    let link = markdown(
-        "<a href='/download' data-toggle='tooltip' data-original-title='Download the latest version'>Download</a>",
-        false,
-    );
-    assert_eq!(link, "[Download](/download)");
-    let fallback = markdown(
-        "<span data-toggle='tooltip' data-original-title='$100/day'></span>",
-        false,
-    );
-    assert_eq!(fallback, "$100/day");
-    let fallback_link = markdown(
-        "<a href='/download' data-toggle='tooltip' data-original-title='Download'></a>",
-        false,
-    );
-    assert_eq!(fallback_link, "[Download](/download)");
-    let metadata = markdown(
-        "<span data-toggle='tooltip' title='Published'>January 24, 2018</span><span data-toggle='tooltip' title='Reading Time'>3 mins read</span>",
-        false,
-    );
-    assert_eq!(metadata, "January 24, 2018\n3 mins read");
 }
 
 #[test]
@@ -684,17 +645,6 @@ fn responsive_image_falls_back_from_unusable_lazy_candidates() {
         );
         assert_eq!(result, "![Chart](/chart.png)");
     }
-}
-
-#[test]
-fn empty_check_icon_retains_positive_state() {
-    let result = markdown(
-        "<div>Image recognition <i class='table-check check'></i></div><div>Speech recognition <i class='table-check'></i></div>",
-        false,
-    );
-    assert!(result.contains("Image recognition ✓"), "{result}");
-    assert!(result.contains("Speech recognition"), "{result}");
-    assert_eq!(result.matches('✓').count(), 1, "{result}");
 }
 
 #[test]
@@ -752,7 +702,7 @@ fn responsive_images_preserve_url_commas_and_use_declared_candidates() {
     assert!(result.contains("/current.jpg"), "{result}");
     assert!(!result.contains("/old.jpg"), "{result}");
     let result = markdown(
-        "<img alt='Photo' src='/placeholder.gif' data-srcset='/small.jpg 1x, /large.jpg 2x'>",
+        "<img alt='Photo' src='' data-srcset='/small.jpg 1x, /large.jpg 2x'>",
         false,
     );
     assert!(result.contains("/large.jpg"), "{result}");
@@ -822,8 +772,8 @@ fn srcset_recovers_only_the_future_compatible_width_height_pair() {
 }
 
 #[test]
-fn lazy_media_uses_declared_resources_instead_of_spacers() {
-    let source = "<img src='/placeholder.gif' data-original='/photo-one.jpg' alt='One'><img src='/placeholder.gif' data-original='/photo-two.jpg' alt='Two'><iframe src='data:image/gif;base64,placeholder' data-src='//video.example/lecture' title='Lecture'></iframe><img src='/ordinary.jpg' data-src=' '>";
+fn lazy_media_uses_declared_resources_when_standard_sources_are_unavailable() {
+    let source = "<img src='' data-original='/photo-one.jpg' alt='One'><img src='' data-original='/photo-two.jpg' alt='Two'><iframe src='data:image/gif;base64,placeholder' data-src='//video.example/lecture' title='Lecture'></iframe><img src='/ordinary.jpg' data-src=' '>";
     let result = markdown(source, false);
     for target in [
         "(/photo-one.jpg)",
@@ -835,7 +785,7 @@ fn lazy_media_uses_declared_resources_instead_of_spacers() {
     }
     assert!(!result.contains("placeholder"), "{result}");
     let table = markdown(
-        "<table><tr><td colspan='2'><img src='/spacer.gif' data-src='/actual.jpg' alt='Photo'></td></tr></table>",
+        "<table><tr><td colspan='2'><img src='' data-src='/actual.jpg' alt='Photo'></td></tr></table>",
         false,
     );
     assert!(

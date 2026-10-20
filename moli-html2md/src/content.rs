@@ -54,7 +54,7 @@ pub(crate) fn has_readable_content<D: Dom + ?Sized>(
 }
 
 pub(crate) fn fallback_text<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Option<String> {
-    for name in ["aria-label", "data-original-title", "title"] {
+    for name in ["aria-label", "title"] {
         if let Some(value) = dom
             .attribute(node, name)
             .map(str::trim)

@@ -15,7 +15,7 @@ pub(crate) fn source<'a, D: Dom + ?Sized>(dom: &'a D, node: D::NodeId) -> Option
         return Some(value);
     }
     let src = direct_attribute(dom, node, "src", true);
-    if src.is_some_and(|value| !is_explicit_placeholder(value)) {
+    if src.is_some() {
         return src.map(Cow::Borrowed);
     }
     if let Some(value) = dom
@@ -33,12 +33,6 @@ pub(crate) fn source<'a, D: Dom + ?Sized>(dom: &'a D, node: D::NodeId) -> Option
 
 fn direct_source<D: Dom + ?Sized>(dom: &D, node: D::NodeId, image: bool) -> Option<&str> {
     let src = direct_attribute(dom, node, "src", image);
-    if src.is_some_and(is_explicit_placeholder) {
-        return direct_attribute(dom, node, "data-src", image)
-            .or_else(|| direct_attribute(dom, node, "data-lazy-src", image))
-            .or_else(|| direct_attribute(dom, node, "data-original", image))
-            .or(src);
-    }
     src.or_else(|| direct_attribute(dom, node, "data-src", image))
         .or_else(|| direct_attribute(dom, node, "data-lazy-src", image))
         .or_else(|| direct_attribute(dom, node, "data-original", image))
@@ -56,26 +50,6 @@ fn direct_attribute<'a, D: Dom + ?Sized>(
             && *value != "about:blank"
             && safe_url(value, image)
     })
-}
-
-fn is_explicit_placeholder(value: &str) -> bool {
-    let lower = value.to_ascii_lowercase();
-    let path = lower
-        .split(['?', '#'])
-        .next()
-        .unwrap_or(&lower)
-        .trim_end_matches('/');
-    matches!(
-        path.rsplit('/').next().unwrap_or_default(),
-        "placeholder.gif"
-            | "placeholder.png"
-            | "spacer.gif"
-            | "spacer.png"
-            | "transparent.gif"
-            | "transparent.png"
-            | "blank.gif"
-            | "blank.png"
-    )
 }
 
 #[doc(hidden)]
