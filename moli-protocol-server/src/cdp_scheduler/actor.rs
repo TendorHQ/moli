@@ -1409,8 +1409,11 @@ async fn handle_frontend_command(
     blocked_commands: &mut VecDeque<BlockedCommandDispatch>,
     next_in_flight_command_token: &mut u64,
 ) -> bool {
-    let CdpFrontendCommand { frontend_id, raw } = frontend_command;
-    let Some(prepared) = frontend_router.prepare_command_str(frontend_id, raw) else {
+    let CdpFrontendCommand {
+        frontend_id,
+        command,
+    } = frontend_command;
+    let Some(prepared) = frontend_router.prepare_command(frontend_id, command) else {
         return true;
     };
     let command = match prepared {

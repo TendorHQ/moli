@@ -1607,7 +1607,7 @@ pub(super) async fn webdriver_classic_new_session(
     State(state): State<AppState>,
     body: Bytes,
 ) -> Response {
-    let Some(instance_connection) = state.shutdown.connection() else {
+    let Some(instance_connection) = state.control.connection() else {
         return classic_error_into_response(ClassicError::new(
             ClassicErrorCode::SessionNotCreated,
             "protocol server is shutting down",

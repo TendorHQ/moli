@@ -10,6 +10,7 @@ from urllib.parse import quote
 from ..assertions import SmokeError, assert_equal, record_contract, wait_until
 from ..progress import await_with_progress
 from ..raw_cdp import RawCdpClient, RawCdpError, connect_raw_cdp
+from .browser_close import browser_close_instance_lifecycle
 
 
 RawSemanticScenario = Callable[[str, str], Awaitable[dict[str, Any]]]
@@ -61,6 +62,13 @@ async def run_target_semantics_group(
 def _raw_semantic_contracts() -> tuple[RawSemanticContract, ...]:
     source = "Chromium behavior and CDP Target domain"
     return (
+        RawSemanticContract(
+            "raw_cdp_contract_browser_close_instance_lifecycle",
+            "Browser.close acknowledges and naturally exits only the selected instance through root, page, browser/tab/worker sessions; ignored params and invalid or foreign session rejection match Chromium.",
+            "Chrome for Testing 145.0.7632.6 process and raw-CDP probes",
+            ["Browser.close", "Target.attachToBrowserTarget", "Target.attachToTarget", "Browser.getVersion"],
+            browser_close_instance_lifecycle,
+        ),
         RawSemanticContract(
             "raw_cdp_contract_created_target_initial_navigation",
             "Target.createTarget with a real URL starts and commits that navigation without a follow-up Page.navigate, and the attached session observes the loaded document.",

@@ -34,6 +34,13 @@ pub(super) struct CdpFrontendRoutingState {
 }
 
 impl CdpFrontendRoutingState {
+    pub(super) fn owns_session(&self, frontend_id: u64, session_id: Option<&str>) -> bool {
+        match session_id {
+            Some(session_id) => self.frontends.owns_client_session(frontend_id, session_id),
+            None => self.frontends.base_session_id(frontend_id).is_some(),
+        }
+    }
+
     pub(super) fn register_browser_frontend(
         &mut self,
         frontend_id: u64,

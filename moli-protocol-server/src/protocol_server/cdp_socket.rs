@@ -1,15 +1,10 @@
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::StreamExt;
-use serde_json::{Value, json};
+use moli_protocol::ParsedCdpCommand;
 use std::time::Duration;
 
-use super::instance_shutdown::InstanceShutdown;
-use crate::{
-    cdp_frontend::CdpFrontendEndpoint,
-    cdp_writer::{CdpSocketSink, spawn_socket_sink},
-};
-
-const BROWSER_CLOSE_FLUSH_BUDGET: Duration = Duration::from_secs(1);
+use super::{BrowserInstanceControl, cdp_instance_control::handle_instance_command};
+use crate::{cdp_frontend::CdpFrontendEndpoint, cdp_writer::spawn_socket_sink};
 
 pub(super) enum CdpFrontendSocketKind {
     Browser,
@@ -20,12 +15,11 @@ pub(super) async fn run_cdp_frontend_socket(
     socket: WebSocket,
     endpoint: CdpFrontendEndpoint,
     kind: CdpFrontendSocketKind,
-    shutdown: InstanceShutdown,
+    control: BrowserInstanceControl,
 ) -> bool {
-    let Some(_connection) = shutdown.connection() else {
+    let Some(_connection) = control.connection() else {
         return false;
     };
-    let browser_socket = matches!(&kind, CdpFrontendSocketKind::Browser);
     let (socket_tx, mut socket_rx) = socket.split();
     let (sink, mut writer_finished_rx) = spawn_socket_sink(socket_tx);
     let socket_sink = sink.clone();
@@ -53,7 +47,7 @@ pub(super) async fn run_cdp_frontend_socket(
 
     let exit = loop {
         tokio::select! {
-            _ = shutdown.requested() => break CdpSocketExit::TransportClose,
+            _ = control.shutdown_requested() => break CdpSocketExit::TransportClose,
             _ = endpoint.wait_for_shutdown() => break CdpSocketExit::TransportClose,
             _ = &mut writer_finished_rx => break CdpSocketExit::WriterFinished,
             maybe_message = socket_rx.next() => {
@@ -62,17 +56,15 @@ pub(super) async fn run_cdp_frontend_socket(
                 };
                 match message {
                     Message::Text(text) => {
-                        if let Some((response, should_close)) = browser_close_response(&text, browser_socket) {
-                            if should_close {
-                                acknowledge_browser_close(&socket_sink, &shutdown, response).await;
-                                break CdpSocketExit::TransportClose;
-                            }
-                            if !socket_sink.enqueue_owned_message(response) {
-                                break CdpSocketExit::TransportClose;
-                            }
-                            continue;
+                        let command = ParsedCdpCommand::parse_str(text.to_string());
+                        if let Ok(command) = &command
+                            && handle_instance_command(
+                                command, &endpoint, frontend_id, &socket_sink, &control,
+                            ).await
+                        {
+                            break CdpSocketExit::TransportClose;
                         }
-                        if !endpoint.command(frontend_id, text.to_string()).await {
+                        if !endpoint.command(frontend_id, command).await {
                             break CdpSocketExit::TransportClose;
                         }
                     }
@@ -94,47 +86,6 @@ pub(super) async fn run_cdp_frontend_socket(
             let _ = writer_finished_rx.await;
         }
     }
-    true
-}
-
-// Instance control belongs to the browser-root transport, not an attached page
-// or an individual owner actor. Every other command keeps its existing route.
-fn browser_close_response(text: &str, browser_socket: bool) -> Option<(Value, bool)> {
-    if !browser_socket {
-        return None;
-    }
-    let command: Value = serde_json::from_str(text).ok()?;
-    if command.get("method")?.as_str()? != "Browser.close" || command.get("sessionId").is_some() {
-        return None;
-    }
-    let id = command.get("id")?.as_u64()?;
-    if command
-        .get("params")
-        .is_some_and(|params| !params.as_object().is_some_and(serde_json::Map::is_empty))
-    {
-        return Some((
-            json!({"id": id, "error": {"code": -32602, "message": "InvalidParams"}}),
-            false,
-        ));
-    }
-    Some((json!({"id": id, "result": {}}), true))
-}
-
-async fn acknowledge_browser_close(
-    sink: &CdpSocketSink,
-    shutdown: &InstanceShutdown,
-    response: Value,
-) -> bool {
-    if !sink.enqueue_owned_message(response) {
-        return false;
-    }
-    if !matches!(
-        tokio::time::timeout(BROWSER_CLOSE_FLUSH_BUDGET, sink.flush()).await,
-        Ok(true)
-    ) {
-        return false;
-    }
-    shutdown.request();
     true
 }
 
@@ -182,57 +133,5 @@ impl CdpFrontendDetachGuard {
 impl Drop for CdpFrontendDetachGuard {
     fn drop(&mut self) {
         self.detach();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn only_a_valid_browser_root_close_can_request_instance_shutdown() {
-        for params in [
-            json!({"id": 7, "method": "Browser.close"}),
-            json!({"id": 7, "method": "Browser.close", "params": {}}),
-        ] {
-            let (response, close) = browser_close_response(&params.to_string(), true).unwrap();
-            assert!(close);
-            assert_eq!(response, json!({"id": 7, "result": {}}));
-        }
-        for command in [
-            json!({"id": 7, "method": "Browser.close", "sessionId": "page"}),
-            json!({"id": 7, "method": "Browser.close", "sessionId": null}),
-            json!({"id": -1, "method": "Browser.close"}),
-            json!({"id": "7", "method": "Browser.close"}),
-            json!({"method": "Browser.close"}),
-            json!({"id": 7, "method": "browser.close"}),
-        ] {
-            assert!(browser_close_response(&command.to_string(), true).is_none());
-        }
-        assert!(browser_close_response(r#"{"id":7,"method":"Browser.close"}"#, false).is_none());
-        for params in [json!(null), json!([]), json!({"force": true})] {
-            let (response, close) = browser_close_response(
-                &json!({"id": 7, "method": "Browser.close", "params": params}).to_string(),
-                true,
-            )
-            .unwrap();
-            assert!(!close);
-            assert_eq!(response["error"]["code"], -32602);
-        }
-    }
-
-    #[tokio::test]
-    async fn failed_or_unconfirmed_flush_does_not_stop_the_instance() {
-        let shutdown = InstanceShutdown::default();
-        let sink = CdpSocketSink::for_test();
-        assert!(!acknowledge_browser_close(&sink, &shutdown, json!({"id": 1, "result": {}})).await);
-        let (sink, _stalled_writer) = CdpSocketSink::with_stalled_writer_for_test(2);
-        assert!(!acknowledge_browser_close(&sink, &shutdown, json!({"id": 2, "result": {}})).await);
-        assert!(
-            tokio::time::timeout(Duration::from_millis(10), shutdown.requested())
-                .await
-                .is_err()
-        );
-        assert!(shutdown.connection().is_some());
     }
 }

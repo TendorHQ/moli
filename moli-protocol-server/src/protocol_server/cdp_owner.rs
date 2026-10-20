@@ -102,7 +102,7 @@ impl SharedCdpOwnerRegistry {
 
     fn spawn_owner(&self) -> Result<(u64, CdpFrontendEndpoint)> {
         let owner_id = self.inner.config.directory.allocate_owner_id();
-        let (endpoint, receivers) = cdp_frontend_channel();
+        let (endpoint, receivers, frontend_router) = cdp_frontend_channel();
         let lifecycle_observer = self
             .inner
             .config
@@ -134,6 +134,7 @@ impl SharedCdpOwnerRegistry {
         );
         let owner_finished_rx = spawn_owner_task(
             receivers,
+            frontend_router,
             initial_storage_partition,
             self.inner.config.navigation_runtime_config.clone(),
             self.inner.config.screencast_interval_ms,
@@ -202,6 +203,7 @@ impl Drop for CdpOwnerRegistryInner {
 #[allow(clippy::too_many_arguments)]
 fn spawn_owner_task(
     receivers: CdpFrontendReceivers,
+    frontend_router: CdpFrontendRouter,
     initial_storage_partition: CdpInitialStoragePartition,
     navigation_runtime_config: NavigationRuntimeConfig,
     screencast_interval_ms: u32,
@@ -220,7 +222,7 @@ fn spawn_owner_task(
         let actor = spawn_cdp_scheduler_actor(
             scheduler,
             scheduler_receivers,
-            CdpFrontendRouter::new(),
+            frontend_router,
             receivers,
             owner_lifecycle,
         );

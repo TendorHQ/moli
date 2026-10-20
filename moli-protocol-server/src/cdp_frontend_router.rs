@@ -1,7 +1,11 @@
-use std::time::Instant;
+use std::{
+    sync::{Arc, Weak},
+    time::Instant,
+};
 
 use anyhow::Result;
 use moli_protocol::ParsedCdpCommand;
+use moli_protocol_cdp::CdpCommandParseError;
 use parking_lot::Mutex;
 use serde_json::Value;
 
@@ -17,22 +21,43 @@ pub(crate) enum CdpPreparedFrontendCommand {
 }
 
 pub(crate) struct CdpFrontendRouter {
-    routing: Mutex<CdpFrontendRoutingState>,
+    routing: Arc<Mutex<CdpFrontendRoutingState>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct CdpFrontendSessionLookup {
+    routing: Weak<Mutex<CdpFrontendRoutingState>>,
+}
+
+impl CdpFrontendSessionLookup {
+    pub(crate) fn owns_session(&self, frontend_id: u64, session_id: Option<&str>) -> bool {
+        self.routing
+            .upgrade()
+            .is_some_and(|routing| routing.lock().owns_session(frontend_id, session_id))
+    }
 }
 
 impl CdpFrontendRouter {
     pub(crate) fn new() -> Self {
         Self {
-            routing: Mutex::new(CdpFrontendRoutingState::default()),
+            routing: Arc::new(Mutex::new(CdpFrontendRoutingState::default())),
         }
     }
 
-    pub(crate) fn prepare_command_str(
+    pub(crate) fn session_lookup(&self) -> CdpFrontendSessionLookup {
+        CdpFrontendSessionLookup {
+            routing: Arc::downgrade(&self.routing),
+        }
+    }
+
+    pub(crate) fn prepare_command(
         &self,
         frontend_id: u64,
-        raw: String,
+        command: Result<ParsedCdpCommand, CdpCommandParseError>,
     ) -> Option<CdpPreparedFrontendCommand> {
-        self.routing.lock().prepare_command_str(frontend_id, raw)
+        self.routing
+            .lock()
+            .prepare_parsed_command(frontend_id, command)
     }
 
     pub(crate) fn enqueue_immediate_response(&self, frontend_id: u64, message: Value) {

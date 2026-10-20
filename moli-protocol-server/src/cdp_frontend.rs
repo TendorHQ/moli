@@ -1,6 +1,8 @@
 use anyhow::{Context, Result, bail};
+use moli_protocol_cdp::{CdpCommandParseError, ParsedCdpCommand};
 use tokio::sync::{mpsc, oneshot};
 
+use crate::cdp_frontend_router::{CdpFrontendRouter, CdpFrontendSessionLookup};
 use crate::cdp_writer::CdpSocketSink;
 
 const FRONTEND_COMMAND_QUEUE_CAPACITY: usize = 256;
@@ -15,6 +17,7 @@ pub(crate) struct CdpFrontendEndpoint {
     control_tx: mpsc::UnboundedSender<CdpFrontendControlRequest>,
     command_tx: mpsc::Sender<CdpFrontendCommand>,
     shutdown_tx: tokio::sync::watch::Sender<bool>,
+    session_lookup: CdpFrontendSessionLookup,
 }
 
 pub(crate) enum CdpFrontendControlRequest {
@@ -56,7 +59,7 @@ pub(crate) enum CdpFrontendControlRequest {
 
 pub(crate) struct CdpFrontendCommand {
     pub(crate) frontend_id: u64,
-    pub(crate) raw: String,
+    pub(crate) command: Result<ParsedCdpCommand, CdpCommandParseError>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -65,20 +68,24 @@ pub(crate) struct CdpCreatedTarget {
     pub(crate) tab_target_id: String,
 }
 
-pub(crate) fn cdp_frontend_channel() -> (CdpFrontendEndpoint, CdpFrontendReceivers) {
+pub(crate) fn cdp_frontend_channel()
+-> (CdpFrontendEndpoint, CdpFrontendReceivers, CdpFrontendRouter) {
     let (control_tx, control_rx) = mpsc::unbounded_channel();
     let (command_tx, command_rx) = mpsc::channel(FRONTEND_COMMAND_QUEUE_CAPACITY);
     let (shutdown_tx, _) = tokio::sync::watch::channel(false);
+    let router = CdpFrontendRouter::new();
     (
         CdpFrontendEndpoint {
             control_tx,
             command_tx,
             shutdown_tx,
+            session_lookup: router.session_lookup(),
         },
         CdpFrontendReceivers {
             control_rx,
             command_rx,
         },
+        router,
     )
 }
 
@@ -126,11 +133,19 @@ impl CdpFrontendEndpoint {
         }
     }
 
-    pub(crate) async fn command(&self, frontend_id: u64, raw: String) -> bool {
+    pub(crate) fn owns_session(&self, frontend_id: u64, session_id: Option<&str>) -> bool {
+        self.session_lookup.owns_session(frontend_id, session_id)
+    }
+
+    pub(crate) async fn command(
+        &self,
+        frontend_id: u64,
+        command: Result<ParsedCdpCommand, CdpCommandParseError>,
+    ) -> bool {
         tokio::select! {
             biased;
             _ = self.wait_for_shutdown() => false,
-            result = self.command_tx.send(CdpFrontendCommand { frontend_id, raw }) => result.is_ok(),
+            result = self.command_tx.send(CdpFrontendCommand { frontend_id, command }) => result.is_ok(),
         }
     }
 

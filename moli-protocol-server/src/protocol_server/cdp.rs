@@ -274,13 +274,13 @@ pub(super) async fn ws_browser_upgrade_handler(
         return StatusCode::NOT_FOUND.into_response();
     }
     let owner_registry = state.cdp_owner_registry;
-    let shutdown = state.shutdown;
+    let control = state.control;
     ws.on_upgrade(move |socket| {
         run_shared_frontend_socket(
             socket,
             owner_registry,
             CdpFrontendSocketKind::Browser,
-            shutdown,
+            control,
         )
     })
 }
@@ -302,14 +302,14 @@ pub(super) async fn ws_target_upgrade_handler(
     let Some(route) = state.cdp_agent_host_directory.lookup_target(&target_id) else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    target_ws_upgrade_response(ws, target_id, route.endpoint, state.shutdown)
+    target_ws_upgrade_response(ws, target_id, route.endpoint, state.control)
 }
 
 async fn run_shared_frontend_socket(
     socket: WebSocket,
     owner_registry: SharedCdpOwnerRegistry,
     kind: CdpFrontendSocketKind,
-    shutdown: super::instance_shutdown::InstanceShutdown,
+    control: super::BrowserInstanceControl,
 ) {
     let endpoint = match owner_registry.shared_owner() {
         Ok(endpoint) => endpoint,
@@ -318,21 +318,21 @@ async fn run_shared_frontend_socket(
             return;
         }
     };
-    run_cdp_frontend_socket(socket, endpoint, kind, shutdown).await;
+    run_cdp_frontend_socket(socket, endpoint, kind, control).await;
 }
 
 fn target_ws_upgrade_response(
     ws: WebSocketUpgrade,
     target_id: String,
     endpoint: crate::cdp_frontend::CdpFrontendEndpoint,
-    shutdown: super::instance_shutdown::InstanceShutdown,
+    control: super::BrowserInstanceControl,
 ) -> Response {
     ws.on_upgrade(move |socket| async move {
         run_cdp_frontend_socket(
             socket,
             endpoint,
             CdpFrontendSocketKind::Target { target_id },
-            shutdown,
+            control,
         )
         .await;
     })

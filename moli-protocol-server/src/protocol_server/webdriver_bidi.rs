@@ -57,7 +57,7 @@ use crate::cdp_scheduler::{
 
 use super::webdriver_files::selected_files_from_paths;
 use super::{
-    AppState, CookieProfileCommit, SharedCookieProfile, instance_shutdown::InstanceShutdown,
+    AppState, BrowserInstanceControl, CookieProfileCommit, SharedCookieProfile,
     protocol_local_executor::spawn_protocol_local_task,
 };
 
@@ -71,7 +71,7 @@ pub(super) async fn ws_bidi_session_upgrade_handler(
     let web_socket_url = state.bidi_ws_url;
     let session_registry = state.bidi_session_registry;
     let cookie_profile = state.cookie_profile;
-    let shutdown = state.shutdown;
+    let control = state.control;
     let navigation_runtime_config = NavigationRuntimeConfig::new_with_layout_configuration(
         state.fetch_config,
         state.optional_resource_fetch_mask,
@@ -87,7 +87,7 @@ pub(super) async fn ws_bidi_session_upgrade_handler(
             initial_cookie_snapshot,
             initial_storage_partition,
             navigation_runtime_config,
-            shutdown,
+            control,
         )
     })
 }
@@ -116,7 +116,7 @@ pub(super) async fn ws_bidi_existing_session_upgrade_handler(
         .map(str::to_owned);
     let web_socket_url = format!("{}/{}", state.bidi_ws_url.trim_end_matches('/'), session_id);
     ws.on_upgrade(move |socket| async move {
-        let Some(_connection) = state.shutdown.connection() else {
+        let Some(_connection) = state.control.connection() else {
             return;
         };
         if !runtime
@@ -142,9 +142,9 @@ async fn handle_bidi_session_socket(
     initial_cookie_snapshot: Vec<StoredCookie>,
     initial_storage_partition: CdpInitialStoragePartition,
     navigation_runtime_config: NavigationRuntimeConfig,
-    shutdown: InstanceShutdown,
+    control: BrowserInstanceControl,
 ) {
-    let Some(_connection) = shutdown.connection() else {
+    let Some(_connection) = control.connection() else {
         return;
     };
     let cookie_commit = spawn_protocol_local_task("bidi-socket", move || {
@@ -155,7 +155,7 @@ async fn handle_bidi_session_socket(
             initial_cookie_snapshot,
             initial_storage_partition,
             navigation_runtime_config,
-            shutdown,
+            control,
         )
     })
     .await;
@@ -179,7 +179,7 @@ async fn handle_bidi_session_socket_local(
     initial_cookie_snapshot: Vec<StoredCookie>,
     initial_storage_partition: CdpInitialStoragePartition,
     navigation_runtime_config: NavigationRuntimeConfig,
-    shutdown: InstanceShutdown,
+    control: BrowserInstanceControl,
 ) -> CookieProfileCommit {
     let mut actor = BidiSocketActor::new(socket, web_socket_url);
     let (mut scheduler, mut receivers) = CdpScheduler::new_with_initial_state_runtime_config(
@@ -193,7 +193,7 @@ async fn handle_bidi_session_socket_local(
         adapter_scheduler.schedule_turn_if_needed(&scheduler, page_javascript_blocked);
         tokio::select! {
             biased;
-            _ = shutdown.requested() => break,
+            _ = control.shutdown_requested() => break,
             maybe_message = actor.socket.recv() => {
                 let Some(message) = maybe_message else {
                     break;

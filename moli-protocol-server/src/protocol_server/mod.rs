@@ -37,11 +37,14 @@ use tracing::info;
 use moli_cookie_cache as cookie_cache;
 
 pub use crate::config::ServerConfig;
+pub use instance_control::{BrowserInstanceControl, InstanceCommand};
 
 mod cdp;
 mod cdp_agent_host;
+mod cdp_instance_control;
 mod cdp_owner;
 mod cdp_socket;
+mod instance_control;
 mod instance_shutdown;
 mod protocol_local_executor;
 mod tcp_options;
@@ -51,7 +54,6 @@ mod webdriver_files;
 
 use cdp_agent_host::SharedCdpAgentHostDirectory;
 use cdp_owner::SharedCdpOwnerRegistry;
-use instance_shutdown::InstanceShutdown;
 use webdriver_bidi::SharedBidiSessionRegistry;
 use webdriver_classic::SharedClassicSessionRegistry;
 
@@ -141,6 +143,12 @@ impl ProtocolServer {
     }
 
     pub async fn serve(&self) -> Result<()> {
+        self.serve_with_control(BrowserInstanceControl::new()).await
+    }
+
+    /// Serve one instance with a protocol-independent lifecycle control handle.
+    /// Use a fresh handle for each instance; shutdown requests are persistent.
+    pub async fn serve_with_control(&self, control: BrowserInstanceControl) -> Result<()> {
         let listener = TcpListener::bind(self.config.bind_target())
             .await
             .with_context(|| {
@@ -156,12 +164,13 @@ impl ProtocolServer {
 
         info!(%addr, "protocol server listening");
 
-        let app_state = AppState::new_with_storage_partition_and_runtime_config(
+        let mut app_state = AppState::new_with_storage_partition_and_runtime_config(
             addr,
             self.storage_partition.clone(),
             self.navigation_runtime_config.clone(),
             self.config.screencast_interval_ms,
         )?;
+        app_state.control = control;
 
         serve_listener(listener, app_state).await
     }
@@ -170,22 +179,22 @@ impl ProtocolServer {
 /// Shared by the executable and instance-lifecycle integration tests.
 async fn serve_listener(listener: TcpListener, app_state: AppState) -> Result<()> {
     const SHUTDOWN_BUDGET: Duration = Duration::from_secs(5);
-    let shutdown = app_state.shutdown.clone();
+    let control = app_state.control.clone();
     let cdp_owner_registry = app_state.cdp_owner_registry.clone();
     let classic_session_registry = app_state.classic_session_registry.clone();
     let cookie_profile = app_state.cookie_profile.clone();
     let listener =
         listener.tap_io(|stream| tcp_options::configure_accepted_protocol_stream(stream));
-    let stop_accepting = shutdown.clone();
+    let stop_accepting = control.clone();
     let serving = axum::serve(listener, build_router(app_state))
-        .with_graceful_shutdown(async move { stop_accepting.requested().await })
+        .with_graceful_shutdown(async move { stop_accepting.shutdown_requested().await })
         .into_future();
     tokio::pin!(serving);
     let completed = tokio::select! {
         result = &mut serving => Some(result),
-        _ = shutdown.requested() => None,
+        _ = control.shutdown_requested() => None,
     };
-    shutdown.request();
+    control.request(InstanceCommand::Shutdown);
     tokio::time::timeout(SHUTDOWN_BUDGET, async {
         let (_, result) = tokio::join!(cdp_owner_registry.shutdown(), async {
             // Drain in-flight HTTP requests before taking the final Classic
@@ -196,7 +205,7 @@ async fn serve_listener(listener: TcpListener, app_state: AppState) -> Result<()
             }
             .context("protocol server failed")?;
             classic_session_registry.shutdown(&cookie_profile).await?;
-            shutdown.drained().await;
+            control.drained().await;
             Ok(())
         });
         result
@@ -206,7 +215,7 @@ async fn serve_listener(listener: TcpListener, app_state: AppState) -> Result<()
 }
 
 fn build_router(app_state: AppState) -> Router {
-    let shutdown = app_state.shutdown.clone();
+    let control = app_state.control.clone();
     Router::new()
         .route("/status", get(webdriver_classic::webdriver_classic_status))
         .route("/status/", get(webdriver_classic::webdriver_classic_status))
@@ -722,15 +731,15 @@ fn build_router(app_state: AppState) -> Router {
         .layer(middleware::from_fn(
             classic_webdriver_response_headers_middleware,
         ))
-        .layer(middleware::from_fn_with_state(shutdown, instance_admission))
+        .layer(middleware::from_fn_with_state(control, instance_admission))
 }
 
 async fn instance_admission(
-    State(shutdown): State<InstanceShutdown>,
+    State(control): State<BrowserInstanceControl>,
     request: Request<Body>,
     next: Next,
 ) -> Response {
-    let Some(_connection) = shutdown.connection() else {
+    let Some(_connection) = control.connection() else {
         return axum::http::StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
     next.run(request).await
@@ -785,7 +794,7 @@ fn is_websocket_upgrade_request(request: &Request<Body>) -> bool {
 
 #[derive(Clone)]
 struct AppState {
-    shutdown: InstanceShutdown,
+    control: BrowserInstanceControl,
     browser_ws_url: String,
     page_ws_url: String,
     bidi_ws_url: String,
@@ -859,7 +868,7 @@ impl AppState {
             screencast_interval_ms,
         );
         Self {
-            shutdown: InstanceShutdown::default(),
+            control: BrowserInstanceControl::new(),
             browser_ws_url: format!("ws://{addr}/devtools/browser/{DEFAULT_BROWSER_ID}"),
             page_ws_url: format!("ws://{addr}/devtools/page/{DEFAULT_TARGET_ID}"),
             bidi_ws_url: format!("ws://{addr}/session"),
