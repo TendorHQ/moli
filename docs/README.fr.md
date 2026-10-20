@@ -244,7 +244,7 @@ Chaque benchmark mesure la fidélité du contenu, la compatibilité de l’autom
 
 ### Web Fetch : extraction du contenu de 545 pages
 
-Moli a extrait le contenu principal des 545 pages de test et obtenu le meilleur score global de similarité (moyenne de cinq indicateurs) parmi les cinq navigateurs : 39,27 %, soit 4,27 points de pourcentage de plus que Lightpanda. Il arrive également en tête pour la conservation du code, avec 91,06 % de similarité, soit 6,35 points de pourcentage de plus que le deuxième. Les cinq navigateurs ont traité les mêmes pages HTML sauvegardées, et leurs résultats ont été comparés à des références de contenu principal préparées manuellement.
+Les résultats ci-dessous proviennent d’un build de développement consacré à la correction du contenu. Moli a extrait le contenu principal des 545 pages de test et obtenu le meilleur score global de similarité (moyenne de cinq indicateurs) parmi les cinq méthodes : 39,27 %, soit 4,27 points de pourcentage de plus que Lightpanda. Il arrive également en tête pour la conservation du code, avec 91,06 % de similarité, soit 6,35 points de pourcentage de plus que le deuxième. Les cinq méthodes ont traité les mêmes pages HTML sauvegardées, et leurs résultats ont été comparés à des références de contenu principal préparées manuellement.
 
 | Méthode | Contenu principal produit | Global | Texte | Code | Formules | Contenu des tableaux | Structure des tableaux |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -258,11 +258,11 @@ Moli a extrait le contenu principal des 545 pages de test et obtenu le meilleur 
 
 ### Automatisation du navigateur
 
-Le corpus complet de [Lexbench-Headless-Browser](https://github.com/lexmount/Lexbench-Headless-Browser) contient 1 928 tâches couvrant le CDP brut, 13 outils d'automatisation aux versions épinglées, dont Playwright, Puppeteer et Selenium, ainsi que la sémantique de la plateforme Web. Le graphique compare les cinq navigateurs sur 1 308 tâches. Les groupes d’outils affectés par des problèmes d’interface du service distant, ou dont les échecs ne pouvaient pas être attribués clairement au navigateur ou au pilote, ont été exclus pour tous les navigateurs. Le rapport lié ci-dessous détaille ces exclusions.
+Le corpus complet de [Lexbench-Headless-Browser](https://github.com/lexmount/Lexbench-Headless-Browser) contient 1 928 tâches couvrant le CDP brut, 13 outils d'automatisation aux versions épinglées, dont Playwright, Puppeteer et Selenium, ainsi que la sémantique de la plateforme Web. Le graphique compare les cinq méthodes sur 1 308 tâches. Les groupes d’outils affectés par des problèmes d’interface du service distant, ou dont les échecs ne pouvaient pas être attribués clairement au navigateur ou au pilote, ont été exclus pour tous les navigateurs. Le rapport lié ci-dessous détaille ces exclusions.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/lexbench-five-engine-caliber-b-dark.jpg">
-  <img alt="Taux de réussite de cinq navigateurs headless sur 1 308 tâches comparables : Chrome 99,8 %, Moli 81,9 %, Kitesurf 62,1 %, Lightpanda 53,3 %, Obscura 44,9 %" src="../assets/lexbench-five-engine-caliber-b-light.jpg" width="100%">
+  <img alt="Taux de réussite de cinq méthodes headless sur 1 308 tâches comparables : Chrome 99,8 %, Moli 81,9 %, Kitesurf 62,1 %, Lightpanda 53,3 %, Obscura 44,9 %" src="../assets/lexbench-five-engine-caliber-b-light.jpg" width="100%">
 </picture>
 
 **Moli 0.1.1 a réussi 1 071 tâches, soit un taux de 81,88 %**, devant Kitesurf à 62,08 %, Lightpanda à 53,29 % et Obscura à 44,88 % ; Chrome, utilisé comme référence, a atteint 99,85 %. Kitesurf a été exécuté avec k=1, les tâches non couvertes comptent comme non réussies et les conditions de reproduction d'un service distant diffèrent de celles des binaires locaux. Les résultats complets figurent dans le [rapport à cinq moteurs](https://github.com/lexmount/Lexbench-Headless-Browser/blob/kitesurf-eval/docs/reports/five-engine-report-20260813.md) du benchmark.

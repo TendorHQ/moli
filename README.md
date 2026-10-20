@@ -318,7 +318,7 @@ browser ranking.
 
 ### Web Fetch: content extraction across 545 pages
 
-Moli extracted main content from all 545 test pages and had the highest overall similarity score (mean of five metrics) among the five browsers: 39.27%, 4.27 percentage points ahead of Lightpanda. It also led in code preservation, with 91.06% similarity, 6.35 percentage points ahead of the runner-up. All five browsers processed the same saved HTML pages, and their outputs were compared with manually prepared main-content references.
+In the measured content-repair development build, Moli extracted main content from all 545 test pages and had the highest overall similarity score (mean of five metrics) among the five methods: 39.27%, 4.27 percentage points ahead of Lightpanda. It also led in code preservation, with 91.06% similarity, 6.35 percentage points ahead of the runner-up. All five methods processed the same saved HTML pages, and their outputs were compared with manually prepared main-content references.
 
 | Method | Body produced | Overall | Text | Code | Formula | Table content | Table structure |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -334,7 +334,7 @@ Moli extracted main content from all 545 test pages and had the highest overall 
 
 The full [Lexbench-Headless-Browser](https://github.com/lexmount/Lexbench-Headless-Browser)
 corpus contains 1,928 tasks covering raw CDP, 13 pinned automation tools
-including Playwright, Puppeteer and Selenium, and web-platform semantics. The chart uses 1,308 tasks to compare all five browsers. Tool groups affected by remote-service interface problems, or whose failures could not be distinguished from driver problems, were excluded from every browser’s results; the linked report lists those exclusions.
+including Playwright, Puppeteer and Selenium, and web-platform semantics. The chart uses 1,308 tasks to compare all five methods. Tool groups affected by remote-service interface problems, or whose failures could not be distinguished from driver problems, were excluded from every browser’s results; the linked report lists those exclusions.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/lexbench-five-engine-caliber-b-dark.jpg">

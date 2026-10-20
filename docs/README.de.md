@@ -243,7 +243,7 @@ Die Benchmarks messen Inhaltstreue, Automatisierungskompatibilität oder Ressour
 
 ### Web Fetch: Inhaltsextraktion auf 545 Seiten
 
-Moli extrahierte den Hauptinhalt aller 545 Testseiten und erzielte mit 39,27 % den höchsten Gesamtwert (Mittelwert aus fünf Kennzahlen) der fünf Browser, 4,27 Prozentpunkte vor Lightpanda. Auch beim Erhalt von Code lag Moli vorn: 91,06 % Ähnlichkeit, 6,35 Prozentpunkte vor dem zweitplatzierten Browser. Alle fünf Browser verarbeiteten dieselben gespeicherten HTML-Seiten. Ihre Ergebnisse wurden mit manuell erstellten Referenzen für den Hauptinhalt verglichen.
+Die folgenden Ergebnisse stammen aus einem Entwicklungsbuild zur Inhaltskorrektur. Moli extrahierte den Hauptinhalt aller 545 Testseiten und erzielte mit 39,27 % den höchsten Gesamtwert (Mittelwert aus fünf Kennzahlen) der fünf Methoden, 4,27 Prozentpunkte vor Lightpanda. Auch beim Erhalt von Code lag Moli vorn: 91,06 % Ähnlichkeit, 6,35 Prozentpunkte vor dem zweitplatzierten Browser. Alle fünf Methoden verarbeiteten dieselben gespeicherten HTML-Seiten. Ihre Ergebnisse wurden mit manuell erstellten Referenzen für den Hauptinhalt verglichen.
 
 | Methode | Hauptinhalt erzeugt | Gesamt | Text | Code | Formeln | Tabelleninhalt | Tabellenstruktur |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -257,7 +257,7 @@ Moli extrahierte den Hauptinhalt aller 545 Testseiten und erzielte mit 39,27 % d
 
 ### Browserautomatisierung
 
-Der vollständige Aufgabenbestand von [Lexbench-Headless-Browser](https://github.com/lexmount/Lexbench-Headless-Browser) umfasst 1.928 Aufgaben zu rohem CDP, 13 fest versionierten Automatisierungswerkzeugen wie Playwright, Puppeteer und Selenium sowie zur Semantik der Web-Plattform. Die Grafik vergleicht alle fünf Browser anhand von 1.308 Aufgaben. Werkzeuggruppen mit Problemen an der Schnittstelle des Remote-Dienstes oder mit Fehlern, die sich nicht eindeutig dem Browser oder dem Treiber zuordnen ließen, wurden bei allen Browsern ausgeschlossen. Der verlinkte Bericht nennt die ausgeschlossenen Gruppen.
+Der vollständige Aufgabenbestand von [Lexbench-Headless-Browser](https://github.com/lexmount/Lexbench-Headless-Browser) umfasst 1.928 Aufgaben zu rohem CDP, 13 fest versionierten Automatisierungswerkzeugen wie Playwright, Puppeteer und Selenium sowie zur Semantik der Web-Plattform. Die Grafik vergleicht alle fünf Methoden anhand von 1.308 Aufgaben. Werkzeuggruppen mit Problemen an der Schnittstelle des Remote-Dienstes oder mit Fehlern, die sich nicht eindeutig dem Browser oder dem Treiber zuordnen ließen, wurden bei allen Browsern ausgeschlossen. Der verlinkte Bericht nennt die ausgeschlossenen Gruppen.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/lexbench-five-engine-caliber-b-dark.jpg">

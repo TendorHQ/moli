@@ -242,7 +242,7 @@ Moli 是一个独立的浏览器内核，而不是对 Chromium 的封装。它�
 
 ### Web Fetch：545 页内容提取
 
-Moli 在全部 545 个测试页面中提取到正文，综合相似度（五项均值）为 39.27%，在五款浏览器中最高，比 Lightpanda 高 4.27 个百分点。代码保留也排名第一，相似度为 91.06%，比第二名高 6.35 个百分点。五款浏览器处理相同的 HTML 快照，提取结果与人工整理的正文参考进行比较。
+以下为内容修复开发构建的历史测量。Moli 在全部 545 个测试页面中提取到正文，综合相似度（五项均值）为 39.27%，在五种方法中最高，比 Lightpanda 高 4.27 个百分点。代码保留也排名第一，相似度为 91.06%，比第二名高 6.35 个百分点。五种方法处理相同的 HTML 快照，提取结果与人工整理的正文参考进行比较。
 
 | 方法 | 生成正文 | 综合 | 全文 | 代码 | 公式 | 表格内容 | 表格结构 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -256,7 +256,7 @@ Moli 在全部 545 个测试页面中提取到正文，综合相似度（五项�
 
 ### 浏览器自动化
 
-[Lexbench-Headless-Browser](https://github.com/lexmount/Lexbench-Headless-Browser) 的完整任务集包含 1,928 道任务，覆盖裸 CDP、Playwright、Puppeteer、Selenium 等 13 个固定版本的自动化工具及 Web 平台语义。下图比较其中 1,308 项测试。出现远程服务接口问题，或无法判断失败来自浏览器还是驱动的工具组，已从五款浏览器的结果中统一排除，具体范围见下方报告。
+[Lexbench-Headless-Browser](https://github.com/lexmount/Lexbench-Headless-Browser) 的完整任务集包含 1,928 道任务，覆盖裸 CDP、Playwright、Puppeteer、Selenium 等 13 个固定版本的自动化工具及 Web 平台语义。下图比较其中 1,308 项测试。出现远程服务接口问题，或无法判断失败来自浏览器还是驱动的工具组，已从五种方法的结果中统一排除，具体范围见下方报告。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/lexbench-five-engine-caliber-b-dark.jpg">
