@@ -1,10 +1,5 @@
 use super::*;
 
-// Two complete 8-turn source-fairness windows let a finite load-handler tail
-// make progress without turning `Done` into a general idle wait. The absolute
-// request deadline remains the stronger bound.
-const MAX_POST_LOAD_READY_TURNS: usize = 16;
-
 impl RendererOwnerHandle {
     pub(super) async fn run_live_page_command_turn(
         &self,
@@ -180,7 +175,7 @@ impl RendererOwnerHandle {
                 self.complete_post_load_ready_tasks_turn(
                     token,
                     deadline,
-                    MAX_POST_LOAD_READY_TURNS,
+                    super::super::page_turn_scheduler::POST_LOAD_READY_TURN_BUDGET,
                     capture_policy,
                 )
                 .await

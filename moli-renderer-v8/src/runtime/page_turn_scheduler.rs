@@ -58,6 +58,11 @@ impl PageTurnTrigger {
 const MAX_CONSECUTIVE_PAGE_TASKS_PER_SOURCE: usize = 8;
 const MAX_CONSECUTIVE_PAGE_TURNS_PER_CLASS: usize = 8;
 
+// Two complete fairness windows let a finite load-handler tail make progress
+// without turning `Done` into an unbounded idle wait.
+pub(super) const POST_LOAD_READY_TURN_BUDGET: usize =
+    MAX_CONSECUTIVE_PAGE_TASKS_PER_SOURCE + MAX_CONSECUTIVE_PAGE_TURNS_PER_CLASS;
+
 #[derive(Debug, Default)]
 struct PageTaskArbitrationState {
     last_selected_source: Option<RendererPageTaskSourceKind>,
