@@ -408,9 +408,10 @@ fn render_markdown_with_frames(
             })
             .collect(),
     };
-    for document in
-        std::iter::once(dom.document_node_id()).chain(frames.iter().map(|(_, _, doc)| *doc))
-    {
+    // Only child documents need URL resolution here. The root document must keep
+    // the same Markdown contract whether frame inclusion is enabled or not.
+    for (_, _, document) in frames {
+        let document = *document;
         let Some(base) = dom
             .node(document)
             .and_then(|node| node.as_document())

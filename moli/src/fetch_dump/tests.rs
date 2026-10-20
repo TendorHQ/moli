@@ -632,7 +632,7 @@ async fn markdown_with_frames_preserves_document_positions_nested_and_cross_orig
     let (_other_browser, other_page, other_server) = load_page("<base href='/assets/'><p>Cross origin body</p><a href='./details'>Foreign link</a><img src='./cover.png' alt='Foreign image'>").await?;
     let cross_url = other_page.final_url().to_string();
     let html = format!(
-        r#"<p>Before</p><iframe srcdoc="&lt;p&gt;Child body&lt;/p&gt;&lt;a href='./local-details'&gt;Local link&lt;/a&gt;&lt;iframe srcdoc='&amp;lt;p&amp;gt;Nested body&amp;lt;/p&amp;gt;'&gt;&lt;/iframe&gt;"></iframe><p>Between</p><iframe src="{cross_url}"></iframe><p>After</p><iframe srcdoc=""></iframe>"#
+        r#"<p>Before</p><a href="./parent-details">Parent link</a><iframe srcdoc="&lt;p&gt;Child body&lt;/p&gt;&lt;a href='./local-details'&gt;Local link&lt;/a&gt;&lt;iframe srcdoc='&amp;lt;p&amp;gt;Nested body&amp;lt;/p&amp;gt;'&gt;&lt;/iframe&gt;"></iframe><p>Between</p><iframe src="{cross_url}"></iframe><p>After</p><iframe srcdoc=""></iframe>"#
     );
     let (_browser, mut page, server) = load_page(&html).await?;
     let parent_url = page.final_url().to_string();
@@ -647,6 +647,7 @@ async fn markdown_with_frames_preserves_document_positions_nested_and_cross_orig
     )
     .await?;
     assert!(!plain.contains("Child body") && !plain.contains("Cross origin body"));
+    assert!(plain.contains("[Parent link](./parent-details)"), "{plain}");
     let framed = render_page_dump_with_options_async(
         &mut page,
         DumpFormat::Markdown,
@@ -657,6 +658,10 @@ async fn markdown_with_frames_preserves_document_positions_nested_and_cross_orig
         None,
     )
     .await?;
+    assert!(
+        framed.contains("[Parent link](./parent-details)"),
+        "{framed}"
+    );
     let positions = [
         "Before",
         "Child body",
@@ -721,6 +726,16 @@ async fn markdown_with_frames_uses_latest_frame_document_and_links_for_failures(
 #[tokio::test]
 async fn iframe_media_urls_use_their_own_document_base() -> Result<()> {
     let (_browser, mut page, server) = load_page(r#"<base href="https://parent.example/page/"><video poster="parent.jpg" src="parent.mp4"></video><iframe srcdoc="&lt;base href='https://cdn.example/assets/'&gt;&lt;video poster='cover.jpg' src='movie.mp4'&gt;&lt;/video&gt;"></iframe>"#).await?;
+    let plain = render_page_dump_with_options_async(
+        &mut page,
+        DumpFormat::Markdown,
+        StripOptions::default(),
+        false,
+        false,
+        false,
+        None,
+    )
+    .await?;
     let rendered = render_page_dump_with_options_async(
         &mut page,
         DumpFormat::Markdown,
@@ -740,13 +755,9 @@ async fn iframe_media_urls_use_their_own_document_base() -> Result<()> {
         rendered.contains("[Video](https://cdn.example/assets/movie.mp4)"),
         "{rendered}"
     );
-    assert!(
-        rendered.contains("![Video poster](https://parent.example/page/parent.jpg)"),
-        "{rendered}"
-    );
-    assert!(
-        rendered.contains("[Video](https://parent.example/page/parent.mp4)"),
-        "{rendered}"
-    );
+    for output in [&plain, &rendered] {
+        assert!(output.contains("![Video poster](parent.jpg)"), "{output}");
+        assert!(output.contains("[Video](parent.mp4)"), "{output}");
+    }
     Ok(())
 }
