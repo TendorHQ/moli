@@ -377,6 +377,7 @@ async fn run_cdp_scheduler_actor(
                     &mut in_flight_commands,
                     &mut blocked_commands,
                     &mut next_in_flight_command_token,
+                    owner_lifecycle.as_ref(),
                 )
                 .await
                 {
@@ -1408,6 +1409,7 @@ async fn handle_frontend_command(
     in_flight_commands: &mut InFlightCommands,
     blocked_commands: &mut VecDeque<BlockedCommandDispatch>,
     next_in_flight_command_token: &mut u64,
+    owner_lifecycle: Option<&CdpOwnerActorLifecycle>,
 ) -> bool {
     let CdpFrontendCommand {
         frontend_id,
@@ -1427,6 +1429,16 @@ async fn handle_frontend_command(
         }
     };
     trace_command(&command, "frontend_command_received", None, None, None);
+    if let Some(owner_lifecycle) = owner_lifecycle
+        && super::instance_command::handle_instance_command(
+            &command,
+            frontend_router,
+            &owner_lifecycle.instance_control,
+        )
+        .await
+    {
+        return true;
+    }
     handle_client_command_with_interleaved_output(
         frontend_router,
         scheduler,

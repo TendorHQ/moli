@@ -20,6 +20,7 @@ async fn instance(
             OptionalResourceFetchMask::NONE,
         ),
         crate::config::DEFAULT_SCREENCAST_INTERVAL_MS,
+        BrowserInstanceControl::new(),
     );
     let serving = state.clone();
     let task = tokio::spawn(async move { serve_listener(listener, serving).await });

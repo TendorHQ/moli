@@ -3,7 +3,7 @@ use futures_util::StreamExt;
 use moli_protocol::ParsedCdpCommand;
 use std::time::Duration;
 
-use super::{BrowserInstanceControl, cdp_instance_control::handle_instance_command};
+use super::BrowserInstanceControl;
 use crate::{cdp_frontend::CdpFrontendEndpoint, cdp_writer::spawn_socket_sink};
 
 pub(super) enum CdpFrontendSocketKind {
@@ -57,13 +57,6 @@ pub(super) async fn run_cdp_frontend_socket(
                 match message {
                     Message::Text(text) => {
                         let command = ParsedCdpCommand::parse_str(text.to_string());
-                        if let Ok(command) = &command
-                            && handle_instance_command(
-                                command, &endpoint, frontend_id, &socket_sink, &control,
-                            ).await
-                        {
-                            break CdpSocketExit::TransportClose;
-                        }
                         if !endpoint.command(frontend_id, command).await {
                             break CdpSocketExit::TransportClose;
                         }

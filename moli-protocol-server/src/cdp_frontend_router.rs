@@ -1,7 +1,4 @@
-use std::{
-    sync::{Arc, Weak},
-    time::Instant,
-};
+use std::time::Instant;
 
 use anyhow::Result;
 use moli_protocol::ParsedCdpCommand;
@@ -21,32 +18,13 @@ pub(crate) enum CdpPreparedFrontendCommand {
 }
 
 pub(crate) struct CdpFrontendRouter {
-    routing: Arc<Mutex<CdpFrontendRoutingState>>,
-}
-
-#[derive(Clone)]
-pub(crate) struct CdpFrontendSessionLookup {
-    routing: Weak<Mutex<CdpFrontendRoutingState>>,
-}
-
-impl CdpFrontendSessionLookup {
-    pub(crate) fn owns_session(&self, frontend_id: u64, session_id: Option<&str>) -> bool {
-        self.routing
-            .upgrade()
-            .is_some_and(|routing| routing.lock().owns_session(frontend_id, session_id))
-    }
+    routing: Mutex<CdpFrontendRoutingState>,
 }
 
 impl CdpFrontendRouter {
     pub(crate) fn new() -> Self {
         Self {
-            routing: Arc::new(Mutex::new(CdpFrontendRoutingState::default())),
-        }
-    }
-
-    pub(crate) fn session_lookup(&self) -> CdpFrontendSessionLookup {
-        CdpFrontendSessionLookup {
-            routing: Arc::downgrade(&self.routing),
+            routing: Mutex::new(CdpFrontendRoutingState::default()),
         }
     }
 
@@ -65,6 +43,14 @@ impl CdpFrontendRouter {
         if let Some(frontend) = frontend {
             frontend.enqueue_message(message);
         }
+    }
+
+    /// Route a response through the ordinary command table, returning its
+    /// writer when the caller needs a flush confirmation before a side effect.
+    pub(crate) fn enqueue_response(&self, message: Value) -> Option<CdpSocketSink> {
+        let (frontend, message) = self.routing.lock().route_message(message, None)?;
+        let sink = frontend.into_sink();
+        sink.enqueue_owned_message(message).then_some(sink)
     }
 
     pub(crate) fn register_browser_frontend(

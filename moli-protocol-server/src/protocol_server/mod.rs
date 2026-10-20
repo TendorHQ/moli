@@ -41,7 +41,6 @@ pub use instance_control::{BrowserInstanceControl, InstanceCommand};
 
 mod cdp;
 mod cdp_agent_host;
-mod cdp_instance_control;
 mod cdp_owner;
 mod cdp_socket;
 mod instance_control;
@@ -164,13 +163,13 @@ impl ProtocolServer {
 
         info!(%addr, "protocol server listening");
 
-        let mut app_state = AppState::new_with_storage_partition_and_runtime_config(
+        let app_state = AppState::new_with_storage_partition_and_runtime_config(
             addr,
             self.storage_partition.clone(),
             self.navigation_runtime_config.clone(),
             self.config.screencast_interval_ms,
+            control,
         )?;
-        app_state.control = control;
 
         serve_listener(listener, app_state).await
     }
@@ -830,6 +829,7 @@ impl AppState {
                 LayoutPolicy::default(),
             ),
             crate::config::DEFAULT_SCREENCAST_INTERVAL_MS,
+            BrowserInstanceControl::new(),
         )
     }
 
@@ -838,6 +838,7 @@ impl AppState {
         storage_partition: Arc<StoragePartitionState>,
         navigation_runtime_config: NavigationRuntimeConfig,
         screencast_interval_ms: u32,
+        control: BrowserInstanceControl,
     ) -> anyhow::Result<Self> {
         Ok(Self::from_parts(
             addr,
@@ -845,6 +846,7 @@ impl AppState {
             storage_partition,
             navigation_runtime_config,
             screencast_interval_ms,
+            control,
         ))
     }
 
@@ -854,6 +856,7 @@ impl AppState {
         storage_partition: Arc<StoragePartitionState>,
         navigation_runtime_config: NavigationRuntimeConfig,
         screencast_interval_ms: u32,
+        control: BrowserInstanceControl,
     ) -> Self {
         let cdp_agent_host_directory = SharedCdpAgentHostDirectory::default();
         let cdp_target_id_allocator = Arc::new(AtomicU64::new(0));
@@ -866,9 +869,10 @@ impl AppState {
             storage_partition.clone(),
             navigation_runtime_config.clone(),
             screencast_interval_ms,
+            control.clone(),
         );
         Self {
-            control: BrowserInstanceControl::new(),
+            control,
             browser_ws_url: format!("ws://{addr}/devtools/browser/{DEFAULT_BROWSER_ID}"),
             page_ws_url: format!("ws://{addr}/devtools/page/{DEFAULT_TARGET_ID}"),
             bidi_ws_url: format!("ws://{addr}/session"),

@@ -27,6 +27,51 @@ fn expect_prepared_command(
 }
 
 #[test]
+fn instance_command_responses_use_normal_command_and_session_routes_once() {
+    let router = CdpFrontendRouter::new();
+    let (sink, mut writer) = CdpSocketSink::with_stalled_writer_for_test(4);
+    router
+        .register_browser_frontend(5, "SID-browser".into(), sink)
+        .unwrap();
+    assert!(
+        router.enqueue_protocol_output_sequence(ProtocolOutputSequence::from_messages(vec![
+            json!({
+                "method": "Target.attachedToTarget",
+                "sessionId": "SID-browser",
+                "params": {
+                    "sessionId": "SID-child",
+                    "targetInfo": {"targetId": "TID-child"},
+                },
+            }),
+        ]))
+    );
+    assert_eq!(writer.take_message()["method"], "Target.attachedToTarget");
+
+    for session_id in [None, Some("SID-child")] {
+        let mut request = json!({"id": 42, "method": "Browser.close"});
+        if let Some(session_id) = session_id {
+            request["sessionId"] = json!(session_id);
+        }
+        let command = expect_prepared_command(
+            router.prepare_command(5, ParsedCdpCommand::parse_value(request)),
+            "instance close",
+        );
+        assert_ne!(command.request().id(), 42);
+        let response = json!({"id": command.request().id(), "result": {}});
+        assert!(router.enqueue_response(response.clone()).is_some());
+        let mut expected = json!({"id": 42, "result": {}});
+        if let Some(session_id) = session_id {
+            expected["sessionId"] = json!(session_id);
+        }
+        assert_eq!(writer.take_message(), expected);
+        assert!(
+            router.enqueue_response(response).is_none(),
+            "responding consumes the ordinary pending-command route"
+        );
+    }
+}
+
+#[test]
 fn browser_and_page_client_command_ids_are_isolated_and_restored() {
     let mut routing = CdpFrontendRoutingState::default();
     routing

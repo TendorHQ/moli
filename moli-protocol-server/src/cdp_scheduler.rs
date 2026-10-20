@@ -36,6 +36,7 @@ mod actor;
 mod adapter_scheduler;
 mod command_dispatch;
 mod frontend_control;
+mod instance_command;
 mod protocol_residence;
 mod runtime_command_barrier;
 mod runtime_dispatch;
