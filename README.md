@@ -314,15 +314,19 @@ nextest regression suite.
 <details open>
 <summary><strong>LexBench WebFetch · 430 tasks</strong></summary>
 
-Five browsers are compared on the same 430 tasks across seven families. A task passes only when its requested content, structure, resource addresses or file bytes meet the task requirements.
+Five web-fetch methods are compared on the same 430 tasks across seven families. A task passes only when its requested content, structure, resource addresses or file bytes meet the task requirements.
 
 | Method | Tasks passed | Pass rate |
 | --- | ---: | ---: |
-| Moli | **385/430** | **89.53%** |
+| Moli 1.1.17 (repair result) | **385/430** | **89.53%** |
 | Chromium 155.0.8059.39 | 234/430 | 54.42% |
 | Lightpanda 1.0.0 | 229/430 | 53.26% |
 | Obscura 0.2.4 | 223/430 | 51.86% |
 | Kitesurf (hosted) | 192/430 | 44.65% |
+
+Measured on October 15, 2026. The pinned report records the exact Moli builds and every task result.
+
+Task definitions are maintained in [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch); execution and reporting are maintained in [`browser-eval`](https://github.com/lexmount/browser-eval).
 
 [Full report, task contracts and failure evidence](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo).
 

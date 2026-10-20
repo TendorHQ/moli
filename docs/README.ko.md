@@ -303,15 +303,19 @@ Chromium/WPT 동작 검사, 대규모 nextest 회귀 테스트 모음을 다룹�
 <details open>
 <summary><strong>LexBench WebFetch · 430개 작업</strong></summary>
 
-5개 브라우저를 7개 유형의 동일한 430개 작업으로 비교합니다. 본문, 구조, 리소스 주소 또는 파일 바이트가 작업 요구사항을 충족해야 통과합니다.
+5개 Web Fetch 방식을 7개 유형의 동일한 430개 작업으로 비교합니다. 본문, 구조, 리소스 주소 또는 파일 바이트가 작업 요구사항을 충족해야 통과합니다.
 
 | 방식 | 통과 작업 수 | 통과율 |
 | --- | ---: | ---: |
-| Moli | **385/430** | **89.53%** |
+| Moli 1.1.17(수정 결과) | **385/430** | **89.53%** |
 | Chromium 155.0.8059.39 | 234/430 | 54.42% |
 | Lightpanda 1.0.0 | 229/430 | 53.26% |
 | Obscura 0.2.4 | 223/430 | 51.86% |
 | Kitesurf (호스팅) | 192/430 | 44.65% |
+
+측정일은 2026년 10월 15일입니다. 고정된 보고서에 Moli의 정확한 빌드 정보와 모든 작업 결과가 기록되어 있습니다.
+
+작업 정의는 [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch), 실행과 보고서는 [`browser-eval`](https://github.com/lexmount/browser-eval)에서 관리합니다.
 
 [전체 보고서, 작업 요구사항 및 실패 증거](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo).
 

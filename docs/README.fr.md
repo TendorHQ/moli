@@ -240,15 +240,19 @@ Les mesures ci-dessous illustrent les capacités actuelles de Moli. Elles couvre
 <details open>
 <summary><strong>LexBench WebFetch · 430 tâches</strong></summary>
 
-Cinq navigateurs sont comparés sur les mêmes 430 tâches, réparties en sept catégories. Une tâche est réussie seulement si le contenu, la structure, les adresses de ressources ou les octets du fichier répondent aux exigences.
+Cinq méthodes Web Fetch sont comparées sur les mêmes 430 tâches, réparties en sept catégories. Une tâche est réussie seulement si le contenu, la structure, les adresses de ressources ou les octets du fichier répondent aux exigences.
 
 | Méthode | Tâches réussies | Taux de réussite |
 | --- | ---: | ---: |
-| Moli | **385/430** | **89.53%** |
+| Moli 1.1.17 (résultat corrigé) | **385/430** | **89.53%** |
 | Chromium 155.0.8059.39 | 234/430 | 54.42% |
 | Lightpanda 1.0.0 | 229/430 | 53.26% |
 | Obscura 0.2.4 | 223/430 | 51.86% |
 | Kitesurf (hébergé) | 192/430 | 44.65% |
+
+Mesure effectuée le 15 octobre 2026. Le rapport figé consigne les builds Moli exacts et le résultat de chaque tâche.
+
+Les tâches sont maintenues dans [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch), l’exécution et les rapports dans [`browser-eval`](https://github.com/lexmount/browser-eval).
 
 [Rapport complet, critères des tâches et preuves des échecs](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo).
 
