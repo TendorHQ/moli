@@ -318,7 +318,7 @@ browser ranking.
 
 ### Web Fetch: content extraction across 545 pages
 
-Moli extracted main content from all 545 test pages and had the highest overall similarity score among the five browsers: 39.27%, 4.27 percentage points ahead of Lightpanda. It also led in code preservation, with 91.06% similarity, 6.35 percentage points ahead of the runner-up. All five browsers processed the same saved HTML pages, and their outputs were compared with manually prepared main-content references.
+Moli extracted main content from all 545 test pages and had the highest overall similarity score (mean of five metrics) among the five browsers: 39.27%, 4.27 percentage points ahead of Lightpanda. It also led in code preservation, with 91.06% similarity, 6.35 percentage points ahead of the runner-up. All five browsers processed the same saved HTML pages, and their outputs were compared with manually prepared main-content references.
 
 | Method | Body produced | Overall | Text | Code | Formula | Table content | Table structure |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -328,7 +328,7 @@ Moli extracted main content from all 545 test pages and had the highest overall 
 | Chrome for Testing 154.0.8037.57 | 545/545 | 27.02% | 39.40% | 35.86% | 21.12% | **25.01%** | 13.73% |
 | Kitesurf (hosted) | 524/545 | 33.43% | 36.99% | 80.70% | 19.32% | 18.25% | 11.87% |
 
-[Reproduce with browser-eval](https://github.com/lexmount/browser-eval).
+[Reproduce with browser-eval](https://github.com/lexmount/browser-eval). Moli was measured at commit [`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe).
 
 ### Browser automation
 

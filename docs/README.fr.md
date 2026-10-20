@@ -244,7 +244,7 @@ Chaque benchmark mesure la fidélité du contenu, la compatibilité de l’autom
 
 ### Web Fetch : extraction du contenu de 545 pages
 
-Moli a extrait le contenu principal des 545 pages de test et obtenu le meilleur score global de similarité parmi les cinq navigateurs : 39,27 %, soit 4,27 points de pourcentage de plus que Lightpanda. Il arrive également en tête pour la conservation du code, avec 91,06 % de similarité, soit 6,35 points de pourcentage de plus que le deuxième. Les cinq navigateurs ont traité les mêmes pages HTML sauvegardées, et leurs résultats ont été comparés à des références de contenu principal préparées manuellement.
+Moli a extrait le contenu principal des 545 pages de test et obtenu le meilleur score global de similarité (moyenne de cinq indicateurs) parmi les cinq navigateurs : 39,27 %, soit 4,27 points de pourcentage de plus que Lightpanda. Il arrive également en tête pour la conservation du code, avec 91,06 % de similarité, soit 6,35 points de pourcentage de plus que le deuxième. Les cinq navigateurs ont traité les mêmes pages HTML sauvegardées, et leurs résultats ont été comparés à des références de contenu principal préparées manuellement.
 
 | Méthode | Contenu principal produit | Global | Texte | Code | Formules | Contenu des tableaux | Structure des tableaux |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -254,7 +254,7 @@ Moli a extrait le contenu principal des 545 pages de test et obtenu le meilleur 
 | Chrome for Testing 154.0.8037.57 | 545/545 | 27,02 % | 39,40 % | 35,86 % | 21,12 % | **25,01 %** | 13,73 % |
 | Kitesurf (service hébergé) | 524/545 | 33,43 % | 36,99 % | 80,70 % | 19,32 % | 18,25 % | 11,87 % |
 
-[Reproduire avec browser-eval](https://github.com/lexmount/browser-eval).
+[Reproduire avec browser-eval](https://github.com/lexmount/browser-eval). Commit Moli mesuré : [`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe).
 
 ### Automatisation du navigateur
 
@@ -287,9 +287,9 @@ Il s’agit d’un seul exemple de charge, pas de la distribution des ressources
 
 | Mesure | Moli | Chromium |
 | --- | ---: | ---: |
-| CDP prêt | 34.85 ms | 169.37 ms |
-| Durée active d'un épisode p50 | 33.40 ms | 57.13 ms |
-| PSS maximal | 102.46 MiB | 348.82 MiB |
+| CDP prêt | 34,85 ms | 169,37 ms |
+| Durée active d'un épisode p50 | 33,40 ms | 57,13 ms |
+| PSS maximal | 102,46 MiB | 348,82 MiB |
 | Nombre maximal de processus / threads | 1 / 24 | 11 / 123 |
 
 </details>

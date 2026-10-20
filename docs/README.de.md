@@ -243,7 +243,7 @@ Die Benchmarks messen Inhaltstreue, Automatisierungskompatibilität oder Ressour
 
 ### Web Fetch: Inhaltsextraktion auf 545 Seiten
 
-Moli extrahierte den Hauptinhalt aller 545 Testseiten und erzielte mit 39,27 % den höchsten Gesamtwert der fünf Browser, 4,27 Prozentpunkte vor Lightpanda. Auch beim Erhalt von Code lag Moli vorn: 91,06 % Ähnlichkeit, 6,35 Prozentpunkte vor dem zweitplatzierten Browser. Alle fünf Browser verarbeiteten dieselben gespeicherten HTML-Seiten. Ihre Ergebnisse wurden mit manuell erstellten Referenzen für den Hauptinhalt verglichen.
+Moli extrahierte den Hauptinhalt aller 545 Testseiten und erzielte mit 39,27 % den höchsten Gesamtwert (Mittelwert aus fünf Kennzahlen) der fünf Browser, 4,27 Prozentpunkte vor Lightpanda. Auch beim Erhalt von Code lag Moli vorn: 91,06 % Ähnlichkeit, 6,35 Prozentpunkte vor dem zweitplatzierten Browser. Alle fünf Browser verarbeiteten dieselben gespeicherten HTML-Seiten. Ihre Ergebnisse wurden mit manuell erstellten Referenzen für den Hauptinhalt verglichen.
 
 | Methode | Hauptinhalt erzeugt | Gesamt | Text | Code | Formeln | Tabelleninhalt | Tabellenstruktur |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -253,7 +253,7 @@ Moli extrahierte den Hauptinhalt aller 545 Testseiten und erzielte mit 39,27 % d
 | Chrome for Testing 154.0.8037.57 | 545/545 | 27,02 % | 39,40 % | 35,86 % | 21,12 % | **25,01 %** | 13,73 % |
 | Kitesurf (gehostet) | 524/545 | 33,43 % | 36,99 % | 80,70 % | 19,32 % | 18,25 % | 11,87 % |
 
-[Mit browser-eval reproduzieren](https://github.com/lexmount/browser-eval).
+[Mit browser-eval reproduzieren](https://github.com/lexmount/browser-eval). Gemessener Moli-Commit: [`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe).
 
 ### Browserautomatisierung
 
@@ -286,9 +286,9 @@ Dies ist eine einzelne Arbeitslast, nicht die Ressourcenverteilung aller Automat
 
 | Metrik | Moli | Chromium |
 | --- | ---: | ---: |
-| CDP bereit | 34.85 ms | 169.37 ms |
-| Aktive Episodendauer p50 | 33.40 ms | 57.13 ms |
-| PSS-Spitzenwert | 102.46 MiB | 348.82 MiB |
+| CDP bereit | 34,85 ms | 169,37 ms |
+| Aktive Episodendauer p50 | 33,40 ms | 57,13 ms |
+| PSS-Spitzenwert | 102,46 MiB | 348,82 MiB |
 | Maximale Prozesse / Threads | 1 / 24 | 11 / 123 |
 
 </details>

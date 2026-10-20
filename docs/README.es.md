@@ -244,7 +244,7 @@ Cada benchmark mide la fidelidad del contenido, la compatibilidad de la automati
 
 ### Web Fetch: extracción de contenido en 545 páginas
 
-Moli extrajo el contenido principal de las 545 páginas de prueba y obtuvo la mayor puntuación global de similitud entre los cinco navegadores: 39,27 %, 4,27 puntos porcentuales por encima de Lightpanda. También obtuvo el mejor resultado en conservación del código, con un 91,06 % de similitud, 6,35 puntos porcentuales por encima del segundo clasificado. Los cinco navegadores procesaron las mismas páginas HTML guardadas, y sus resultados se compararon con referencias del contenido principal preparadas manualmente.
+Moli extrajo el contenido principal de las 545 páginas de prueba y obtuvo la mayor puntuación global de similitud (media de cinco métricas) entre los cinco navegadores: 39,27 %, 4,27 puntos porcentuales por encima de Lightpanda. También obtuvo el mejor resultado en conservación del código, con un 91,06 % de similitud, 6,35 puntos porcentuales por encima del segundo clasificado. Los cinco navegadores procesaron las mismas páginas HTML guardadas, y sus resultados se compararon con referencias del contenido principal preparadas manualmente.
 
 | Método | Contenido principal generado | Global | Texto | Código | Fórmulas | Contenido de tablas | Estructura de tablas |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -254,7 +254,7 @@ Moli extrajo el contenido principal de las 545 páginas de prueba y obtuvo la ma
 | Chrome for Testing 154.0.8037.57 | 545/545 | 27,02 % | 39,40 % | 35,86 % | 21,12 % | **25,01 %** | 13,73 % |
 | Kitesurf (servicio alojado) | 524/545 | 33,43 % | 36,99 % | 80,70 % | 19,32 % | 18,25 % | 11,87 % |
 
-[Reproducir con browser-eval](https://github.com/lexmount/browser-eval).
+[Reproducir con browser-eval](https://github.com/lexmount/browser-eval). Commit de Moli evaluado: [`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe).
 
 ### Automatización del navegador
 
@@ -287,9 +287,9 @@ Es una sola muestra de carga de trabajo, no la distribución de recursos de toda
 
 | Métrica | Moli | Chromium |
 | --- | ---: | ---: |
-| CDP listo | 34.85 ms | 169.37 ms |
-| Tiempo activo del episodio (p50) | 33.40 ms | 57.13 ms |
-| PSS máximo | 102.46 MiB | 348.82 MiB |
+| CDP listo | 34,85 ms | 169,37 ms |
+| Tiempo activo del episodio (p50) | 33,40 ms | 57,13 ms |
+| PSS máximo | 102,46 MiB | 348,82 MiB |
 | Procesos / hilos máximos | 1 / 24 | 11 / 123 |
 
 </details>
