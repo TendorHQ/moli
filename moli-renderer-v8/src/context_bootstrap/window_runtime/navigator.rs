@@ -343,7 +343,7 @@ struct CacheRequestInfo {
     headers: Vec<(String, String)>,
 }
 
-#[derive(Debug, Default, webidl::WebIdlDictionary)]
+#[derive(Debug, webidl::WebIdlDictionary)]
 #[webidl(prefix = "CacheQueryOptions")]
 struct CacheQueryOptions {
     #[webidl(default = false)]
@@ -354,12 +354,26 @@ struct CacheQueryOptions {
     ignore_vary: bool,
 }
 
-#[derive(Default, webidl::WebIdlDictionary)]
+#[derive(webidl::WebIdlDictionary)]
 #[webidl(prefix = "MultiCacheQueryOptions")]
 struct MultiCacheQueryOptions {
     #[webidl(inherit)]
     base: CacheQueryOptions,
     cache_name: Option<String>,
+}
+
+#[derive(webidl::WebIdlArgs)]
+#[webidl(prefix = "Cache")]
+struct CacheQueryArgs {
+    #[webidl(index = 1, dictionary)]
+    options: CacheQueryOptions,
+}
+
+#[derive(webidl::WebIdlArgs)]
+#[webidl(prefix = "CacheStorage.match")]
+struct MultiCacheQueryArgs {
+    #[webidl(index = 1, dictionary)]
+    options: MultiCacheQueryOptions,
 }
 
 #[derive(WebApiObject)]
@@ -1485,7 +1499,7 @@ fn storage_bucket_cache_storage_match_callback<'s>(
             return;
         }
     };
-    let Some(options) = cache_query_options::<MultiCacheQueryOptions>(scope, &args, 1, resolver)
+    let Some(MultiCacheQueryArgs { options }) = cache_query_arguments(scope, &args, resolver)
     else {
         return;
     };
@@ -2011,7 +2025,7 @@ fn storage_bucket_cache_match_callback<'s>(
             return;
         }
     };
-    let Some(options) = cache_query_options::<CacheQueryOptions>(scope, &args, 1, resolver) else {
+    let Some(CacheQueryArgs { options }) = cache_query_arguments(scope, &args, resolver) else {
         return;
     };
     let query = storage_bucket_cache_query(request, &options);
@@ -2065,7 +2079,7 @@ fn storage_bucket_cache_match_all_callback<'s>(
             return;
         }
     };
-    let Some(options) = cache_query_options::<CacheQueryOptions>(scope, &args, 1, resolver) else {
+    let Some(CacheQueryArgs { options }) = cache_query_arguments(scope, &args, resolver) else {
         return;
     };
     let query = request.map(|request| storage_bucket_cache_query(request, &options));
@@ -2135,7 +2149,7 @@ fn storage_bucket_cache_keys_callback<'s>(
             return;
         }
     };
-    let Some(options) = cache_query_options::<CacheQueryOptions>(scope, &args, 1, resolver) else {
+    let Some(CacheQueryArgs { options }) = cache_query_arguments(scope, &args, resolver) else {
         return;
     };
     let query = request.map(|request| storage_bucket_cache_query(request, &options));
@@ -2192,7 +2206,7 @@ fn storage_bucket_cache_delete_callback<'s>(
             return;
         }
     };
-    let Some(options) = cache_query_options::<CacheQueryOptions>(scope, &args, 1, resolver) else {
+    let Some(CacheQueryArgs { options }) = cache_query_arguments(scope, &args, resolver) else {
         return;
     };
     let query = storage_bucket_cache_query(request, &options);
@@ -2851,22 +2865,17 @@ fn cache_request_info_argument<'s>(
     })
 }
 
-fn cache_query_options<'s, T>(
+fn cache_query_arguments<'s, T>(
     scope: &mut v8::PinScope<'s, '_>,
     args: &v8::FunctionCallbackArguments<'s>,
-    index: i32,
     resolver: v8::Local<'s, v8::PromiseResolver>,
 ) -> Option<T>
 where
-    T: webidl::WebIdlDictionary<'s> + Default,
+    T: webidl::WebIdlArguments<'s>,
 {
     v8::tc_scope!(let scope, scope);
-    match webidl::parse_dictionary::<T>(
-        scope,
-        args.get(index),
-        webidl::Context::argument("Cache", (index + 1) as usize),
-    ) {
-        Ok(options) => Some(options.unwrap_or_default()),
+    match webidl::try_parse_args::<T>(scope, args) {
+        Ok(arguments) => Some(arguments),
         Err(error) => {
             webidl::throw_error(scope, &error);
             let exception = scope
