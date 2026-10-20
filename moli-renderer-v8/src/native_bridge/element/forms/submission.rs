@@ -1,5 +1,6 @@
 use super::*;
 use crate::blob;
+use crate::context_bootstrap::sandbox_blocks_ancestor_or_top_navigation_from_source;
 use crate::native_bridge::context_host::ChildBrowsingContextNavigationRequest;
 use crate::native_bridge::element::activation::{
     SpecialBrowsingContextTarget, browsing_context_window_for_dispatch_scope,
@@ -621,11 +622,22 @@ pub(in crate::native_bridge) fn submit_form_default_action(
     let source_popup = source_document.and_then(|document| {
         unsafe { &*runtime_ptr }.lightweight_popup_id_for_document_handle(document)
     });
+    // Capture the form Document's authority before formdata can replace its
+    // frame. Both methods must stop before navigation events or seed updates.
+    let sandbox_blocks_navigation = form_sandbox_blocks_target_navigation(
+        scope,
+        runtime_ptr,
+        source_document,
+        target_name.as_deref(),
+    );
     let Some(request) =
         build_form_submission_request(scope, runtime_ptr, form_handle, submitter, action)
     else {
         return false;
     };
+    if sandbox_blocks_navigation {
+        return true;
+    }
 
     let special_target = target_name
         .as_deref()
@@ -783,6 +795,35 @@ pub(in crate::native_bridge) fn submit_form_default_action(
             }
         },
     }
+}
+
+fn form_sandbox_blocks_target_navigation(
+    scope: &mut v8::PinScope<'_, '_>,
+    runtime_ptr: *mut JsContextHost,
+    source_document: Option<DomHandle>,
+    target_name: Option<&str>,
+) -> bool {
+    let target = source_document.and_then(|document| {
+        let runtime = unsafe { &*runtime_ptr };
+        let source_frame = runtime.child_browsing_context_host_for_document_handle(document)?;
+        let target_document = form_navigation_target_document(runtime, document, target_name)?;
+        let target_scope = if target_document == runtime.document_handle() {
+            crate::native_bridge::OwnerDispatchScope::Top
+        } else {
+            crate::native_bridge::OwnerDispatchScope::Child(
+                runtime.child_browsing_context_host_for_document_handle(target_document)?,
+            )
+        };
+        Some((source_frame, target_scope))
+    });
+    let Some((source_frame, target_scope)) = target else {
+        return false;
+    };
+    let Some(window) = browsing_context_window_for_dispatch_scope(scope, runtime_ptr, target_scope)
+    else {
+        return true;
+    };
+    sandbox_blocks_ancestor_or_top_navigation_from_source(scope, source_frame, window)
 }
 
 fn submit_dialog_form(
