@@ -765,7 +765,7 @@ async fn spawn_profiled_test_protocol_server_with_cookie_profile(
     )
     .expect("profiled app state should initialize");
     let server = tokio::spawn(async move {
-        axum::serve(listener, build_router(state))
+        serve_listener(listener, state)
             .await
             .expect("profiled test protocol server should serve");
     });
