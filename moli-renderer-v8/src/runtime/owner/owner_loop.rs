@@ -52,7 +52,10 @@ impl RendererOwnerHandle {
                         }
                     }
                     while let Ok(envelope) = rx.try_recv() {
-                        if let RenderRuntimeEnvelope::Command { command, reply_tx } = envelope {
+                        if let RenderRuntimeEnvelope::Command {
+                            command, reply_tx, ..
+                        } = envelope
+                        {
                             self.release_rejected_command_output_reservation(&command);
                             let _ = reply_tx.send(Err(anyhow!(
                                 "renderer browser context was dropped before command dispatch"
@@ -189,9 +192,11 @@ impl RendererOwnerHandle {
                         continue;
                     }
                     let completed_page_turn_token = pending_turn.page_owner_token();
-                    let outcome = self
-                        .run_pending_turn_on_owner_local_store(pending_turn.turn)
-                        .await;
+                    let outcome = moli_trace::diagnostic_future(
+                        "renderer_turn_dispatch",
+                        self.run_pending_turn_on_owner_local_store(pending_turn.turn),
+                    )
+                    .await;
                     let parser_continuation_admitted = matches!(
                         &outcome,
                         RenderRuntimeDispatchOutcome::PageTurnComplete {
@@ -525,7 +530,21 @@ impl RendererOwnerHandle {
         parked_turns: &mut VecDeque<RenderRuntimeParkedTurn>,
     ) {
         let (command, reply_tx) = match envelope {
-            RenderRuntimeEnvelope::Command { command, reply_tx } => (*command, reply_tx),
+            RenderRuntimeEnvelope::Command {
+                command,
+                reply_tx,
+                diagnostic_queued_at,
+            } => {
+                moli_trace::diagnostic_event(
+                    "renderer_command_dequeued",
+                    format_args!(
+                        "kind={:?} queue_us={:?}",
+                        command.diagnostic_name(),
+                        diagnostic_queued_at.map(|at| at.elapsed().as_micros())
+                    ),
+                );
+                (*command, reply_tx)
+            }
             RenderRuntimeEnvelope::InspectorMainReceiverWake(wake) => {
                 Self::enqueue_inspector_main_receiver_wake(wake, pending_turns);
                 return;
@@ -559,7 +578,8 @@ impl RendererOwnerHandle {
                 .and_then(renderer_output_fence_for_tail_on_bound_owner_local_store);
         let command_future =
             Box::pin(self.dispatch_command_inline_on_owner_local_store(command, owner_local_store));
-        let outcome = command_future.await;
+        let outcome =
+            moli_trace::diagnostic_future("renderer_command_dispatch", command_future).await;
         if self.context_shutdown_started() {
             self.cancel_dispatch_outcome_for_context_shutdown(outcome);
             let _ = reply_tx.send(Err(anyhow!(
@@ -760,6 +780,10 @@ impl RendererOwnerHandle {
         &self,
         turn: RenderRuntimeTurn,
     ) -> RenderRuntimeDispatchOutcome {
+        let _diagnostic_span = moli_trace::DiagnosticSpan::new(
+            "renderer_pending_turn",
+            format_args!("kind={:?}", turn.diagnostic_name()),
+        );
         // Keep large navigation futures out of this shared dispatcher's state machine.
         match turn {
             RenderRuntimeTurn::FinishHtmlCreatePage {

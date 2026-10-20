@@ -514,6 +514,14 @@ impl Browser {
         let stage = wait_until.base_stage();
 
         let raw_url = request.url.as_str().to_owned();
+        let _diagnostic_span = moli_trace::DiagnosticSpan::new(
+            "fetch_base_stage",
+            format_args!(
+                "url={raw_url:?} wait_until={wait_until:?} stage={stage:?} budget_ms={} remaining_us={}",
+                timeout.as_millis(),
+                deadline.remaining().as_micros()
+            ),
+        );
         debug!(
             url = %raw_url,
             wait_until = ?wait_until,
@@ -825,6 +833,14 @@ impl Browser {
 
         let loader = self.resource_request_client();
         let remaining = deadline.remaining();
+        let _diagnostic_span = moli_trace::DiagnosticSpan::new(
+            "best_effort_readiness",
+            format_args!(
+                "page_id={} wait_until={wait_until:?} remaining_us={}",
+                page.page_id(),
+                remaining.as_micros()
+            ),
+        );
         let result = match wait_until {
             RenderedDomWaitUntil::NetworkIdle => {
                 tokio::time::timeout_at(
@@ -1104,8 +1120,32 @@ impl Browser {
         F: std::future::Future<Output = Result<T>>,
         P: FnOnce() -> FetchTimeoutPhase,
     {
-        match tokio::time::timeout_at(deadline, future).await {
-            Ok(result) => result,
+        let _diagnostic_span = moli_trace::DiagnosticSpan::new(
+            "fetch_operation",
+            format_args!(
+                "url={raw_url:?} stage={stage:?} budget_ms={} remaining_us={}",
+                timeout.as_millis(),
+                deadline
+                    .saturating_duration_since(tokio::time::Instant::now())
+                    .as_micros()
+            ),
+        );
+        match moli_trace::diagnostic_future(
+            "fetch_timer",
+            tokio::time::timeout_at(
+                deadline,
+                moli_trace::diagnostic_future("fetch_operation_inner", future),
+            ),
+        )
+        .await
+        {
+            Ok(result) => {
+                moli_trace::diagnostic_event(
+                    "fetch_operation_result",
+                    format_args!("url={raw_url:?} ok={}", result.is_ok()),
+                );
+                result
+            }
             Err(_) => Err(self.fetch_document_wait_timeout_error(
                 raw_url,
                 wait_until,
@@ -1124,6 +1164,13 @@ impl Browser {
         stage: PageVmInitStage,
         phase: FetchTimeoutPhase,
     ) -> anyhow::Error {
+        moli_trace::diagnostic_event(
+            "fetch_timeout",
+            format_args!(
+                "url={raw_url:?} wait_until={wait_until:?} stage={stage:?} phase={phase:?} budget_ms={}",
+                timeout.as_millis()
+            ),
+        );
         warn!(
             url = %raw_url,
             wait_until = ?wait_until,

@@ -3,10 +3,12 @@
 //! These flags are intentionally process-global and cached after first read:
 //! they are diagnostics controls, not dynamic runtime configuration.
 
+mod diagnostics;
 mod dom_binding;
 mod flags;
 mod promise_hook;
 
+pub use diagnostics::{DiagnosticSpan, diagnostic_event, diagnostic_future, diagnostics_enabled};
 pub use dom_binding::{
     DomBindingOperationStats, record_dom_binding_operation, take_dom_binding_operation_stats,
 };

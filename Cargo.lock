@@ -2735,6 +2735,7 @@ dependencies = [
  "moli-storage-key",
  "moli-storage-service",
  "moli-test-support",
+ "moli-trace",
  "moli-url",
  "moli-web-mime",
  "moli-wpt-compat",
@@ -3527,6 +3528,9 @@ dependencies = [
 [[package]]
 name = "moli-trace"
 version = "0.1.0"
+dependencies = [
+ "parking_lot",
+]
 
 [[package]]
 name = "moli-url"

@@ -796,6 +796,16 @@ async fn runtime_inserted_stylesheet_load_mutation_syncs_back_into_parser_before
         .fetch(&server.url("/compat/runtime-inserted-stylesheet-load-syncs-parser-snapshot"))
         .await?;
 
+    moli_trace::diagnostic_event(
+        "stylesheet_snapshot_result",
+        format_args!(
+            "order={:?} marker={:?} late={:?} dcl={:?}",
+            diagnostic_global(&page, "runtimeInsertedStyleSnapshotFinalOrder"),
+            diagnostic_global(&page, "runtimeInsertedStyleSnapshotSawMarker"),
+            diagnostic_global(&page, "runtimeInsertedStyleSnapshotSawLate"),
+            diagnostic_global(&page, "runtimeInsertedStyleSnapshotParserSawDcl")
+        ),
+    );
     assert_eq!(
         diagnostic_global(&page, "runtimeInsertedStyleSnapshotSawMarker"),
         Some(&JsValueSnapshot::Bool(true))

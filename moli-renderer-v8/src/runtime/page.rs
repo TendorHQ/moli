@@ -199,10 +199,13 @@ impl JsRuntime {
     fn initialize_with_browser_context_runtime_inner(
         browser_context_runtime: RendererBrowserContextRuntime,
     ) -> Self {
+        let diagnostic_init_span =
+            moli_trace::DiagnosticSpan::new("v8_process_initialize", format_args!(""));
         moli_v8_init::ensure_v8_initialized_with_flags(
             Some(crate::v8_platform::initialization_flags()),
             crate::v8_platform::create_platform,
         );
+        drop(diagnostic_init_span);
 
         let local_executor = JsLocalExecutor::new();
         let next_page_id = Arc::new(AtomicU64::new(1));

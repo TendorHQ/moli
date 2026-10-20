@@ -51,6 +51,17 @@ impl ConcurrentParseTimeRuntime {
     }
 
     pub(super) async fn drive_owner_step(&mut self) -> Result<OwnerStepProgress> {
+        let _diagnostic_span = moli_trace::DiagnosticSpan::new(
+            "parser_owner_step",
+            format_args!(
+                "url={:?} owner={:?} input_closed={} parser_step_ready={} pending={:?}",
+                self.state.final_url.as_str(),
+                self.owner,
+                self.state.input_closed,
+                self.parser_step_ready,
+                self.pending_parsing_blocking_wait
+            ),
+        );
         let parser_continuation_admitted = self.admit_selected_main_parser_continuation();
         if parser_continuation_admitted {
             // A selected continuation is the sole authority for resuming all

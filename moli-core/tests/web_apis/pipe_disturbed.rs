@@ -76,15 +76,20 @@ pub(super) async fn run_probe(
     } else {
         url
     };
-    let mut page = browser.fetch(&url).await?;
+    let mut page =
+        moli_trace::diagnostic_future("web_api_probe_fetch", browser.fetch(&url)).await?;
+    moli_trace::diagnostic_event("web_api_probe_fetched", format_args!("target={target}"));
     let expression = if target == "child" {
         "document.getElementById('target').contentWindow.done.then(JSON.stringify)"
     } else {
         "done.then(JSON.stringify)"
     };
-    let value = page
-        .evaluate_runtime_expression_with_await_async(expression, true)
-        .await?;
+    let value = moli_trace::diagnostic_future(
+        "web_api_probe_await",
+        page.evaluate_runtime_expression_with_await_async(expression, true),
+    )
+    .await?;
+    moli_trace::diagnostic_event("web_api_probe_result", format_args!("target={target}"));
     Ok(serde_json::from_str(
         value["value"].as_str().expect("callback probe result"),
     )?)

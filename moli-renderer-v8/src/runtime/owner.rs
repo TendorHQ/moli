@@ -296,6 +296,44 @@ pub enum RendererOwnerCommand {
     TestingDeferredPageVmDropPendingCount,
 }
 
+impl RendererOwnerCommand {
+    pub(crate) fn diagnostic_name(&self) -> &'static str {
+        match self {
+            Self::ReleaseCapturedDocumentEnvironment { .. } => "ReleaseCapturedDocumentEnvironment",
+            Self::CreateHtmlPage(..) => "CreateHtmlPage",
+            Self::CancelPendingAuxiliaryPage { .. } => "CancelPendingAuxiliaryPage",
+            Self::ReserveLivePageReplacement(..) => "ReserveLivePageReplacement",
+            Self::CancelLivePageReplacementReservation { .. } => {
+                "CancelLivePageReplacementReservation"
+            }
+            Self::PrepareStreamingRawDocument { .. } => "PrepareStreamingRawDocument",
+            Self::UpdatePreparedRendererDocumentCommitConfiguration { .. } => {
+                "UpdatePreparedRendererDocumentCommitConfiguration"
+            }
+            Self::CommitPreparedRendererDocument { .. } => "CommitPreparedRendererDocument",
+            Self::CommitPreparedPageReplacement { .. } => "CommitPreparedPageReplacement",
+            Self::CancelPreparedRendererDocument { .. } => "CancelPreparedRendererDocument",
+            Self::RunAsyncPageCommand { .. } => "RunAsyncPageCommand",
+            Self::RunProtocolPageCommand { .. } => "RunProtocolPageCommand",
+            Self::FinalizeRuntimeInspectorSessionDetach { .. } => {
+                "FinalizeRuntimeInspectorSessionDetach"
+            }
+            Self::WaitForNetworkIdle { .. } => "WaitForNetworkIdle",
+            Self::WaitForDomStable { .. } => "WaitForDomStable",
+            Self::RemovePage { .. } => "RemovePage",
+            Self::TestingCurrentPageState { .. } => "TestingCurrentPageState",
+            Self::TestingRendererPageView { .. } => "TestingRendererPageView",
+            Self::TestingOwnerSlot { .. } => "TestingOwnerSlot",
+            Self::TestingHostInstanceKey { .. } => "TestingHostInstanceKey",
+            Self::TestingHostUniqueDocumentIsolateCount { .. } => {
+                "TestingHostUniqueDocumentIsolateCount"
+            }
+            #[cfg(test)]
+            Self::TestingDeferredPageVmDropPendingCount => "TestingDeferredPageVmDropPendingCount",
+        }
+    }
+}
+
 pub enum RendererOwnerReply {
     CapturedDocumentEnvironmentReleased,
     PageCreated(Box<RendererAttachedPage>),
@@ -811,6 +849,48 @@ enum RenderRuntimeTurn {
 }
 
 impl RenderRuntimeTurn {
+    fn diagnostic_name(&self) -> &'static str {
+        match self {
+            Self::FinishHtmlCreatePage { .. } => "FinishHtmlCreatePage",
+            Self::ContinueAttachedPageCreationLifecycle { .. } => {
+                "ContinueAttachedPageCreationLifecycle"
+            }
+            Self::DrainSharedWorkerServiceLane => "DrainSharedWorkerServiceLane",
+            Self::DrainServiceWorkerServiceLane => "DrainServiceWorkerServiceLane",
+            Self::RunPageTurn { .. } => "RunPageTurn",
+            Self::RunOwnerMaintenance { .. } => "RunOwnerMaintenance",
+            Self::RunInspectorMainReceiver { .. } => "RunInspectorMainReceiver",
+            Self::RunDevToolsMainCommand { .. } => "RunDevToolsMainCommand",
+            Self::RunLivePageCommand { .. } => "RunLivePageCommand",
+            Self::ContinueLivePageRuntimeCommandLifecycle { .. } => {
+                "ContinueLivePageRuntimeCommandLifecycle"
+            }
+            Self::ResumeLivePageDocumentLifecycleAfterReply { .. } => {
+                "ResumeLivePageDocumentLifecycleAfterReply"
+            }
+            Self::WaitLivePageNetworkIdle { .. } => "WaitLivePageNetworkIdle",
+            Self::WaitLivePageDomStable { .. } => "WaitLivePageDomStable",
+            Self::WaitLifecycleNavigation(..) => "WaitLifecycleNavigation",
+            Self::WaitLivePageSelector { .. } => "WaitLivePageSelector",
+            Self::WaitLivePageScriptTruthy { .. } => "WaitLivePageScriptTruthy",
+            Self::WaitLivePageRuntimeExpressionAwait { .. } => "WaitLivePageRuntimeExpressionAwait",
+            Self::WaitLivePageSubresourceResponse { .. } => "WaitLivePageSubresourceResponse",
+            Self::WaitLivePageChildFrameLifecycle { .. } => "WaitLivePageChildFrameLifecycle",
+            Self::ClaimLivePageTopLevelNavigationHandoff { .. } => {
+                "ClaimLivePageTopLevelNavigationHandoff"
+            }
+            Self::FollowLivePagePendingLocationNavigation { .. } => {
+                "FollowLivePagePendingLocationNavigation"
+            }
+            Self::ContinueLivePagePendingLocationNavigationPhaseOne { .. } => {
+                "ContinueLivePagePendingLocationNavigationPhaseOne"
+            }
+            Self::ContinueLivePageNavigationPostParseLifecycle { .. } => {
+                "ContinueLivePageNavigationPostParseLifecycle"
+            }
+        }
+    }
+
     fn page_turn_should_yield_to_ready_command(&self) -> bool {
         !matches!(
             self,

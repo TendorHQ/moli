@@ -180,6 +180,15 @@ impl RendererOwnerHandle {
             self.detach_navigation_or_cancel_pending_turn(turn, pending_turns);
             return;
         }
+        moli_trace::diagnostic_event(
+            "renderer_turn_parked",
+            format_args!(
+                "page={wake_token:?} kind={:?} condition={condition:?} ready_in_us={:?} parked_count={}",
+                turn.diagnostic_name(),
+                ready_at.map(|at| at.saturating_duration_since(Instant::now()).as_micros()),
+                parked_turns.len()
+            ),
+        );
         parked_turns.push_back(RenderRuntimeParkedTurn {
             reply_tx,
             turn,
@@ -254,6 +263,10 @@ impl RendererOwnerHandle {
         parked_turns: &mut VecDeque<RenderRuntimeParkedTurn>,
         pending_turns: &mut RenderRuntimePendingTurnQueue,
     ) {
+        moli_trace::diagnostic_event(
+            "renderer_owner_wake",
+            format_args!("wake={wake:?} parked_count={}", parked_turns.len()),
+        );
         match wake {
             RendererOwnerWake::Page { token, source } => {
                 if parked_turns.iter().any(|turn| {

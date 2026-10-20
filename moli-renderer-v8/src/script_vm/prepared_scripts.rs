@@ -30,6 +30,16 @@ impl ScriptVm {
             >,
         >,
     ) -> std::result::Result<Option<PreparedScriptRunInput>, PreparedScriptExecutionError> {
+        let _diagnostic_span = moli_trace::DiagnosticSpan::new(
+            "script_prepare",
+            format_args!(
+                "url={:?} kind={:?} mode={:?} source_kind={:?} wait_stylesheets={wait_for_blocking_stylesheets}",
+                script.url.as_str(),
+                script.kind,
+                script.mode,
+                script.source_kind
+            ),
+        );
         if !self.prepared_script_is_live_for_execution(script) {
             return Ok(None);
         }
@@ -497,6 +507,17 @@ impl ScriptVm {
             None
         };
         let source = inline_source.as_deref().unwrap_or(source);
+        let _diagnostic_span = moli_trace::DiagnosticSpan::new(
+            "script_execute",
+            format_args!(
+                "url={:?} kind={:?} mode={:?} source_kind={:?} bytes={}",
+                script.url.as_str(),
+                script.kind,
+                script.mode,
+                script.source_kind,
+                source.len()
+            ),
+        );
         let selector_before = self.document_runtime.selector_debug_snapshot();
         let started = Instant::now();
         debug!(url = %script.url, "execute_prepared_script_once executing source");

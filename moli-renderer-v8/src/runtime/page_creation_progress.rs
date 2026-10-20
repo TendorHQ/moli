@@ -43,6 +43,10 @@ pub struct RendererPageCreationProgress {
 
 impl RendererPageCreationProgress {
     pub fn new() -> Self {
+        moli_trace::diagnostic_event(
+            "page_creation_progress_new",
+            format_args!("phase=StreamingMainBody"),
+        );
         Self {
             phase: Arc::new(AtomicU8::new(
                 RendererPageCreationPhase::StreamingMainBody as u8,
@@ -55,7 +59,21 @@ impl RendererPageCreationProgress {
     }
 
     pub(crate) fn set_phase(&self, phase: RendererPageCreationPhase) {
-        self.phase.store(phase as u8, Ordering::Relaxed);
+        if !moli_trace::diagnostics_enabled() {
+            self.phase.store(phase as u8, Ordering::Relaxed);
+            return;
+        }
+        let previous = self.phase.swap(phase as u8, Ordering::Relaxed);
+        if previous != phase as u8 {
+            moli_trace::diagnostic_event(
+                "page_creation_phase",
+                format_args!(
+                    "progress={:p} from={:?} to={phase:?}",
+                    Arc::as_ptr(&self.phase),
+                    RendererPageCreationPhase::from_u8(previous)
+                ),
+            );
+        }
     }
 }
 

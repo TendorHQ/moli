@@ -71,6 +71,10 @@ async fn indexed_db_queries_snapshot_arguments_and_delete_key_ranges() -> Result
     let browser = Browser::new(AppConfig::default())?;
     let fixture = include_str!("fixtures/indexeddb-query-snapshots.js");
     for target in ["window", "child", "worker"] {
+        let _diagnostic_span = moli_trace::DiagnosticSpan::new(
+            "indexeddb_snapshot_probe",
+            format_args!("target={target}"),
+        );
         let source = format!(
             "{fixture}\nquerySnapshotProbe('query-snapshots-{target}').then(finish, error => finish({{state: 'error', error: String(error), checks: queryChecks}}));"
         );

@@ -115,6 +115,10 @@ impl FetchDeadline {
                     timeout.as_millis()
                 )
             })?;
+        moli_trace::diagnostic_event(
+            "deadline_new",
+            format_args!("budget_ms={}", timeout.as_millis()),
+        );
         Ok(Self { timeout, at })
     }
 
@@ -137,14 +141,42 @@ impl FetchDeadline {
     where
         F: Future<Output = Result<T>>,
     {
+        let _span = moli_trace::DiagnosticSpan::new(
+            "deadline_wait",
+            format_args!(
+                "phase={phase:?} budget_ms={} remaining_us={}",
+                self.timeout.as_millis(),
+                self.remaining().as_micros()
+            ),
+        );
         // Tokio polls the inner future first. A result queued after the deadline
         // must not replace the typed timeout when both are ready on the next poll.
-        match tokio::time::timeout_at(self.at, future).await {
+        match moli_trace::diagnostic_future(
+            "deadline_timer",
+            tokio::time::timeout_at(
+                self.at,
+                moli_trace::diagnostic_future("deadline_operation", future),
+            ),
+        )
+        .await
+        {
             Ok(result) if tokio::time::Instant::now() < self.at => result,
-            _ => Err(anyhow::Error::new(FetchReadinessTimeout::new(
-                self.timeout,
-                phase,
-            ))),
+            _ => {
+                moli_trace::diagnostic_event(
+                    "deadline_expired",
+                    format_args!(
+                        "phase={phase:?} budget_ms={} overdue_us={}",
+                        self.timeout.as_millis(),
+                        tokio::time::Instant::now()
+                            .saturating_duration_since(self.at)
+                            .as_micros()
+                    ),
+                );
+                Err(anyhow::Error::new(FetchReadinessTimeout::new(
+                    self.timeout,
+                    phase,
+                )))
+            }
         }
     }
 }

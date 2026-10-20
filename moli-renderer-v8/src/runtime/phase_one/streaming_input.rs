@@ -28,12 +28,24 @@ impl StreamingDocumentInputSender {
     }
 
     async fn send(&self, event: StreamingDocumentInputEvent) -> bool {
+        let _diagnostic_span = moli_trace::DiagnosticSpan::new(
+            "main_body_deliver",
+            format_args!(
+                "event={}",
+                match &event {
+                    StreamingDocumentInputEvent::Chunks(_) => "chunks",
+                    StreamingDocumentInputEvent::Finished(_) => "terminal",
+                }
+            ),
+        );
         if self.tx.send(event).await.is_err() {
             return false;
         }
         // The payload is resident before the owner is notified. A merged or
         // delayed wake therefore cannot lose parser input.
-        self.parser_continuation.request().is_ok()
+        let result = self.parser_continuation.request().is_ok();
+        moli_trace::diagnostic_event("main_body_owner_notified", format_args!("ok={result}"));
+        result
     }
 }
 
@@ -91,7 +103,19 @@ impl StreamingDocumentInputSource {
 
     pub(super) fn try_next(&mut self) -> Result<Option<StreamingDocumentInputEvent>> {
         match self.rx.try_recv() {
-            Ok(event) => Ok(Some(event)),
+            Ok(event) => {
+                moli_trace::diagnostic_event(
+                    "main_body_consumed",
+                    format_args!(
+                        "event={}",
+                        match &event {
+                            StreamingDocumentInputEvent::Chunks(_) => "chunks",
+                            StreamingDocumentInputEvent::Finished(_) => "terminal",
+                        }
+                    ),
+                );
+                Ok(Some(event))
+            }
             Err(mpsc::error::TryRecvError::Empty) => Ok(None),
             Err(mpsc::error::TryRecvError::Disconnected) => Err(anyhow!(
                 "streaming main-Document input producer exited without a terminal event"

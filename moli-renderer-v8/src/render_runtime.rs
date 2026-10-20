@@ -25,6 +25,7 @@ pub(crate) enum RenderRuntimeEnvelope {
     Command {
         command: Box<RendererOwnerCommand>,
         reply_tx: oneshot::Sender<Result<RendererOwnerReply>>,
+        diagnostic_queued_at: Option<std::time::Instant>,
     },
     InspectorMainReceiverWake(RendererInspectorMainOwnerWake),
 }
@@ -108,6 +109,8 @@ impl RenderRuntimeOwner {
             .name("render_runtime".to_owned())
             .stack_size(RENDER_RUNTIME_STACK_SIZE_BYTES)
             .spawn(move || {
+                let _diagnostic_span =
+                    moli_trace::DiagnosticSpan::new("renderer_thread", format_args!(""));
                 let mut runtime_builder = tokio::runtime::Builder::new_current_thread();
                 runtime_builder
                     .max_blocking_threads(
@@ -195,6 +198,10 @@ impl RenderRuntimeHandle {
             });
         };
         let (reply_tx, reply_rx) = oneshot::channel();
+        let _diagnostic_span = moli_trace::DiagnosticSpan::new(
+            "renderer_command_enqueue",
+            format_args!("kind={:?}", command.diagnostic_name()),
+        );
         let admission = state.admission.lock();
         if admission.terminal {
             return Err(RenderRuntimeEnqueueError {
@@ -205,6 +212,7 @@ impl RenderRuntimeHandle {
         if let Err(error) = admission.tx.send(RenderRuntimeEnvelope::Command {
             command: Box::new(command),
             reply_tx,
+            diagnostic_queued_at: moli_trace::diagnostics_enabled().then(std::time::Instant::now),
         }) {
             let RenderRuntimeEnvelope::Command { command, .. } = error.0 else {
                 unreachable!("command admission must recover the command envelope it sent")

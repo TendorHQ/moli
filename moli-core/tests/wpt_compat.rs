@@ -1475,6 +1475,8 @@ fn wpt_async_runtime() -> &'static tokio::runtime::Runtime {
 }
 
 async fn run_selected_wpt_case(case_id: &str) -> Result<Option<WptSuiteReport>> {
+    let _diagnostic_span =
+        moli_trace::DiagnosticSpan::new("wpt_case", format_args!("case={case_id:?}"));
     let server = WptFixtureServer::spawn().await?;
     let report = wpt_support::run_selected_case(&server, case_id).await;
     server.shutdown().await;
@@ -1482,6 +1484,8 @@ async fn run_selected_wpt_case(case_id: &str) -> Result<Option<WptSuiteReport>> 
 }
 
 async fn run_exact_wpt_case(case_id: &str) -> Result<Option<WptSuiteReport>> {
+    let _diagnostic_span =
+        moli_trace::DiagnosticSpan::new("wpt_case_exact", format_args!("case={case_id:?}"));
     let server = WptFixtureServer::spawn().await?;
     let report = wpt_support::run_exact_case(&server, case_id).await;
     server.shutdown().await;

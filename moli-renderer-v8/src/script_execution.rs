@@ -5,6 +5,7 @@ pub(crate) fn execute_compiled_script<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     script: v8::Local<'_, v8::Script>,
 ) -> Option<v8::Local<'s, v8::Value>> {
+    let _diagnostic_span = moli_trace::DiagnosticSpan::new("v8_script_run", format_args!(""));
     run(scope, |scope| script.run(scope))
 }
 
@@ -12,6 +13,7 @@ pub(crate) fn evaluate_module<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     module: v8::Local<'_, v8::Module>,
 ) -> Option<v8::Local<'s, v8::Value>> {
+    let _diagnostic_span = moli_trace::DiagnosticSpan::new("v8_module_evaluate", format_args!(""));
     run(scope, |scope| module.evaluate(scope))
 }
 

@@ -930,6 +930,8 @@ impl RendererDocumentIsolateHolder {
         foreground_wake: V8ForegroundTaskWake,
         devtools_target_shutdown_registry: Option<&RendererDevToolsTargetShutdownRegistry>,
     ) -> Result<(Self, NativeBridgeBindings)> {
+        let _diagnostic_span =
+            moli_trace::DiagnosticSpan::new("document_isolate_create", format_args!(""));
         let foreground_router = foreground_wake.page_router();
         let timing_enabled = moli_trace::cdp_nav_timing_enabled();
         let total_start = timing_enabled.then(std::time::Instant::now);
@@ -938,7 +940,10 @@ impl RendererDocumentIsolateHolder {
         // Window agents must not block their event loop with Atomics.wait().
         // Blink configures its main-thread isolates the same way; dedicated
         // workers keep V8's default and may use the blocking operation.
+        let diagnostic_isolate_span =
+            moli_trace::DiagnosticSpan::new("v8_isolate_new", format_args!(""));
         let mut isolate = v8::Isolate::new(v8::CreateParams::default().allow_atomics_wait(false));
+        drop(diagnostic_isolate_span);
         if timing_enabled {
             tracing::info!(
                 target: "moli_cdp_nav_timing",
@@ -1004,7 +1009,10 @@ impl RendererDocumentIsolateHolder {
             let scope = &mut scope.init();
 
             let bootstrap_start = timing_enabled.then(std::time::Instant::now);
+            let diagnostic_bootstrap_span =
+                moli_trace::DiagnosticSpan::new("isolate_bootstrap", format_args!(""));
             isolate_bootstrap = IsolateBootstrapCache::build(scope)?;
+            drop(diagnostic_bootstrap_span);
             if timing_enabled {
                 tracing::info!(
                     target: "moli_cdp_nav_timing",
