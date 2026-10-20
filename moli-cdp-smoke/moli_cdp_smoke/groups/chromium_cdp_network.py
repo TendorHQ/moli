@@ -1510,11 +1510,15 @@ async def _verify_failed_main_document_request_extra_info_on_session(
         1,
         "failed Document loadingFailed count",
     )
-    assert_equal(
-        state.fixture_server.request_count(route),
-        1 if is_moli_browser() else 2,
-        "failed Document fixture request count",
-    )
+    # Chromium may retry a reset on a reused/preconnected socket. Whether the
+    # navigation uses that socket depends on timing, so both counts are valid.
+    fixture_request_count = state.fixture_server.request_count(route)
+    expected_counts = (1,) if is_moli_browser() else (1, 2)
+    if fixture_request_count not in expected_counts:
+        raise SmokeError(
+            "failed Document fixture request count: "
+            f"expected one of {expected_counts}, got {fixture_request_count}"
+        )
     loading_failed = next(
         event for event in request_events if event.get("method") == "Network.loadingFailed"
     )
@@ -1545,7 +1549,10 @@ async def _verify_failed_main_document_request_extra_info_on_session(
         raise SmokeError(
             f"failed Document request ExtraInfo missing transport Accept-Encoding: {request_headers}"
         )
-    state.record("chromium_failed_main_document_request_extra_info_sample")
+    state.record(
+        "chromium_failed_main_document_request_extra_info_sample",
+        {"fixtureRequestCount": fixture_request_count},
+    )
 
 async def _verify_chromium_redirect_then_failed_main_document_extra_info_sample(
     state: SmokeState,

@@ -97,6 +97,26 @@ counters delivered together. Run
 `--browser chromium --group network --group browser-semantics --repeat 20 --jobs 4`
 to exercise both groups with fresh browser processes.
 
+The reset-before-response navigation was calibrated on 2026-10-21 with the same
+pinned Chrome for Testing 145.0.7632.6. A probe calling
+`_verify_failed_main_document_request_extra_info_on_session` on fresh pages
+observed one fixture request in 3 of 20 navigations and two requests in the other
+17. NetLog showed an internal transport retry only in the two-request case;
+both paths exposed one CDP request, one request ExtraInfo, and one
+`loadingFailed` with `net::ERR_CONNECTION_RESET`, without response events.
+Waiting another 500 ms did not change either fixture count. With four CPU cores
+and four workers, the original `chromium-cdp` group failed its fixed two-request
+assertion in 5 of 20 runs. The equivalent probe on Moli 1.1.18 observed exactly
+one fixture request in all 10 runs. The scenario accepts one or two transport
+requests on Chromium, requires one on Moli, and records `fixtureRequestCount`
+while keeping the CDP event and error assertions strict. From the repository
+root, exercise the scheduling-sensitive case with:
+
+```bash
+taskset -c 0-3 uv run --project moli-cdp-smoke --no-sync moli-cdp-smoke \
+  --browser chromium --group chromium-cdp --repeat 20 --jobs 4
+```
+
 The default `cdp-ordering` group locks down Renderer native and Inspector wire
 publication order. It pipelines Page trees/layout, DOMSnapshot, DOM queries and
 objects, CSS, AX, and a native backend error before `Runtime.enable`; stylesheet
