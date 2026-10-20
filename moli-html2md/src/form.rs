@@ -46,5 +46,5 @@ pub(crate) fn textarea_text<'a, D: Dom + ?Sized>(
     dom: &'a D,
     node: D::NodeId,
 ) -> Option<Cow<'a, str>> {
-    dom.attribute(node, "value").map(Cow::Borrowed)
+    dom.control_value(node).map(Cow::Borrowed)
 }
