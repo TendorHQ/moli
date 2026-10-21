@@ -181,6 +181,7 @@ content-security-policy/media-src/media-src-blocked-blob-url.html
 content-security-policy/media-src/media-src-blocked-data-url.html
 content-security-policy/meta/meta-img-src.html
 content-security-policy/meta/meta-modified.html
+content-security-policy/meta/sandbox-iframe.html
 content-security-policy/navigation/to-javascript-parent-initiated-check-csp-order.html
 content-security-policy/navigation/to-javascript-parent-initiated-child-csp.html
 content-security-policy/navigation/to-javascript-url-frame-src.html
@@ -3305,6 +3306,7 @@ css/cssom-view/pt-to-px-width.html
 css/cssom-view/range-bounding-client-rect-with-display-contents.html
 css/cssom-view/resize-event-on-initial-layout-001.html
 css/cssom-view/resize-event-on-initial-layout-002.html
+css/cssom-view/screen-detached-frame.html
 css/cssom-view/screenLeftTop.html
 css/cssom-view/scroll-back-to-initial-position.html
 css/cssom-view/scroll-behavior-smooth-positions.html
@@ -4107,8 +4109,6 @@ dom/nodes/Node-removeChild.html
 dom/nodes/Node-replaceChild.html
 dom/nodes/Node-textContent.html
 dom/nodes/NodeList-Iterable.html
-dom/nodes/NodeList-static-length-getter-tampered-1.html
-dom/nodes/NodeList-static-length-getter-tampered-2.html
 dom/nodes/NodeList-static-length-getter-tampered-3.html
 dom/nodes/NodeList-static-length-getter-tampered-indexOf-1.html
 dom/nodes/NodeList-static-length-getter-tampered-indexOf-2.html
@@ -5827,7 +5827,6 @@ html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/f
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/history-pushstate-during-load.html
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/history-pushstate-during-pageshow.html
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/history-pushstate.html
-html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/iframe-src.html
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/window-open-popup-during-load.html
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/window-open-popup-during-pageshow.html
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/window-open-popup.html
@@ -5839,7 +5838,6 @@ html/browsers/browsing-the-web/navigating-across-documents/source/navigate-child
 html/browsers/browsing-the-web/navigating-across-documents/source/navigate-child-function-src.html
 html/browsers/browsing-the-web/navigating-across-documents/source/navigate-child-src-about-blank.html
 html/browsers/browsing-the-web/overlapping-navigations-and-traversals/anchor-fragment-history-back-on-click.html
-html/browsers/browsing-the-web/overlapping-navigations-and-traversals/cross-document-traversal-cross-document-traversal.html
 html/browsers/browsing-the-web/overlapping-navigations-and-traversals/cross-document-traversal-same-document-nav.html
 html/browsers/browsing-the-web/overlapping-navigations-and-traversals/cross-document-traversal-same-document-traversal.html
 html/browsers/browsing-the-web/overlapping-navigations-and-traversals/cross-document-traversal-stop.html
@@ -5899,6 +5897,7 @@ html/browsers/history/the-history-interface/history_go_minus.html
 html/browsers/history/the-history-interface/history_go_no_argument.html
 html/browsers/history/the-history-interface/history_go_plus.html
 html/browsers/history/the-history-interface/history_go_to_uri.html
+html/browsers/history/the-history-interface/history_go_zero.html
 html/browsers/history/the-history-interface/history_properties_only_fully_active.html
 html/browsers/history/the-history-interface/history_pushstate.html
 html/browsers/history/the-history-interface/history_pushstate_err.html
@@ -6022,7 +6021,6 @@ html/browsers/the-window-object/window-prototype-chain.html
 html/browsers/the-windowproxy-exotic-object/windowproxy-define-own-property-unforgeable-same-origin.html
 html/browsers/the-windowproxy-exotic-object/windowproxy-prevent-extensions.html
 html/browsers/the-windowproxy-exotic-object/windowproxy-prototype-setting-same-origin.html
-html/browsers/windows/auxiliary-browsing-contexts/opener-multiple.html
 html/browsers/windows/auxiliary-browsing-contexts/opener.html
 html/browsers/windows/browsing-context-names/choose-_blank-001.html
 html/browsers/windows/browsing-context-names/choose-_parent-001.html
@@ -6269,6 +6267,7 @@ html/semantics/document-metadata/the-meta-element/pragma-directives/attr-meta-ht
 html/semantics/document-metadata/the-meta-element/pragma-directives/attr-meta-http-equiv-refresh/allow-scripts-flag-changing-2.html
 html/semantics/document-metadata/the-meta-element/pragma-directives/attr-meta-http-equiv-refresh/dynamic-append.html
 html/semantics/document-metadata/the-meta-element/pragma-directives/attr-meta-http-equiv-refresh/not-in-shadow-tree.html
+html/semantics/document-metadata/the-meta-element/pragma-directives/attr-meta-http-equiv-refresh/remove-from-document.html
 html/semantics/document-metadata/the-meta-element/pragma-directives/http-equiv-enumerated-ascii-case-insensitive.html
 html/semantics/document-metadata/the-meta-element/the-lang-attribute-012.html
 html/semantics/document-metadata/the-style-element/historical.html
@@ -6389,7 +6388,6 @@ html/semantics/embedded-content/the-iframe-element/sandbox_028.htm
 html/semantics/embedded-content/the-iframe-element/sandbox_030.htm
 html/semantics/embedded-content/the-iframe-element/sandbox_031.htm
 html/semantics/embedded-content/the-iframe-element/sandbox_032.htm
-html/semantics/embedded-content/the-iframe-element/src-repeated-in-ancestor.html
 html/semantics/embedded-content/the-iframe-element/srcdoc-anchor.html
 html/semantics/embedded-content/the-iframe-element/srcdoc-attribute-reset.html
 html/semantics/embedded-content/the-iframe-element/srcdoc-removed-iframe-crash.html
@@ -6614,6 +6612,7 @@ html/semantics/forms/the-input-element/input-stepup.html
 html/semantics/forms/the-input-element/input-submit-remove-jssubmit.html
 html/semantics/forms/the-input-element/input-type-button.html
 html/semantics/forms/the-input-element/input-type-change-empty-crash.html
+html/semantics/forms/the-input-element/input-type-change-submit.html
 html/semantics/forms/the-input-element/input-type-checkbox.html
 html/semantics/forms/the-input-element/input-type-number-rtl-invalid-crash.html
 html/semantics/forms/the-input-element/input-untrusted-key-event.html
@@ -7062,6 +7061,7 @@ html/semantics/scripting-1/the-script-element/module/dynamic-import/string-compi
 html/semantics/scripting-1/the-script-element/module/dynamic-import/string-compilation-nonce-module.html
 html/semantics/scripting-1/the-script-element/module/dynamic-import/string-compilation-of-promise-result.html
 html/semantics/scripting-1/the-script-element/module/dynamic-import/string-compilation-other-document.html
+html/semantics/scripting-1/the-script-element/module/dynamic-import/v8-code-cache.html
 html/semantics/scripting-1/the-script-element/module/error-and-slow-dependency.html
 html/semantics/scripting-1/the-script-element/module/error-type-1.html
 html/semantics/scripting-1/the-script-element/module/error-type-2.html
@@ -8286,6 +8286,9 @@ resource-timing/initiator-type/img.html
 resource-timing/initiator-type/script.html
 resource-timing/internal-resources-not-counted.html
 resource-timing/link-sequence-of-events.html
+resource-timing/nested-context-navigations-embed.html
+resource-timing/nested-context-navigations-iframe.html
+resource-timing/nested-context-navigations-object.html
 resource-timing/queue-entry-regardless-buffer-size.html
 resource-timing/resource-ignore-data-url.html
 resource-timing/resource-timing-failed-fetch.html
@@ -8432,7 +8435,6 @@ service-workers/service-worker/fetch-request-no-freshness-headers.https.html
 service-workers/service-worker/getregistration.https.html
 service-workers/service-worker/immutable-prototype-serviceworker.https.html
 service-workers/service-worker/import-scripts-data-url.https.html
-service-workers/service-worker/import-scripts-mime-types.https.html
 service-workers/service-worker/indexeddb.https.html
 service-workers/service-worker/install-event-type.https.html
 service-workers/service-worker/installing.https.html
@@ -8503,7 +8505,6 @@ shadow-dom/declarative/declarative-shadow-dom-slot-assignment.html
 shadow-dom/declarative/declarative-shadow-dom-write-to-iframe.html
 shadow-dom/declarative/declarative-with-disabled-shadow.html
 shadow-dom/declarative/gethtml-ordering.html
-shadow-dom/declarative/gethtml.html
 shadow-dom/declarative/innerhtml-before-closing-tag.html
 shadow-dom/declarative/innerhtml-on-ordinary-template.html
 shadow-dom/declarative/move-template-before-closing-tag.html
@@ -8648,7 +8649,6 @@ streams/piping/error-propagation-backward.any.js?moli-wpt-any=dedicatedworker
 streams/piping/error-propagation-backward.any.js?moli-wpt-any=window
 streams/piping/error-propagation-forward.any.js?moli-wpt-any=dedicatedworker
 streams/piping/error-propagation-forward.any.js?moli-wpt-any=window
-streams/piping/flow-control.any.js?moli-wpt-any=dedicatedworker
 streams/piping/flow-control.any.js?moli-wpt-any=window
 streams/piping/general-addition.any.js?moli-wpt-any=dedicatedworker
 streams/piping/general-addition.any.js?moli-wpt-any=window
@@ -9020,10 +9020,7 @@ trusted-types/should-sink-type-mismatch-violation-be-blocked-by-csp-003.html
 trusted-types/trusted-types-duplicate-names-list-report-only.html
 trusted-types/trusted-types-eval-reporting-no-unsafe-eval.html
 trusted-types/trusted-types-eval-reporting-report-only.html
-trusted-types/trusted-types-navigation.html?01-05
-trusted-types/trusted-types-navigation.html?06-10
 trusted-types/trusted-types-navigation.html?16-20
-trusted-types/trusted-types-navigation.html?21-25
 trusted-types/trusted-types-reporting-for-DOMParser-parseFromString.html
 trusted-types/trusted-types-reporting-for-DedicatedWorker-DedicatedWorker-constructor.html
 trusted-types/trusted-types-reporting-for-DedicatedWorker-eval.html
@@ -9734,6 +9731,7 @@ xhr/open-url-about-blank-window.htm
 xhr/open-url-base-inserted-after-open.htm
 xhr/open-url-base-inserted.htm
 xhr/open-url-base.htm
+xhr/open-url-encoding.htm
 xhr/open-url-javascript-window-2.htm
 xhr/open-url-javascript-window.htm
 xhr/open-url-multi-window-6.htm
@@ -9761,13 +9759,13 @@ xhr/responseurl.html
 xhr/responsexml-basic.htm
 xhr/responsexml-get-twice.htm
 xhr/responsexml-invalid-type.html
-xhr/responsexml-media-type.htm
 xhr/responsexml-non-document-types.htm
 xhr/responsexml-non-well-formed.htm
 xhr/send-accept-language.htm
 xhr/send-after-setting-document-domain.htm
 xhr/send-blob-with-no-mime-type.html
 xhr/send-data-blob.htm
+xhr/send-entity-body-basic.htm
 xhr/send-entity-body-empty.htm
 xhr/send-entity-body-get-head-async.htm
 xhr/send-entity-body-get-head.htm
@@ -9797,7 +9795,6 @@ xhr/setrequestheader-bogus-name.htm
 xhr/setrequestheader-bogus-value.htm
 xhr/setrequestheader-case-insensitive.htm
 xhr/setrequestheader-header-allowed.htm
-xhr/setrequestheader-header-forbidden.htm
 xhr/setrequestheader-open-setrequestheader.htm
 xhr/status-async.htm
 xhr/status-basic.htm
