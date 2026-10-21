@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use axum::{
     Router,
     extract::Path,
@@ -11,15 +11,17 @@ use clap::Parser;
 use moli::{app, cli::Cli};
 use serde_json::{Value, json};
 use std::{
-    io::{self, Read, Write},
-    process::{Child, Command, ExitCode, Output, Stdio},
-    time::{Duration, Instant},
+    io::{self, Write},
+    process::{Command, ExitCode, Output},
+    time::Duration,
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpListener,
     task::JoinHandle,
 };
+
+use super::subprocess::run_command_with_process_timeout;
 
 const HTML: &str =
     "<!doctype html><title>HTTP fixture</title><h1>HTTP fixture</h1><p>response body</p>";
@@ -185,57 +187,6 @@ impl Drop for HttpFailureFixture {
     fn drop(&mut self) {
         self.task.abort();
     }
-}
-
-struct KillOnDropChild(Child);
-
-impl Drop for KillOnDropChild {
-    fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
-    }
-}
-
-fn read_process_pipe(mut pipe: impl Read) -> io::Result<Vec<u8>> {
-    let mut bytes = Vec::new();
-    pipe.read_to_end(&mut bytes)?;
-    Ok(bytes)
-}
-
-fn run_command_with_process_timeout(mut command: Command, timeout: Duration) -> Result<Output> {
-    std::thread::scope(|scope| {
-        let mut child = KillOnDropChild(
-            command
-                .stdin(Stdio::null())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()?,
-        );
-        let stdout = child.0.stdout.take().expect("CLI stdout must be piped");
-        let stderr = child.0.stderr.take().expect("CLI stderr must be piped");
-        // Drain both pipes while polling so large output cannot block exit.
-        let stdout = scope.spawn(move || read_process_pipe(stdout));
-        let stderr = scope.spawn(move || read_process_pipe(stderr));
-        let started = Instant::now();
-        let status = loop {
-            if let Some(status) = child.0.try_wait()? {
-                break status;
-            }
-            // The guard kills and reaps the child before the scoped pipe
-            // readers are joined, including on timeout or an early error.
-            ensure!(
-                started.elapsed() < timeout,
-                "CLI subprocess did not exit within {} ms",
-                timeout.as_millis()
-            );
-            std::thread::sleep(Duration::from_millis(10));
-        };
-        Ok(Output {
-            status,
-            stdout: stdout.join().expect("CLI stdout reader must not panic")?,
-            stderr: stderr.join().expect("CLI stderr reader must not panic")?,
-        })
-    })
 }
 
 struct FailingOutput {

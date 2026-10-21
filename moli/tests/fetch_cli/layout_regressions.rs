@@ -1,12 +1,8 @@
-use super::clean_output;
-use anyhow::{Context, Result, bail};
+use super::{clean_output, subprocess::run_command_with_process_timeout};
+use anyhow::{Context, Result, ensure};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::Value;
-use std::{
-    process::{Command, Stdio},
-    thread,
-    time::{Duration, Instant},
-};
+use std::{process::Command, time::Duration};
 
 fn run_layout(html: &str, expression: &str, fonts: bool) -> Result<Value> {
     let url = format!("data:text/html;base64,{}", STANDARD.encode(html));
@@ -26,25 +22,16 @@ fn run_layout(html: &str, expression: &str, fonts: bool) -> Result<Value> {
     if fonts {
         command.arg("--font");
     }
-    let mut child = command
-        .arg(url)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-    let started = Instant::now();
-    loop {
-        if child.try_wait()?.is_some() {
-            break;
-        }
-        if started.elapsed() >= Duration::from_secs(10) {
-            child.kill()?;
-            let output = child.wait_with_output()?;
-            bail!("layout did not terminate: {}", clean_output(&output.stderr));
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
-    let output = child.wait_with_output()?;
-    assert!(output.status.success(), "{}", clean_output(&output.stderr));
+    command.arg(url);
+    let output = run_command_with_process_timeout(command, Duration::from_secs(10))
+        .context("layout probe process failed")?;
+    ensure!(
+        output.status.success(),
+        "layout probe exited with {}: stdout={} stderr={}",
+        output.status,
+        clean_output(&output.stdout),
+        clean_output(&output.stderr)
+    );
     serde_json::from_slice(&output.stdout).context("layout probe must return JSON")
 }
 
@@ -65,6 +52,35 @@ fn fractional_grid_track_limits_terminate_with_a_finite_item_width() -> Result<(
     let width = value.as_f64().context("item width must be a number")?;
     assert!((width - 202.44017).abs() < 0.05, "{width}");
     Ok(())
+}
+
+#[test]
+fn layout_probe_drains_large_evaluation_results_before_waiting_for_exit() -> Result<()> {
+    const PAYLOAD_SIZE: usize = 256 * 1024;
+    let expression = format!(
+        "JSON.stringify({{width:document.querySelector('#item').getBoundingClientRect().width,payload:'x'.repeat({PAYLOAD_SIZE})}})"
+    );
+    let value = run_layout(
+        "<!doctype html><div id='item' style='width:123px'></div>",
+        &expression,
+        false,
+    )?;
+    assert_eq!(value["width"], 123);
+    assert_eq!(value["payload"], "x".repeat(PAYLOAD_SIZE));
+    Ok(())
+}
+
+#[test]
+fn layout_probe_drains_large_script_errors_before_reporting_exit_failure() {
+    let error = run_layout(
+        "<!doctype html><p>probe</p>",
+        "throw new Error('layout-stderr-marker:' + 'x'.repeat(256 * 1024))",
+        false,
+    )
+    .expect_err("the script error must fail the probe");
+    let message = format!("{error:#}");
+    assert!(message.contains("layout probe exited with"));
+    assert!(message.contains("layout-stderr-marker:"));
 }
 
 fn probe_font_document(body: &str) -> String {
