@@ -924,7 +924,7 @@ dependencies = [
 [[package]]
 name = "curl"
 version = "0.4.51"
-source = "git+https://github.com/lexmount/curl-rust?rev=9d40ca90d8f19ccfd11afe7dd49bc32aab79435c#9d40ca90d8f19ccfd11afe7dd49bc32aab79435c"
+source = "git+https://github.com/lexmount/curl-rust?rev=79310cbd939be3548b78d0b23ab1d60d5facdeec#79310cbd939be3548b78d0b23ab1d60d5facdeec"
 dependencies = [
  "curl-sys",
  "libc",
@@ -938,7 +938,7 @@ dependencies = [
 [[package]]
 name = "curl-sys"
 version = "0.4.91+curl-8.23.0"
-source = "git+https://github.com/lexmount/curl-rust?rev=9d40ca90d8f19ccfd11afe7dd49bc32aab79435c#9d40ca90d8f19ccfd11afe7dd49bc32aab79435c"
+source = "git+https://github.com/lexmount/curl-rust?rev=79310cbd939be3548b78d0b23ab1d60d5facdeec#79310cbd939be3548b78d0b23ab1d60d5facdeec"
 dependencies = [
  "brotlic-sys",
  "cc",
