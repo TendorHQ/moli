@@ -1,3 +1,5 @@
+use crate::content_security_policy::ContentSecurityPolicy;
+
 use super::{
     CHILD_BROWSING_CONTEXT_HANDLE_SLOT, MessagePortRealmBinding,
     ensure_message_port_wrapper_for_id_in_realm,
@@ -135,7 +137,7 @@ struct SharedWorkerConstructorContext {
     storage_key: MoliStorageKey,
     top_level_site: String,
     document_referrer_policy: Option<String>,
-    document_content_security_policies: Vec<String>,
+    document_content_security_policies: Vec<ContentSecurityPolicy>,
     browser_context_runtime: RendererBrowserContextRuntime,
     indexed_db_manager: Option<WeakIndexedDbManager>,
     storage_bucket_store: SharedStorageBucketStore,
@@ -440,7 +442,7 @@ fn shared_worker_constructor_context(
         let top_level_site = storage_key.top_level_site().to_owned();
         let mut document_content_security_policies = if let Some(handle) = child_handle {
             host.child_browsing_context_content_security_policies(handle)
-                .map(<[String]>::to_vec)
+                .map(<[_]>::to_vec)
                 .unwrap_or_else(|| host.document_content_security_policies().to_vec())
         } else if let Some(policies) =
             host.active_lightweight_popup_content_security_policies(scope)

@@ -449,9 +449,9 @@ fn main_document_open_fetch_redirect_uses_source_document_csp_report_context() {
     let final_url = Url::parse("https://redirected-fetch-csp-owner.test/final").unwrap();
     let report_url = Url::parse("https://main-fetch-csp-owner.test/report").unwrap();
     let policy = crate::document_runtime::DocumentPolicyContainer {
-        response_content_security_report_only_policies: vec![format!(
-            "connect-src 'none'; report-uri {report_url}"
-        )],
+        response_content_security_report_only_policies: vec![
+            format!("connect-src 'none'; report-uri {report_url}").into(),
+        ],
         ..Default::default()
     };
     let registered = vm

@@ -1,6 +1,7 @@
 mod renderer_owned;
 
 use super::{JsContextHost, NavigationHistoryEntrySeed};
+use crate::content_security_policy::ContentSecurityPolicy;
 use crate::web_api_interfaces;
 use crate::{
     content_security_policy::content_security_policy_forces_opaque_origin,
@@ -208,8 +209,8 @@ struct LightweightPopupClassicScriptContinuation {
     document_url: Url,
     scripts: Vec<DomHandle>,
     next_script_index: usize,
-    response_content_security_policies: Vec<String>,
-    response_content_security_report_only_policies: Vec<String>,
+    response_content_security_policies: Vec<ContentSecurityPolicy>,
+    response_content_security_report_only_policies: Vec<ContentSecurityPolicy>,
     response_content_security_reporting_endpoints:
         crate::content_security_policy::ContentSecurityPolicyReportingEndpoints,
 }
@@ -1305,7 +1306,7 @@ impl JsContextHost {
     fn lightweight_popup_response_storage_scope(
         &mut self,
         final_url: &Url,
-        response_content_security_policies: &[String],
+        response_content_security_policies: &[ContentSecurityPolicy],
         sandbox_forces_opaque_origin: bool,
     ) -> LightweightPopupStorageScope {
         if sandbox_forces_opaque_origin
@@ -1383,7 +1384,7 @@ impl JsContextHost {
     pub(crate) fn active_lightweight_popup_content_security_policies(
         &self,
         scope: &mut v8::PinScope<'_, '_>,
-    ) -> Option<&[String]> {
+    ) -> Option<&[ContentSecurityPolicy]> {
         let popup_id = active_lightweight_popup_id(scope)?;
         Some(
             self.lightweight_popup_document_record(popup_id)?
@@ -3096,8 +3097,8 @@ impl JsContextHost {
         task: LightweightPopupNavigationTaskToken,
         document_handle: Option<DomHandle>,
         scripting_enabled: bool,
-        response_content_security_policies: &[String],
-        response_content_security_report_only_policies: &[String],
+        response_content_security_policies: &[ContentSecurityPolicy],
+        response_content_security_report_only_policies: &[ContentSecurityPolicy],
         response_content_security_reporting_endpoints:
             &crate::content_security_policy::ContentSecurityPolicyReportingEndpoints,
     ) -> LightweightPopupClassicScriptAdvance {
@@ -3539,8 +3540,8 @@ impl JsContextHost {
         popup_id: u64,
         document_handle: Option<crate::document_runtime::DomHandle>,
         document_url: &Url,
-        response_content_security_policies: &[String],
-        response_content_security_report_only_policies: &[String],
+        response_content_security_policies: &[ContentSecurityPolicy],
+        response_content_security_report_only_policies: &[ContentSecurityPolicy],
         response_content_security_reporting_endpoints:
             &crate::content_security_policy::ContentSecurityPolicyReportingEndpoints,
         fetched_source: &LoadedChildScriptSource,

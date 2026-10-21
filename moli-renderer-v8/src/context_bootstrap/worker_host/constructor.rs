@@ -180,7 +180,7 @@ pub(in crate::context_bootstrap) fn worker_constructor_callback<'s>(
         let dispatch_scope = crate::native_bridge::OwnerDispatchScope::from(owner_scope);
         let mut document_content_security_policies = if let Some(handle) = child_handle {
             host.child_browsing_context_content_security_policies(handle)
-                .map(<[String]>::to_vec)
+                .map(<[_]>::to_vec)
                 .unwrap_or_else(|| host.document_content_security_policies().to_vec())
         } else if let Some(policies) =
             host.active_lightweight_popup_content_security_policies(scope)

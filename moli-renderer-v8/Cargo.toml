@@ -38,6 +38,7 @@ moli-action-window = { path = "../moli-action-window" }
 moli-broadcast-channel = { path = "../moli-broadcast-channel" }
 moli-browser-profile = { path = "../moli-browser-profile" }
 moli-crypto = { path = "../moli-crypto" }
+moli-csp = { path = "../moli-csp" }
 moli-css-parse = { path = "../moli-css-parse" }
 moli-dom = { path = "../moli-dom" }
 moli-disk-pool = { path = "../moli-disk-pool" }

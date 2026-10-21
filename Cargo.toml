@@ -15,6 +15,7 @@ members = [
     "moli-cookie-store",
     "moli-content-type",
     "moli-css-parse",
+    "moli-csp",
     "moli-crypto",
     "moli-curl",
     "moli-dns-resolver",

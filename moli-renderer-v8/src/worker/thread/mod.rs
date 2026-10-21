@@ -1,6 +1,8 @@
 //! Worker thread — owns a V8 isolate and Tokio `LocalRuntime`, runs the
 //! worker event loop, and handles message dispatch.
 
+use crate::content_security_policy::ContentSecurityPolicy;
+
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::pin::pin;
@@ -183,9 +185,9 @@ pub(crate) struct WorkerSpawnOptions {
     pub(crate) module_static_import_initiator_url: Option<url::Url>,
     pub(crate) module_credentials_mode: RequestCredentialsMode,
     pub(crate) referrer_policy: Option<String>,
-    pub(crate) module_static_import_content_security_policies: Vec<String>,
-    pub(crate) content_security_policies: Vec<String>,
-    pub(crate) content_security_report_only_policies: Vec<String>,
+    pub(crate) module_static_import_content_security_policies: Vec<ContentSecurityPolicy>,
+    pub(crate) content_security_policies: Vec<ContentSecurityPolicy>,
+    pub(crate) content_security_report_only_policies: Vec<ContentSecurityPolicy>,
     pub(crate) content_security_reporting_endpoints: ContentSecurityPolicyReportingEndpoints,
     pub(crate) network_policy: WorkerNetworkPolicy,
     pub(crate) policy_context: crate::types::SubresourcePolicyContext,
@@ -382,14 +384,17 @@ impl WorkerSpawnOptions {
         self
     }
 
-    pub(crate) fn with_content_security_policies(mut self, policies: Vec<String>) -> Self {
+    pub(crate) fn with_content_security_policies(
+        mut self,
+        policies: Vec<ContentSecurityPolicy>,
+    ) -> Self {
         self.content_security_policies = policies;
         self
     }
 
     pub(crate) fn with_module_static_import_content_security_policies(
         mut self,
-        policies: Vec<String>,
+        policies: Vec<ContentSecurityPolicy>,
     ) -> Self {
         self.module_static_import_content_security_policies = policies;
         self
@@ -397,7 +402,7 @@ impl WorkerSpawnOptions {
 
     pub(crate) fn with_content_security_report_only_policies(
         mut self,
-        policies: Vec<String>,
+        policies: Vec<ContentSecurityPolicy>,
     ) -> Self {
         self.content_security_report_only_policies = policies;
         self
@@ -584,9 +589,9 @@ fn start_worker_module_graph_fetch(
     request: WorkerModuleGraphFetchRequest,
     loader: WorkerResourceLoader,
     network_partition_key: Option<String>,
-    module_static_import_content_security_policies: Vec<String>,
-    worker_global_content_security_policies: Vec<String>,
-    worker_global_content_security_report_only_policies: Vec<String>,
+    module_static_import_content_security_policies: Vec<ContentSecurityPolicy>,
+    worker_global_content_security_policies: Vec<ContentSecurityPolicy>,
+    worker_global_content_security_report_only_policies: Vec<ContentSecurityPolicy>,
     worker_global_content_security_reporting_endpoints: ContentSecurityPolicyReportingEndpoints,
     completion_tx: mpsc::UnboundedSender<WorkerModuleGraphFetchCompletion>,
 ) {
@@ -1500,9 +1505,9 @@ async fn worker_main(
     module_static_import_initiator_url: Option<url::Url>,
     module_credentials_mode: RequestCredentialsMode,
     referrer_policy: Option<String>,
-    module_static_import_content_security_policies: Vec<String>,
-    content_security_policies: Vec<String>,
-    content_security_report_only_policies: Vec<String>,
+    module_static_import_content_security_policies: Vec<ContentSecurityPolicy>,
+    content_security_policies: Vec<ContentSecurityPolicy>,
+    content_security_report_only_policies: Vec<ContentSecurityPolicy>,
     content_security_reporting_endpoints: ContentSecurityPolicyReportingEndpoints,
     network_policy: WorkerNetworkPolicy,
     policy_context: crate::types::SubresourcePolicyContext,

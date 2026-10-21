@@ -1848,7 +1848,7 @@ async fn worker_xmlhttprequest_cross_origin_redirect_final_url_obeys_connect_src
             format!("{source_base_url}/worker/main.js"),
         )
         .with_request_client(loader)
-        .with_content_security_policies(vec!["connect-src 'self'".to_owned()]),
+        .with_content_security_policies(vec!["connect-src 'self'".into()]),
     );
 
     let mut post = None;

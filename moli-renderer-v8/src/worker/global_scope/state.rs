@@ -1,5 +1,7 @@
 //! WorkerGlobalScope runtime state and native queries for the current worker.
 
+use crate::content_security_policy::ContentSecurityPolicy;
+
 use super::*;
 
 pub(crate) const WORKER_STATE_SLOT: &str = "__workerState";
@@ -47,11 +49,12 @@ pub(crate) struct WorkerGlobalState {
     /// Referrer policy parsed from the top-level worker script response.
     pub(in crate::worker) referrer_policy: Option<String>,
     /// CSP policies from outside settings used for module static imports.
-    pub(in crate::worker) module_static_import_content_security_policies: Vec<String>,
+    pub(in crate::worker) module_static_import_content_security_policies:
+        Vec<ContentSecurityPolicy>,
     /// Enforce CSP policies parsed from the top-level worker script response.
-    pub(in crate::worker) content_security_policies: Vec<String>,
+    pub(in crate::worker) content_security_policies: Vec<ContentSecurityPolicy>,
     /// Report-only CSP policies parsed from the top-level worker script response.
-    pub(in crate::worker) content_security_report_only_policies: Vec<String>,
+    pub(in crate::worker) content_security_report_only_policies: Vec<ContentSecurityPolicy>,
     /// Reporting API endpoints parsed from the top-level worker script response.
     pub(in crate::worker) content_security_reporting_endpoints:
         ContentSecurityPolicyReportingEndpoints,

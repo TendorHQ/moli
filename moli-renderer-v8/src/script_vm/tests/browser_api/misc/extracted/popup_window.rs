@@ -2258,7 +2258,10 @@ async fn popup_javascript_url_string_document_keeps_inherited_frame_src_policy()
             .borrow()
             .lightweight_popup_policy_container(1)
             .expect("popup policy container")
-            .response_content_security_policies,
+            .response_content_security_policies
+            .iter()
+            .map(|policy| policy.as_str())
+            .collect::<Vec<_>>(),
         ["frame-src 'none'".to_owned()]
     );
     advance_page_task_executor_until_eval_equals(

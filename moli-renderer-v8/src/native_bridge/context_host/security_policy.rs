@@ -1,3 +1,5 @@
+use crate::content_security_policy::ContentSecurityPolicy;
+
 use super::{JsContextHost, OwnerDispatchScope};
 use crate::{
     content_security_policy::{
@@ -753,7 +755,7 @@ impl JsContextHost {
     fn child_effective_response_content_security_policies(
         &self,
         child_handle: DomHandle,
-    ) -> Vec<String> {
+    ) -> Vec<ContentSecurityPolicy> {
         let mut policies = Vec::new();
         if self
             .child_browsing_contexts
@@ -774,7 +776,7 @@ impl JsContextHost {
     fn child_effective_response_content_security_report_only_policies(
         &self,
         child_handle: DomHandle,
-    ) -> Vec<String> {
+    ) -> Vec<ContentSecurityPolicy> {
         let mut policies = Vec::new();
         if self
             .child_browsing_contexts
@@ -801,7 +803,7 @@ impl JsContextHost {
     fn parent_effective_response_content_security_policies(
         &self,
         child_handle: DomHandle,
-    ) -> Vec<String> {
+    ) -> Vec<ContentSecurityPolicy> {
         match self.child_browsing_context_parent_handle(child_handle) {
             Some(parent) => self.child_effective_response_content_security_policies(parent),
             None => unsafe { &*self.runtime }
@@ -813,7 +815,7 @@ impl JsContextHost {
     fn parent_effective_response_content_security_report_only_policies(
         &self,
         child_handle: DomHandle,
-    ) -> Vec<String> {
+    ) -> Vec<ContentSecurityPolicy> {
         match self.child_browsing_context_parent_handle(child_handle) {
             Some(parent) => {
                 self.child_effective_response_content_security_report_only_policies(parent)
@@ -1023,14 +1025,20 @@ impl JsContextHost {
         )
     }
 
-    fn child_response_content_security_policies(&self, handle: DomHandle) -> &[String] {
+    fn child_response_content_security_policies(
+        &self,
+        handle: DomHandle,
+    ) -> &[ContentSecurityPolicy] {
         self.child_browsing_contexts
             .get(&handle)
             .map(|entry| entry.response_content_security_policies())
             .unwrap_or_default()
     }
 
-    fn child_response_content_security_report_only_policies(&self, handle: DomHandle) -> &[String] {
+    fn child_response_content_security_report_only_policies(
+        &self,
+        handle: DomHandle,
+    ) -> &[ContentSecurityPolicy] {
         self.child_browsing_contexts
             .get(&handle)
             .map(|entry| entry.response_content_security_report_only_policies())

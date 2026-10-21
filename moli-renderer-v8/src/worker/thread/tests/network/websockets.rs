@@ -82,7 +82,7 @@ async fn worker_classic_websocket_report_only_csp_dispatches_without_blocking() 
             script_url.to_owned(),
         )
         .with_request_client(loader)
-        .with_content_security_report_only_policies(vec!["connect-src 'none'".to_owned()]),
+        .with_content_security_report_only_policies(vec!["connect-src 'none'".into()]),
     );
 
     assert_eq!(
@@ -123,7 +123,7 @@ async fn worker_websocket_csp_block_precedes_mixed_content_rejection() {
             .to_owned(),
             "http://localhost:8000/worker/main.js".to_owned(),
         )
-        .with_content_security_policies(vec!["connect-src 'none'".to_owned()]),
+        .with_content_security_policies(vec!["connect-src 'none'".into()]),
     );
 
     assert_eq!(
@@ -166,7 +166,7 @@ async fn worker_classic_websocket_connect_src_self_allows_same_host_ws() {
             worker_script_url,
         )
         .with_request_client(loader)
-        .with_content_security_policies(vec!["connect-src 'self'".to_owned()]),
+        .with_content_security_policies(vec!["connect-src 'self'".into()]),
     );
 
     assert_eq!(recv_post_json(&mut handle).await, r#""self-csp""#);

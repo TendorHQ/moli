@@ -744,6 +744,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
+name = "content-security-policy"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9dd26eb56761db2c5288e97cfb8593fb411d3a7907ced6b6679512207ea8759c"
+dependencies = [
+ "base64 0.22.1",
+ "bitflags",
+ "once_cell",
+ "percent-encoding 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "regex",
+ "sha2 0.10.9",
+ "url",
+]
+
+[[package]]
 name = "content_disposition"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2451,7 +2466,7 @@ dependencies = [
  "nom 8.0.0",
  "rand 0.10.3",
  "rangemap",
- "sha2",
+ "sha2 0.11.0",
  "stringprep",
  "thiserror",
  "weezl 0.2.1",
@@ -2756,6 +2771,20 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "openssl",
+]
+
+[[package]]
+name = "moli-csp"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "content-security-policy",
+ "moli-crypto",
+ "moli-header-field",
+ "percent-encoding 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json",
+ "strum",
+ "url",
 ]
 
 [[package]]
@@ -3301,6 +3330,7 @@ dependencies = [
  "moli-canvas",
  "moli-cookie-jar",
  "moli-crypto",
+ "moli-csp",
  "moli-css-parse",
  "moli-disk-pool",
  "moli-dom",
@@ -5066,6 +5096,17 @@ name = "sha1"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.2.17",
+ "digest 0.10.7",
+]
+
+[[package]]
+name = "sha2"
+version = "0.10.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283"
 dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",

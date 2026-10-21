@@ -1,3 +1,5 @@
+use crate::content_security_policy::ContentSecurityPolicy;
+
 use std::collections::HashSet;
 
 use super::{
@@ -742,7 +744,7 @@ impl JsContextHost {
         &self.extra_http_headers
     }
 
-    pub(crate) fn document_content_security_policies(&self) -> &[String] {
+    pub(crate) fn document_content_security_policies(&self) -> &[ContentSecurityPolicy] {
         unsafe { &*self.runtime }.document_content_security_policies()
     }
 

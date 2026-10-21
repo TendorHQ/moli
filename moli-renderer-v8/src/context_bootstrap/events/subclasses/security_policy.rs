@@ -5,6 +5,25 @@ use crate::context_bootstrap::events::EventInit;
 use crate::webidl;
 use webidl::WebIdlDictionarySerialize;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, webidl::WebIdlEnum)]
+#[webidl(
+    name = "SecurityPolicyViolationEventDisposition",
+    rename_all = "kebab-case"
+)]
+enum SecurityPolicyViolationEventDisposition {
+    Enforce,
+    Report,
+}
+
+impl From<ContentSecurityPolicyDisposition> for SecurityPolicyViolationEventDisposition {
+    fn from(disposition: ContentSecurityPolicyDisposition) -> Self {
+        match disposition {
+            ContentSecurityPolicyDisposition::Enforce => Self::Enforce,
+            ContentSecurityPolicyDisposition::Report => Self::Report,
+        }
+    }
+}
+
 // Convert EventInit first, then the derived members in lexical order. Keep
 // DOMString code units distinct from the four USVString URL fields.
 #[derive(webidl::WebIdlDictionary)]
@@ -16,8 +35,8 @@ pub(super) struct SecurityPolicyViolationEventInit {
     blocked_uri: String,
     #[webidl(name = "columnNumber", default = 0)]
     column_number: u32,
-    #[webidl(converter = "enum", default = ContentSecurityPolicyDisposition::Enforce)]
-    disposition: ContentSecurityPolicyDisposition,
+    #[webidl(converter = "enum", default = SecurityPolicyViolationEventDisposition::Enforce)]
+    disposition: SecurityPolicyViolationEventDisposition,
     #[webidl(name = "documentURI", default = "", converter = "usv_string")]
     document_uri: String,
     #[webidl(name = "effectiveDirective", default = webidl::DomString16(Vec::new()), converter = "raw")]
@@ -44,7 +63,7 @@ impl Default for SecurityPolicyViolationEventInit {
             base: EventInit::default(),
             blocked_uri: String::new(),
             column_number: 0,
-            disposition: ContentSecurityPolicyDisposition::Enforce,
+            disposition: SecurityPolicyViolationEventDisposition::Enforce,
             document_uri: String::new(),
             effective_directive: webidl::DomString16(Vec::new()),
             line_number: 0,
@@ -113,7 +132,7 @@ pub(crate) fn initialize_native_security_policy_violation_event<'s>(
         },
         blocked_uri: fields.blocked_uri.to_owned(),
         column_number: fields.column_number.try_into().unwrap_or_default(),
-        disposition: fields.disposition,
+        disposition: fields.disposition.into(),
         document_uri: fields.document_uri.to_owned(),
         effective_directive: text(fields.effective_directive),
         line_number: fields.line_number.try_into().unwrap_or_default(),

@@ -82,8 +82,8 @@ pub(crate) enum DocumentNavigationEmbeddingContext<'a> {
 
 #[derive(Debug, Clone)]
 pub(crate) struct DocumentConnectPolicySnapshot {
-    enforce_policies: Vec<String>,
-    report_only_policies: Vec<String>,
+    enforce_policies: Vec<ContentSecurityPolicy>,
+    report_only_policies: Vec<ContentSecurityPolicy>,
     reporting_endpoints: ContentSecurityPolicyReportingEndpoints,
 }
 
@@ -559,7 +559,7 @@ impl DocumentRuntime {
         self.bypass_content_security_policy
     }
 
-    pub(crate) fn document_content_security_policies(&self) -> &[String] {
+    pub(crate) fn document_content_security_policies(&self) -> &[ContentSecurityPolicy] {
         self.policy_container
             .document_content_security_policies
             .as_slice()
@@ -567,12 +567,15 @@ impl DocumentRuntime {
 
     #[cfg(test)]
     pub(crate) fn set_response_content_security_policies(&mut self, policies: &[String]) {
-        self.policy_container.response_content_security_policies = policies.to_vec();
+        self.policy_container.response_content_security_policies =
+            policies.iter().cloned().map(Into::into).collect();
         self.policy_container.sandbox =
-            DocumentSandboxPolicy::from_response_content_security_policies(policies);
+            DocumentSandboxPolicy::from_response_content_security_policies(
+                &self.policy_container.response_content_security_policies,
+            );
     }
 
-    pub(crate) fn response_content_security_policies(&self) -> &[String] {
+    pub(crate) fn response_content_security_policies(&self) -> &[ContentSecurityPolicy] {
         &self.policy_container.response_content_security_policies
     }
 
@@ -582,7 +585,13 @@ impl DocumentRuntime {
         policies: &[String],
     ) {
         self.policy_container
-            .response_content_security_report_only_policies = policies.to_vec();
+            .response_content_security_report_only_policies = policies
+            .iter()
+            .cloned()
+            .map(|policy| {
+                ContentSecurityPolicy::from_header(policy, ContentSecurityPolicyDisposition::Report)
+            })
+            .collect();
     }
 
     #[cfg(test)]
@@ -626,7 +635,9 @@ impl DocumentRuntime {
         self.policy_container.sandbox
     }
 
-    pub(crate) fn response_content_security_report_only_policies(&self) -> &[String] {
+    pub(crate) fn response_content_security_report_only_policies(
+        &self,
+    ) -> &[ContentSecurityPolicy] {
         &self
             .policy_container
             .response_content_security_report_only_policies
@@ -684,7 +695,7 @@ impl DocumentRuntime {
         request: ContentSecurityPolicyScriptElementRequest<'_>,
     ) -> Option<DocumentContentSecurityPolicyViolation> {
         let document_url = self.document_url();
-        let policies = self.document_content_security_policy_strings_for_optional_document(
+        let policies = self.document_content_security_policies_for_optional_document(
             Some(self.document_handle()),
             &self.policy_container.response_content_security_policies,
             &self.policy_container.content_security_reporting_endpoints,
@@ -756,7 +767,7 @@ impl DocumentRuntime {
         redirect_status: ContentSecurityPolicyRedirectStatus,
     ) -> DocumentContentSecurityPolicyCheck {
         let document_url = self.document_url();
-        let policies = self.document_content_security_policy_strings_for_optional_document(
+        let policies = self.document_content_security_policies_for_optional_document(
             Some(self.document_handle()),
             &self.policy_container.response_content_security_policies,
             &self.policy_container.content_security_reporting_endpoints,
@@ -806,7 +817,7 @@ impl DocumentRuntime {
         request_url: &Url,
         kind: DocumentSubresourceCspKind,
     ) -> DocumentContentSecurityPolicyCheck {
-        let policies = self.document_content_security_policy_strings_for_optional_document(
+        let policies = self.document_content_security_policies_for_optional_document(
             document_handle,
             &policy_container.response_content_security_policies,
             &policy_container.content_security_reporting_endpoints,
@@ -876,12 +887,11 @@ impl DocumentRuntime {
         request: ContentSecurityPolicyStyleElementRequest<'_>,
     ) -> DocumentContentSecurityPolicyCheck {
         let document_url = self.document_url();
-        let enforced_policies = self
-            .document_content_security_policy_strings_for_optional_document(
-                Some(self.document_handle()),
-                &self.policy_container.response_content_security_policies,
-                &self.policy_container.content_security_reporting_endpoints,
-            );
+        let enforced_policies = self.document_content_security_policies_for_optional_document(
+            Some(self.document_handle()),
+            &self.policy_container.response_content_security_policies,
+            &self.policy_container.content_security_reporting_endpoints,
+        );
         let enforced_violation =
             document_inline_style_element_policy_violation_from_document_policies(
                 enforced_policies,
@@ -890,7 +900,7 @@ impl DocumentRuntime {
                 request,
                 ContentSecurityPolicyDisposition::Enforce,
             );
-        let report_only_policies = document_response_content_security_policy_strings(
+        let report_only_policies = document_response_content_security_policies(
             &self
                 .policy_container
                 .response_content_security_report_only_policies,
@@ -916,12 +926,11 @@ impl DocumentRuntime {
         request: ContentSecurityPolicyStyleElementRequest<'_>,
     ) -> DocumentContentSecurityPolicyCheck {
         let document_url = self.document_url();
-        let enforced_policies = self
-            .document_content_security_policy_strings_for_optional_document(
-                Some(self.document_handle()),
-                &self.policy_container.response_content_security_policies,
-                &self.policy_container.content_security_reporting_endpoints,
-            );
+        let enforced_policies = self.document_content_security_policies_for_optional_document(
+            Some(self.document_handle()),
+            &self.policy_container.response_content_security_policies,
+            &self.policy_container.content_security_reporting_endpoints,
+        );
         let enforced_violation = document_style_element_url_policy_violation_from_document_policies(
             enforced_policies,
             document_url,
@@ -930,7 +939,7 @@ impl DocumentRuntime {
             ContentSecurityPolicyDisposition::Enforce,
             request,
         );
-        let report_only_policies = document_response_content_security_policy_strings(
+        let report_only_policies = document_response_content_security_policies(
             &self
                 .policy_container
                 .response_content_security_report_only_policies,
@@ -957,7 +966,7 @@ impl DocumentRuntime {
         request: ContentSecurityPolicyStyleElementRequest<'_>,
     ) -> DocumentContentSecurityPolicyCheck {
         let document_url = self.document_url();
-        let enforced_policies = document_response_content_security_policy_strings(
+        let enforced_policies = document_response_content_security_policies(
             &self.policy_container.response_content_security_policies,
             &self.policy_container.content_security_reporting_endpoints,
         );
@@ -969,7 +978,7 @@ impl DocumentRuntime {
             ContentSecurityPolicyDisposition::Enforce,
             request,
         );
-        let report_only_policies = document_response_content_security_policy_strings(
+        let report_only_policies = document_response_content_security_policies(
             &self
                 .policy_container
                 .response_content_security_report_only_policies,
@@ -995,18 +1004,17 @@ impl DocumentRuntime {
         &self,
         document_handle: Option<DomHandle>,
         document_url: &Url,
-        response_policies: &[String],
-        response_report_only_policies: &[String],
+        response_policies: &[ContentSecurityPolicy],
+        response_report_only_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
         source: &str,
         request: ContentSecurityPolicyScriptElementRequest<'_>,
     ) -> DocumentContentSecurityPolicyCheck {
-        let enforced_policies = self
-            .document_content_security_policy_strings_for_optional_document(
-                document_handle,
-                response_policies,
-                response_reporting_endpoints,
-            );
+        let enforced_policies = self.document_content_security_policies_for_optional_document(
+            document_handle,
+            response_policies,
+            response_reporting_endpoints,
+        );
         let enforced_violation =
             document_inline_script_element_policy_violation_from_document_policies(
                 enforced_policies,
@@ -1015,7 +1023,7 @@ impl DocumentRuntime {
                 request,
                 ContentSecurityPolicyDisposition::Enforce,
             );
-        let report_only_policies = document_response_content_security_policy_strings(
+        let report_only_policies = document_response_content_security_policies(
             response_report_only_policies,
             response_reporting_endpoints,
         );
@@ -1037,18 +1045,17 @@ impl DocumentRuntime {
         &self,
         document_handle: Option<DomHandle>,
         document_url: &Url,
-        response_policies: &[String],
-        response_report_only_policies: &[String],
+        response_policies: &[ContentSecurityPolicy],
+        response_report_only_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
         kind: ContentSecurityPolicyNonUrlKind,
         source: &str,
     ) -> DocumentContentSecurityPolicyCheck {
-        let enforced_policies = self
-            .document_content_security_policy_strings_for_optional_document(
-                document_handle,
-                response_policies,
-                response_reporting_endpoints,
-            );
+        let enforced_policies = self.document_content_security_policies_for_optional_document(
+            document_handle,
+            response_policies,
+            response_reporting_endpoints,
+        );
         let enforced_violation = document_inline_source_policy_violation_from_document_policies(
             enforced_policies,
             document_url,
@@ -1056,7 +1063,7 @@ impl DocumentRuntime {
             source,
             ContentSecurityPolicyDisposition::Enforce,
         );
-        let report_only_policies = document_response_content_security_policy_strings(
+        let report_only_policies = document_response_content_security_policies(
             response_report_only_policies,
             response_reporting_endpoints,
         );
@@ -1077,18 +1084,17 @@ impl DocumentRuntime {
         &self,
         document_handle: Option<DomHandle>,
         document_url: &Url,
-        response_policies: &[String],
-        response_report_only_policies: &[String],
+        response_policies: &[ContentSecurityPolicy],
+        response_report_only_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
         kind: ContentSecurityPolicyNonUrlKind,
         source: Option<&str>,
     ) -> DocumentContentSecurityPolicyCheck {
-        let enforced_policies = self
-            .document_content_security_policy_strings_for_optional_document(
-                document_handle,
-                response_policies,
-                response_reporting_endpoints,
-            );
+        let enforced_policies = self.document_content_security_policies_for_optional_document(
+            document_handle,
+            response_policies,
+            response_reporting_endpoints,
+        );
         let enforced_violation = document_non_url_policy_violation_from_document_policies(
             enforced_policies,
             document_url,
@@ -1096,7 +1102,7 @@ impl DocumentRuntime {
             source,
             ContentSecurityPolicyDisposition::Enforce,
         );
-        let report_only_policies = document_response_content_security_policy_strings(
+        let report_only_policies = document_response_content_security_policies(
             response_report_only_policies,
             response_reporting_endpoints,
         );
@@ -1119,7 +1125,7 @@ impl DocumentRuntime {
         request_url: &Url,
     ) -> Option<DocumentContentSecurityPolicyViolation> {
         let document_url = self.document_url();
-        let policies = self.document_content_security_policy_strings_for_optional_document(
+        let policies = self.document_content_security_policies_for_optional_document(
             Some(self.document_handle()),
             &self.policy_container.response_content_security_policies,
             &self.policy_container.content_security_reporting_endpoints,
@@ -1137,7 +1143,7 @@ impl DocumentRuntime {
         &self,
         document_handle: Option<DomHandle>,
         document_url: &Url,
-        response_policies: &[String],
+        response_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
         request_url: &Url,
     ) -> Option<DocumentContentSecurityPolicyViolation> {
@@ -1156,13 +1162,13 @@ impl DocumentRuntime {
         &self,
         document_handle: Option<DomHandle>,
         document_url: &Url,
-        response_policies: &[String],
+        response_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
         request_url: &Url,
         redirect_status: ContentSecurityPolicyRedirectStatus,
         nonce: Option<&str>,
     ) -> Option<DocumentContentSecurityPolicyViolation> {
-        let policies = self.document_content_security_policy_strings_for_optional_document(
+        let policies = self.document_content_security_policies_for_optional_document(
             document_handle,
             response_policies,
             response_reporting_endpoints,
@@ -1180,7 +1186,7 @@ impl DocumentRuntime {
     pub(crate) fn script_element_request_csp_report_only_violation_for_document(
         &self,
         document_url: &Url,
-        response_report_only_policies: &[String],
+        response_report_only_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
         request_url: &Url,
     ) -> Option<DocumentContentSecurityPolicyViolation> {
@@ -1197,7 +1203,7 @@ impl DocumentRuntime {
     pub(crate) fn script_element_request_csp_report_only_violation_for_document_with_redirect_status(
         &self,
         document_url: &Url,
-        response_report_only_policies: &[String],
+        response_report_only_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
         request_url: &Url,
         redirect_status: ContentSecurityPolicyRedirectStatus,
@@ -1219,13 +1225,13 @@ impl DocumentRuntime {
         &self,
         document_handle: Option<DomHandle>,
         document_url: &Url,
-        response_policies: &[String],
-        response_report_only_policies: &[String],
+        response_policies: &[ContentSecurityPolicy],
+        response_report_only_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
         request_url: &Url,
         redirect_status: ContentSecurityPolicyRedirectStatus,
     ) -> DocumentContentSecurityPolicyCheck {
-        let policies = self.document_content_security_policy_strings_for_optional_document(
+        let policies = self.document_content_security_policies_for_optional_document(
             document_handle,
             response_policies,
             response_reporting_endpoints,
@@ -1255,11 +1261,11 @@ impl DocumentRuntime {
         &self,
         document_handle: Option<DomHandle>,
         document_url: &Url,
-        response_policies: &[String],
+        response_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
         request_url: &Url,
     ) -> Option<DocumentContentSecurityPolicyViolation> {
-        let policies = self.document_content_security_policy_strings_for_optional_document(
+        let policies = self.document_content_security_policies_for_optional_document(
             document_handle,
             response_policies,
             response_reporting_endpoints,
@@ -1276,7 +1282,7 @@ impl DocumentRuntime {
     pub(crate) fn document_frame_csp_report_only_violation_for_document(
         &self,
         document_url: &Url,
-        response_report_only_policies: &[String],
+        response_report_only_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
         request_url: &Url,
     ) -> Option<DocumentContentSecurityPolicyViolation> {
@@ -1294,10 +1300,10 @@ impl DocumentRuntime {
         &self,
         document_handle: Option<DomHandle>,
         document_url: &Url,
-        response_policies: &[String],
+        response_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
     ) -> Option<DocumentContentSecurityPolicyViolation> {
-        let policies = self.document_content_security_policy_strings_for_optional_document(
+        let policies = self.document_content_security_policies_for_optional_document(
             document_handle,
             response_policies,
             response_reporting_endpoints,
@@ -1314,10 +1320,10 @@ impl DocumentRuntime {
     pub(crate) fn inline_script_csp_report_only_violation_for_document(
         &self,
         document_url: &Url,
-        response_report_only_policies: &[String],
+        response_report_only_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
     ) -> Option<DocumentContentSecurityPolicyViolation> {
-        let policies = document_response_content_security_policy_strings(
+        let policies = document_response_content_security_policies(
             response_report_only_policies,
             response_reporting_endpoints,
         );
@@ -1347,7 +1353,7 @@ impl DocumentRuntime {
         disposition: ContentSecurityPolicyDisposition,
     ) -> Option<DocumentContentSecurityPolicyViolation> {
         let document_url = self.document_url();
-        let policies = self.document_content_security_policy_strings_for_optional_document(
+        let policies = self.document_content_security_policies_for_optional_document(
             Some(self.document_handle()),
             &self.policy_container.response_content_security_policies,
             &self.policy_container.content_security_reporting_endpoints,
@@ -1369,7 +1375,7 @@ impl DocumentRuntime {
         disposition: ContentSecurityPolicyDisposition,
     ) -> Option<DocumentContentSecurityPolicyViolation> {
         let document_url = self.document_url();
-        let policies = document_response_content_security_policy_strings(
+        let policies = document_response_content_security_policies(
             &self
                 .policy_container
                 .response_content_security_report_only_policies,
@@ -1402,7 +1408,7 @@ impl DocumentRuntime {
         sample: &str,
     ) -> Option<DocumentContentSecurityPolicyViolation> {
         let document_url = self.document_url();
-        let policies = document_response_content_security_policy_strings(
+        let policies = document_response_content_security_policies(
             &self
                 .policy_container
                 .response_content_security_report_only_policies,
@@ -1422,7 +1428,7 @@ impl DocumentRuntime {
         &self,
     ) -> TrustedTypesForScriptRequirements {
         let enforced = self.requires_trusted_types_for_script();
-        let report_only_policies = document_response_content_security_policy_strings(
+        let report_only_policies = document_response_content_security_policies(
             &self
                 .policy_container
                 .response_content_security_report_only_policies,
@@ -1437,20 +1443,17 @@ impl DocumentRuntime {
     pub(crate) fn trusted_types_for_script_requirements_for_document(
         &self,
         document_handle: Option<DomHandle>,
-        response_policies: &[String],
-        report_only_policies: &[String],
+        response_policies: &[ContentSecurityPolicy],
+        report_only_policies: &[ContentSecurityPolicy],
         reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
     ) -> TrustedTypesForScriptRequirements {
-        let enforced_policies = self
-            .document_content_security_policy_strings_for_optional_document(
-                document_handle,
-                response_policies,
-                reporting_endpoints,
-            );
-        let report_only_policies = document_response_content_security_policy_strings(
-            report_only_policies,
+        let enforced_policies = self.document_content_security_policies_for_optional_document(
+            document_handle,
+            response_policies,
             reporting_endpoints,
         );
+        let report_only_policies =
+            document_response_content_security_policies(report_only_policies, reporting_endpoints);
         TrustedTypesForScriptRequirements::new(
             document_policies_require_trusted_types_for_script(&enforced_policies),
             document_policies_require_trusted_types_for_script(&report_only_policies),
@@ -1461,22 +1464,19 @@ impl DocumentRuntime {
         &self,
         document_handle: Option<DomHandle>,
         document_url: &Url,
-        response_policies: &[String],
-        report_only_policies: &[String],
+        response_policies: &[ContentSecurityPolicy],
+        report_only_policies: &[ContentSecurityPolicy],
         reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
         sink: &str,
         sample: &str,
     ) -> Vec<DocumentContentSecurityPolicyViolation> {
-        let report_only_policies = document_response_content_security_policy_strings(
-            report_only_policies,
+        let report_only_policies =
+            document_response_content_security_policies(report_only_policies, reporting_endpoints);
+        let enforced_policies = self.document_content_security_policies_for_optional_document(
+            document_handle,
+            response_policies,
             reporting_endpoints,
         );
-        let enforced_policies = self
-            .document_content_security_policy_strings_for_optional_document(
-                document_handle,
-                response_policies,
-                reporting_endpoints,
-            );
         let mut violations = iter_document_trusted_types_sink_policy_violations(
             enforced_policies,
             document_url,
@@ -1496,7 +1496,7 @@ impl DocumentRuntime {
     }
 
     pub(crate) fn requires_trusted_types_for_script(&self) -> bool {
-        let policies = self.document_content_security_policy_strings_for_optional_document(
+        let policies = self.document_content_security_policies_for_optional_document(
             Some(self.document_handle()),
             &self.policy_container.response_content_security_policies,
             &self.policy_container.content_security_reporting_endpoints,
@@ -1507,10 +1507,10 @@ impl DocumentRuntime {
     pub(crate) fn allows_trusted_types_eval_for_document(
         &self,
         document_handle: Option<DomHandle>,
-        response_policies: &[String],
+        response_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
     ) -> bool {
-        let policies = self.document_content_security_policy_strings_for_optional_document(
+        let policies = self.document_content_security_policies_for_optional_document(
             document_handle,
             response_policies,
             response_reporting_endpoints,
@@ -1521,11 +1521,11 @@ impl DocumentRuntime {
     pub(crate) fn allows_trusted_type_policy_name_for_document(
         &self,
         document_handle: Option<DomHandle>,
-        response_policies: &[String],
+        response_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
         policy_name: &str,
     ) -> bool {
-        let policies = self.document_content_security_policy_strings_for_optional_document(
+        let policies = self.document_content_security_policies_for_optional_document(
             document_handle,
             response_policies,
             response_reporting_endpoints,
@@ -1685,21 +1685,21 @@ impl DocumentRuntime {
         Ok(())
     }
 
-    fn document_content_security_policy_strings_for_optional_document(
+    fn document_content_security_policies_for_optional_document(
         &self,
         document_handle: Option<DomHandle>,
-        response_policies: &[String],
+        response_policies: &[ContentSecurityPolicy],
         response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
-    ) -> Vec<DocumentContentSecurityPolicyString> {
-        let mut policies = document_response_content_security_policy_strings(
+    ) -> Vec<DocumentContentSecurityPolicy> {
+        let mut policies = document_response_content_security_policies(
             response_policies,
             response_reporting_endpoints,
         );
         if let Some(handle) = document_handle {
             policies.extend(
-                self.meta_content_security_policy_strings_for_document(handle)
+                self.meta_content_security_policies_for_document(handle)
                     .into_iter()
-                    .map(|policy| DocumentContentSecurityPolicyString {
+                    .map(|policy| DocumentContentSecurityPolicy {
                         policy,
                         report_uri_enabled: false,
                         reporting_endpoints: response_reporting_endpoints.clone(),
@@ -1709,10 +1709,10 @@ impl DocumentRuntime {
         policies
     }
 
-    fn meta_content_security_policy_strings_for_document(
+    pub(crate) fn meta_content_security_policies_for_document(
         &self,
         document_handle: DomHandle,
-    ) -> Vec<String> {
+    ) -> Vec<ContentSecurityPolicy> {
         let candidates = self
             .dom_host
             .html_elements_by_local_name_in_document_tree_order(document_handle, "meta")
@@ -1736,7 +1736,12 @@ impl DocumentRuntime {
         document_handle: DomHandle,
         handle: DomHandle,
     ) {
-        if self.dom_host.owner_document_handle(handle) != Some(document_handle) {
+        if self.dom_host.owner_document_handle(handle) != Some(document_handle)
+            || self
+                .processed_meta_content_security_policy_handles
+                .borrow()
+                .contains(&(document_handle, handle))
+        {
             return;
         }
         let policy = {
@@ -1774,13 +1779,13 @@ impl DocumentRuntime {
                 .borrow_mut()
                 .entry(document_handle)
                 .or_default()
-                .push(policy);
+                .push(ContentSecurityPolicy::from_meta(policy));
         }
     }
 }
 
 fn document_connect_policy_violation(
-    policies: &[String],
+    policies: &[ContentSecurityPolicy],
     reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
     document_url: &Url,
     request_url: &Url,
@@ -1799,7 +1804,7 @@ fn document_connect_policy_violation(
 }
 
 fn document_frame_policy_violation(
-    policies: &[String],
+    policies: &[ContentSecurityPolicy],
     reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
     document_url: &Url,
     request_url: &Url,
@@ -1818,7 +1823,7 @@ fn document_frame_policy_violation(
 }
 
 fn document_url_policy_violation(
-    policies: &[String],
+    policies: &[ContentSecurityPolicy],
     reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
     document_url: &Url,
     request_url: &Url,
@@ -1838,7 +1843,7 @@ fn document_url_policy_violation(
 }
 
 fn document_script_element_url_policy_violation(
-    policies: &[String],
+    policies: &[ContentSecurityPolicy],
     reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
     document_url: &Url,
     request_url: &Url,
@@ -1858,7 +1863,7 @@ fn document_script_element_url_policy_violation(
 }
 
 fn document_style_element_url_policy_violation(
-    policies: &[String],
+    policies: &[ContentSecurityPolicy],
     reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
     document_url: &Url,
     request_url: &Url,
@@ -1878,19 +1883,19 @@ fn document_style_element_url_policy_violation(
 }
 
 #[derive(Debug, Clone)]
-struct DocumentContentSecurityPolicyString {
-    policy: String,
+struct DocumentContentSecurityPolicy {
+    policy: ContentSecurityPolicy,
     report_uri_enabled: bool,
     reporting_endpoints: ContentSecurityPolicyReportingEndpoints,
 }
 
-fn document_response_content_security_policy_strings(
-    response_policies: &[String],
+fn document_response_content_security_policies(
+    response_policies: &[ContentSecurityPolicy],
     response_reporting_endpoints: &ContentSecurityPolicyReportingEndpoints,
-) -> Vec<DocumentContentSecurityPolicyString> {
+) -> Vec<DocumentContentSecurityPolicy> {
     response_policies
         .iter()
-        .map(|policy| DocumentContentSecurityPolicyString {
+        .map(|policy| DocumentContentSecurityPolicy {
             policy: policy.to_owned(),
             report_uri_enabled: true,
             reporting_endpoints: response_reporting_endpoints.clone(),
@@ -1899,7 +1904,7 @@ fn document_response_content_security_policy_strings(
 }
 
 fn document_connect_policy_violation_from_document_policies(
-    policies: Vec<DocumentContentSecurityPolicyString>,
+    policies: Vec<DocumentContentSecurityPolicy>,
     document_url: &Url,
     request_url: &Url,
     redirect_status: ContentSecurityPolicyRedirectStatus,
@@ -1916,7 +1921,7 @@ fn document_connect_policy_violation_from_document_policies(
 }
 
 fn document_frame_policy_violation_from_document_policies(
-    policies: Vec<DocumentContentSecurityPolicyString>,
+    policies: Vec<DocumentContentSecurityPolicy>,
     document_url: &Url,
     request_url: &Url,
     redirect_status: ContentSecurityPolicyRedirectStatus,
@@ -1933,7 +1938,7 @@ fn document_frame_policy_violation_from_document_policies(
 }
 
 fn document_url_policy_violation_from_document_policies(
-    policies: Vec<DocumentContentSecurityPolicyString>,
+    policies: Vec<DocumentContentSecurityPolicy>,
     document_url: &Url,
     request_url: &Url,
     kind: ContentSecurityPolicyResourceKind,
@@ -1957,7 +1962,7 @@ fn document_url_policy_violation_from_document_policies(
 }
 
 fn document_script_element_url_policy_violation_from_document_policies(
-    policies: Vec<DocumentContentSecurityPolicyString>,
+    policies: Vec<DocumentContentSecurityPolicy>,
     document_url: &Url,
     request_url: &Url,
     redirect_status: ContentSecurityPolicyRedirectStatus,
@@ -1981,7 +1986,7 @@ fn document_script_element_url_policy_violation_from_document_policies(
 }
 
 fn document_style_element_url_policy_violation_from_document_policies(
-    policies: Vec<DocumentContentSecurityPolicyString>,
+    policies: Vec<DocumentContentSecurityPolicy>,
     document_url: &Url,
     request_url: &Url,
     redirect_status: ContentSecurityPolicyRedirectStatus,
@@ -2005,7 +2010,7 @@ fn document_style_element_url_policy_violation_from_document_policies(
 }
 
 fn document_non_url_policy_violation_from_document_policies(
-    policies: Vec<DocumentContentSecurityPolicyString>,
+    policies: Vec<DocumentContentSecurityPolicy>,
     document_url: &Url,
     kind: ContentSecurityPolicyNonUrlKind,
     source: Option<&str>,
@@ -2026,7 +2031,7 @@ fn document_non_url_policy_violation_from_document_policies(
 }
 
 fn document_inline_source_policy_violation_from_document_policies(
-    policies: Vec<DocumentContentSecurityPolicyString>,
+    policies: Vec<DocumentContentSecurityPolicy>,
     document_url: &Url,
     kind: ContentSecurityPolicyNonUrlKind,
     source: &str,
@@ -2047,7 +2052,7 @@ fn document_inline_source_policy_violation_from_document_policies(
 }
 
 fn document_inline_script_element_policy_violation_from_document_policies(
-    policies: Vec<DocumentContentSecurityPolicyString>,
+    policies: Vec<DocumentContentSecurityPolicy>,
     document_url: &Url,
     source: &str,
     request: ContentSecurityPolicyScriptElementRequest<'_>,
@@ -2068,7 +2073,7 @@ fn document_inline_script_element_policy_violation_from_document_policies(
 }
 
 fn document_inline_style_element_policy_violation_from_document_policies(
-    policies: Vec<DocumentContentSecurityPolicyString>,
+    policies: Vec<DocumentContentSecurityPolicy>,
     document_url: &Url,
     source: &str,
     request: ContentSecurityPolicyStyleElementRequest<'_>,
@@ -2090,7 +2095,7 @@ fn document_inline_style_element_policy_violation_from_document_policies(
 
 #[cfg(test)]
 fn document_trusted_types_sink_policy_violation_from_document_policies(
-    policies: Vec<DocumentContentSecurityPolicyString>,
+    policies: Vec<DocumentContentSecurityPolicy>,
     document_url: &Url,
     sink: &str,
     sample: &str,
@@ -2107,7 +2112,7 @@ fn document_trusted_types_sink_policy_violation_from_document_policies(
 }
 
 fn iter_document_trusted_types_sink_policy_violations<'a>(
-    policies: Vec<DocumentContentSecurityPolicyString>,
+    policies: Vec<DocumentContentSecurityPolicy>,
     document_url: &'a Url,
     sink: &'a str,
     sample: &'a str,
@@ -2130,7 +2135,7 @@ fn iter_document_trusted_types_sink_policy_violations<'a>(
 }
 
 fn document_policies_allow_trusted_type_policy_name(
-    policies: Vec<DocumentContentSecurityPolicyString>,
+    policies: Vec<DocumentContentSecurityPolicy>,
     policy_name: &str,
 ) -> bool {
     policies.into_iter().all(|policy| {
@@ -2139,7 +2144,7 @@ fn document_policies_allow_trusted_type_policy_name(
 }
 
 fn document_policies_require_trusted_types_for_script(
-    policies: &[DocumentContentSecurityPolicyString],
+    policies: &[DocumentContentSecurityPolicy],
 ) -> bool {
     policies.iter().any(|policy| {
         content_security_policy_requires_trusted_types_for_script(std::slice::from_ref(
@@ -2148,9 +2153,7 @@ fn document_policies_require_trusted_types_for_script(
     })
 }
 
-fn document_policies_allow_trusted_types_eval(
-    policies: &[DocumentContentSecurityPolicyString],
-) -> bool {
+fn document_policies_allow_trusted_types_eval(policies: &[DocumentContentSecurityPolicy]) -> bool {
     let policies = policies
         .iter()
         .map(|policy| policy.policy.clone())
@@ -2160,7 +2163,7 @@ fn document_policies_allow_trusted_types_eval(
 
 fn apply_document_policy_reporting_flags(
     violation: &mut DocumentContentSecurityPolicyViolation,
-    policy: &DocumentContentSecurityPolicyString,
+    policy: &DocumentContentSecurityPolicy,
 ) {
     if !policy.report_uri_enabled {
         violation.report_uri_endpoints.clear();
@@ -2208,35 +2211,14 @@ pub(crate) fn create_content_security_policy_violation_event<'s>(
 
 pub(crate) fn response_content_security_policies_from_headers(
     headers: &[(String, Vec<u8>)],
-) -> Vec<String> {
+) -> Vec<ContentSecurityPolicy> {
     content_security_policy_headers(headers)
 }
 
 pub(crate) fn response_content_security_report_only_policies_from_headers(
     headers: &[(String, Vec<u8>)],
-) -> Vec<String> {
+) -> Vec<ContentSecurityPolicy> {
     content_security_policy_report_only_headers(headers)
-}
-
-impl<'a> From<&'a DocumentContentSecurityPolicyViolation>
-    for ContentSecurityPolicyViolationEventFields<'a>
-{
-    fn from(violation: &'a DocumentContentSecurityPolicyViolation) -> Self {
-        Self {
-            document_uri: violation.document_uri.as_str(),
-            referrer: "",
-            blocked_uri: violation.blocked_uri.as_str(),
-            effective_directive: violation.effective_directive,
-            violated_directive: violation.effective_directive,
-            original_policy: violation.original_policy.as_str(),
-            disposition: violation.disposition,
-            source_file: violation.source_file.as_str(),
-            sample: violation.sample.as_str(),
-            line_number: violation.line_number,
-            column_number: violation.column_number,
-            status_code: 0,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -2889,7 +2871,7 @@ mod tests {
             .inline_script_csp_violation_for_document(
                 Some(runtime.document_handle()),
                 runtime.document_url(),
-                &["script-src 'none'; report-to csp".to_owned()],
+                &["script-src 'none'; report-to csp".into()],
                 &reporting_endpoints(),
             )
             .expect("inline script should violate script-src none");
@@ -3085,7 +3067,7 @@ mod tests {
     fn csp_response_header_blocks_child_document_script_requests() {
         let runtime = runtime_for_html("<!doctype html>");
         let document_url = Url::parse("https://example.test/popup.html").unwrap();
-        let response_policies = vec!["script-src 'self'".to_owned()];
+        let response_policies = vec!["script-src 'self'".into()];
         let blocked = Url::parse("https://cdn.example.test/popup.js").unwrap();
         let reporting_endpoints = ContentSecurityPolicyReportingEndpoints::default();
 
@@ -3108,8 +3090,8 @@ mod tests {
     fn csp_response_header_blocks_child_inline_scripts_without_unsafe_inline() {
         let runtime = runtime_for_html("<!doctype html>");
         let document_url = Url::parse("https://example.test/popup.html").unwrap();
-        let blocking_policies = vec!["script-src 'self'".to_owned()];
-        let allowing_policies = vec!["script-src 'unsafe-inline'".to_owned()];
+        let blocking_policies = vec!["script-src 'self'".into()];
+        let allowing_policies = vec!["script-src 'unsafe-inline'".into()];
         let reporting_endpoints = ContentSecurityPolicyReportingEndpoints::default();
 
         let violation = runtime
@@ -3148,7 +3130,10 @@ mod tests {
                     b"default-src 'none'".to_vec()
                 ),
                 ("X-Other".to_owned(), b"ignored".to_vec()),
-            ]),
+            ])
+            .iter()
+            .map(|policy| policy.as_str())
+            .collect::<Vec<_>>(),
             vec!["default-src 'self'"]
         );
         assert_eq!(
@@ -3162,7 +3147,10 @@ mod tests {
                     b" default-src 'none' ".to_vec()
                 ),
                 ("X-Other".to_owned(), b"ignored".to_vec()),
-            ]),
+            ])
+            .iter()
+            .map(|policy| policy.as_str())
+            .collect::<Vec<_>>(),
             vec!["default-src 'none'"]
         );
     }
@@ -3202,11 +3190,19 @@ mod tests {
             policy.response_content_security_policies
         );
         assert_eq!(
-            policy.response_content_security_policies,
+            policy
+                .response_content_security_policies
+                .iter()
+                .map(|policy| policy.as_str())
+                .collect::<Vec<_>>(),
             vec!["sandbox allow-scripts; frame-ancestors 'self'"]
         );
         assert_eq!(
-            policy.response_content_security_report_only_policies,
+            policy
+                .response_content_security_report_only_policies
+                .iter()
+                .map(|policy| policy.as_str())
+                .collect::<Vec<_>>(),
             vec!["frame-ancestors https://embedder.test; report-to csp"]
         );
         assert_eq!(policy.referrer_policy.as_deref(), Some("no-referrer"));
@@ -3229,9 +3225,9 @@ mod tests {
     fn navigation_response_frame_ancestors_check_distinguishes_top_level_and_nested() {
         let protected_url = Url::parse("https://child.test/frame.html").unwrap();
         let policy = DocumentPolicyContainer {
-            response_content_security_policies: vec!["frame-ancestors 'self'".to_owned()],
+            response_content_security_policies: vec!["frame-ancestors 'self'".into()],
             response_content_security_report_only_policies: vec![
-                "frame-ancestors https://reported.test".to_owned(),
+                "frame-ancestors https://reported.test".into(),
             ],
             ..Default::default()
         };
