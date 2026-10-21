@@ -195,9 +195,11 @@ impl TargetNavigationLoadInputs {
     pub(crate) fn document_settings_snapshot(
         &self,
         idle_override: Option<moli_page_types::EmulatedIdleOverride>,
+        debugger_enabled: bool,
     ) -> moli_page_types::DocumentSettings {
         moli_page_types::DocumentSettings {
             script_execution_disabled: self.script_execution_disabled,
+            debugger_enabled,
             scrollbars_hidden: self.scrollbars_hidden,
             bypass_content_security_policy: self.bypass_content_security_policy,
             emulated_media: self.emulated_media.clone(),

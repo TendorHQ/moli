@@ -44,6 +44,10 @@ pub(super) struct DomDebuggerState {
 }
 
 impl DomDebuggerState {
+    pub(super) fn debugger_pauses_enabled(&self) -> bool {
+        self.pause_scheduler.debugger_pauses_enabled()
+    }
+
     pub(super) fn rebind_pause_scheduler(&mut self, scheduler: RendererDomDebuggerPauseScheduler) {
         self.pause_scheduler = scheduler;
     }

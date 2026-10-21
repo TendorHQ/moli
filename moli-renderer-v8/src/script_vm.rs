@@ -1955,7 +1955,7 @@ pub(crate) use document_environment::ScriptVmCapturedDocumentEnvironment;
 impl ScriptVmPageRealmBootstrap {
     fn new_from_dom_host(
         mut dom_host: DomHost,
-        bypass_content_security_policy: bool,
+        document_settings: &moli_page_types::DocumentSettings,
         page_task_tx: RuntimePageTaskSender,
         page_task_parser_boundary_injection_tx: tokio::sync::mpsc::UnboundedSender<PageTask>,
         resource_completion_tx: RendererResourceCompletionSender,
@@ -2039,7 +2039,8 @@ impl ScriptVmPageRealmBootstrap {
             document_runtime.set_initial_document_policy_container(initial_policy);
         }
         document_runtime.set_author_styles_disabled(author_styles_disabled);
-        document_runtime.set_bypass_content_security_policy(bypass_content_security_policy);
+        document_runtime
+            .set_bypass_content_security_policy(document_settings.bypass_content_security_policy);
         let (page_context_cancel_tx, page_context_cancel_rx) =
             renderer_page_context_cancel_channel();
 
@@ -2057,6 +2058,7 @@ impl ScriptVmPageRealmBootstrap {
             renderer_page_script_environment,
             reuse_main_window_proxy,
         } = renderer_document_isolate_bootstrap;
+        page_inspector.configure_debugger(document_settings.debugger_enabled);
         if !runtime_inspector_session_restore_snapshots.is_empty() {
             renderer_document_isolate.with_renderer_document_isolate_and_inspector_mut(
                 |_, backend| {
@@ -2370,7 +2372,7 @@ impl ScriptVmDefaultWorldBootstrap {
             };
         Self::from_dom_host_with_resource_completion_sender_browser_context_runtime_and_document_isolate(
             bootstrap_dom_host,
-            false,
+            &moli_page_types::DocumentSettings::default(),
             page_task_tx,
             page_task_parser_boundary_injection_tx,
             resource_completion_tx,
@@ -2389,7 +2391,7 @@ impl ScriptVmDefaultWorldBootstrap {
 
     pub(super) fn from_dom_host_with_resource_completion_sender_browser_context_runtime_and_document_isolate(
         bootstrap_dom_host: DomHost,
-        bypass_content_security_policy: bool,
+        document_settings: &moli_page_types::DocumentSettings,
         page_task_tx: RuntimePageTaskSender,
         page_task_parser_boundary_injection_tx: tokio::sync::mpsc::UnboundedSender<PageTask>,
         resource_completion_tx: RendererResourceCompletionSender,
@@ -2409,7 +2411,7 @@ impl ScriptVmDefaultWorldBootstrap {
     ) -> std::result::Result<Self, ScriptVmBootstrapError> {
         ScriptVmPageRealmBootstrap::new_from_dom_host(
             bootstrap_dom_host,
-            bypass_content_security_policy,
+            document_settings,
             page_task_tx,
             page_task_parser_boundary_injection_tx,
             resource_completion_tx,

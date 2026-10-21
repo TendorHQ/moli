@@ -130,6 +130,8 @@ fn real_layout_test_runtime_config(
         true,
         LayoutPolicy::OnDemand,
     )
+    // Debugger tests exercise actual pauses; production defaults are tested separately.
+    .with_debugger_enabled(true)
 }
 
 pub(crate) fn real_layout_test_connection() -> CdpConnection {

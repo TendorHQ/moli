@@ -362,6 +362,7 @@ impl v8::inspector::V8InspectorClientImpl for WorkerInspectorClient {
 }
 
 pub(super) struct WorkerRuntimeInspector {
+    debugger_enabled: bool,
     sessions: RefCell<HashMap<String, Rc<v8::inspector::V8InspectorSession>>>,
     detached_sessions: RefCell<HashSet<String>>,
     navigator_emulation: Rc<RefCell<moli_page_types::NavigatorEmulationSessions>>,
@@ -432,6 +433,7 @@ impl WorkerRuntimeInspector {
         task_runner: WorkerInspectorTaskRunner,
         parent_tx: mpsc::UnboundedSender<WorkerToParentMessage>,
         shared_worker: bool,
+        debugger_enabled: bool,
     ) -> Rc<Self> {
         let isolate_ptr = unsafe { isolate.as_raw_isolate_ptr() };
         let default_context = Rc::new(RefCell::new(None));
@@ -454,6 +456,7 @@ impl WorkerRuntimeInspector {
                     executor.clone(),
                 )));
             Self {
+                debugger_enabled,
                 inspector: v8::inspector::V8Inspector::create(isolate, inspector_client),
                 sessions: RefCell::new(HashMap::new()),
                 detached_sessions: RefCell::new(HashSet::new()),
@@ -471,12 +474,17 @@ impl WorkerRuntimeInspector {
 
     #[cfg(test)]
     fn new_for_test(isolate: &mut v8::Isolate) -> Rc<Self> {
+        Self::new_for_test_with_debugger(isolate, false)
+    }
+
+    #[cfg(test)]
+    fn new_for_test_with_debugger(isolate: &mut v8::Isolate, debugger_enabled: bool) -> Rc<Self> {
         let (wake_tx, _wake_rx) = mpsc::unbounded_channel();
         let (parent_tx, _parent_rx) = mpsc::unbounded_channel();
         let isolate_handle =
             std::sync::Arc::new(parking_lot::Mutex::new(Some(isolate.thread_safe_handle())));
         let task_runner = WorkerInspectorTaskRunner::new(wake_tx, isolate_handle);
-        Self::new(isolate, task_runner, parent_tx, false)
+        Self::new(isolate, task_runner, parent_tx, false, debugger_enabled)
     }
 
     pub(super) fn attach_context<'s>(
@@ -776,7 +784,7 @@ impl WorkerRuntimeInspector {
             .borrow_mut()
             .entry(session_key.to_owned())
             .or_insert_with(|| {
-                Rc::new(self.inspector.connect(
+                let session = self.inspector.connect(
                     WORKER_INSPECTOR_CONTEXT_GROUP_ID,
                     v8::inspector::Channel::new(Box::new(WorkerInspectorChannel {
                         outbound: self.outbound.clone(),
@@ -784,7 +792,9 @@ impl WorkerRuntimeInspector {
                     })),
                     v8::inspector::StringView::from(&b"{}"[..]),
                     v8::inspector::V8InspectorClientTrustLevel::FullyTrusted,
-                ))
+                );
+                session.set_skip_all_pauses(!self.debugger_enabled);
+                Rc::new(session)
             })
             .clone()
     }
@@ -947,7 +957,7 @@ mod tests {
             std::sync::Arc::new(parking_lot::Mutex::new(Some(isolate.thread_safe_handle()))),
         );
         let inspector =
-            WorkerRuntimeInspector::new(&mut isolate, task_runner.clone(), parent_tx, false);
+            WorkerRuntimeInspector::new(&mut isolate, task_runner.clone(), parent_tx, false, false);
         let registration = moli_v8_platform::V8PlatformIsolateRegistration::register(
             &mut isolate,
             moli_v8_platform::V8ForegroundTaskWake::queued(|_| {}),
@@ -1145,6 +1155,56 @@ mod tests {
             outbound.take_all().is_empty(),
             "stale worker late response must not contaminate pending notifications"
         );
+    }
+
+    #[test]
+    fn worker_debugger_initializes_each_session_with_startup_setting() {
+        crate::ensure_v8_for_test();
+        for debugger_enabled in [false, true] {
+            let mut isolate = v8::Isolate::new(Default::default());
+            let inspector =
+                WorkerRuntimeInspector::new_for_test_with_debugger(&mut isolate, debugger_enabled);
+            let scope = pin!(v8::HandleScope::new(&mut isolate));
+            let scope = &mut scope.init();
+            let context = v8::Context::new(scope, Default::default());
+            inspector.attach_context(
+                context,
+                v8::Global::new(scope, context),
+                "https://worker-debugger.test/worker.js",
+            );
+            for key in ["", "peer"] {
+                let state = v8::crdtp::cbor_to_json(&inspector.ensure_session(key).state())
+                    .expect("worker session state");
+                let state: Value = serde_json::from_slice(&state).expect("worker session JSON");
+                assert_eq!(state["Debugger"]["skipAllPauses"], !debugger_enabled);
+            }
+            assert!(inspector.take_pending_messages().is_empty());
+            let scope = &mut v8::ContextScope::new(scope, context);
+            if !debugger_enabled {
+                crate::inspector_session::tests::assert_debugger_defaults(|request| {
+                    inspector
+                        .dispatch_protocol_message(scope, None, request)
+                        .expect("worker Inspector dispatch")
+                        .into_iter()
+                        .map(RendererRuntimeInspectorMessage::into_v8_inspector_message)
+                        .collect()
+                });
+            }
+            inspector
+                .dispatch_protocol_message(
+                    scope,
+                    None,
+                    r#"{"id":10,"method":"Debugger.setSkipAllPauses","params":{"skip":false}}"#,
+                )
+                .expect("explicit worker pause override");
+            inspector
+                .dispatch_protocol_message(scope, None, r#"{"id":11,"method":"Debugger.enable"}"#)
+                .expect("worker Debugger.enable");
+            let state = v8::crdtp::cbor_to_json(&inspector.ensure_session("").state())
+                .expect("worker state");
+            let state: Value = serde_json::from_slice(&state).expect("worker state JSON");
+            assert_eq!(state["Debugger"]["skipAllPauses"], false);
+        }
     }
 
     #[test]

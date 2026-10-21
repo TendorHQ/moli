@@ -1676,7 +1676,8 @@ pub(super) async fn webdriver_classic_new_session(
             state.optional_resource_fetch_mask,
             state.subframe_loading_enabled,
             state.layout_configuration,
-        ),
+        )
+        .with_debugger_enabled(state.debugger_enabled),
         instance_connection,
     );
     let create_context = ClassicDevToolsCommandContext::new(session.session_id.as_str());

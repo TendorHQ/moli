@@ -4403,7 +4403,7 @@ impl PageVm {
         } else {
             let vm_bootstrap = ScriptVmDefaultWorldBootstrap::from_dom_host_with_resource_completion_sender_browser_context_runtime_and_document_isolate(
             bootstrap_document,
-            env.document_settings.bypass_content_security_policy,
+            &env.document_settings,
             post_domcontentloaded_page_task_sender,
             script_event_parser_boundary_sender,
             resource_completion_sender,

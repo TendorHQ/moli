@@ -1762,7 +1762,16 @@ impl CdpConnection {
     ) -> anyhow::Result<PreparedDocumentPageCommitConfiguration> {
         let idle_override = self.idle_override_for_navigation(owner, final_url);
         let load_inputs = self.navigation_load_inputs_for_owner(owner);
-        let document_settings = load_inputs.document_settings_snapshot(idle_override);
+        let debugger_enabled = self
+            .page_navigation_engine_for_load_inputs(&load_inputs)
+            .map(NavigationEngine::debugger_enabled)
+            .unwrap_or_else(|| {
+                self.standalone_navigation_engine
+                    .runtime_config()
+                    .debugger_enabled()
+            });
+        let document_settings =
+            load_inputs.document_settings_snapshot(idle_override, debugger_enabled);
         // The renderer runtime is shared by the BrowserContext, but each Page
         // target owns its NavigationEngine and may have a different transport
         // identity. Resolve through that target's engine at the commit

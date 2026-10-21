@@ -409,6 +409,8 @@ fn protocol_server_test_runtime_config(
         true,
         LayoutPolicy::OnDemand,
     )
+    // Most protocol fixtures exercise Chromium-compatible debugging, including pauses.
+    .with_debugger_enabled(true)
 }
 
 async fn spawn_test_protocol_server_with_layout_policy(

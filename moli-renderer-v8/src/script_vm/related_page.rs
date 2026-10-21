@@ -22,7 +22,7 @@ impl ScriptVmDefaultWorldBootstrap {
             .window_global_template(scope);
         let bootstrap = ScriptVmPageRealmBootstrap::new_from_dom_host(
             dom_host,
-            env.document_settings.bypass_content_security_policy,
+            &env.document_settings,
             page_task_tx,
             parser_boundary_tx,
             resource_completion_tx,

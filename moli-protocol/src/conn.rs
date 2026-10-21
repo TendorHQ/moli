@@ -930,12 +930,14 @@ impl CdpInitialStoragePartitionOwner {
         id: String,
         http_cache_root: Option<PathBuf>,
         http_cache_max_bytes: Option<u64>,
+        debugger_enabled: bool,
     ) -> BrowserContext {
         BrowserContext::new_with_storage_partition_handles_and_http_cache(
             id,
             self.handles.clone(),
             http_cache_root,
             http_cache_max_bytes,
+            debugger_enabled,
         )
     }
 
@@ -3139,6 +3141,9 @@ impl CdpConnection {
             id,
             self.fetch_config().http_cache_dir().map(PathBuf::from),
             self.fetch_config().http_cache_max_bytes(),
+            self.standalone_navigation_engine
+                .runtime_config()
+                .debugger_enabled(),
         );
         self.apply_global_browser_context_state(&mut browser_context);
         browser_context
@@ -3168,6 +3173,9 @@ impl CdpConnection {
             id,
             self.fetch_config().http_cache_dir().map(PathBuf::from),
             self.fetch_config().http_cache_max_bytes(),
+            self.standalone_navigation_engine
+                .runtime_config()
+                .debugger_enabled(),
         );
         self.apply_global_browser_context_state(&mut browser_context);
         browser_context

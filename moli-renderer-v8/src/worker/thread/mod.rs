@@ -1556,6 +1556,7 @@ async fn worker_main(
         inspector_task_runner.clone(),
         parent_tx.clone(),
         matches!(global_kind, WorkerGlobalKind::Shared { .. }),
+        worker_context_runtime.debugger_enabled(),
     );
     worker_isolate
         .worker_runtime_inspector()

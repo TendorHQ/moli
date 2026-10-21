@@ -64,6 +64,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn default_connection_keeps_running_with_debugger_enabled() {
+        let conn = crate::conn::CdpConnection::new();
+        let mut ctx = TestContext::from_conn(conn);
+        with_loaded_document(&mut ctx).await;
+        for cycle in 0..2 {
+            let enable = command(&mut ctx, json!({"id": 1, "method": "Debugger.enable"}), 1).await;
+            assert!(enable["result"]["debuggerId"].is_string(), "{enable}");
+            let exceptions = command(
+                &mut ctx,
+                json!({
+                    "id": 2, "method": "Debugger.setPauseOnExceptions", "params": {"state": "all"}
+                }),
+                2,
+            )
+            .await;
+            assert_eq!(exceptions["result"], json!({}), "{exceptions}");
+            let evaluate = command(&mut ctx, json!({
+                "id": 3, "method": "Runtime.evaluate", "params": {
+                    "expression": "(() => { debugger; try { throw new Error('caught'); } catch {} return 42; })()"
+                }
+            }), 3).await;
+            assert_eq!(
+                evaluate["result"]["result"]["value"], 42,
+                "cycle {cycle}: {evaluate}"
+            );
+            assert!(
+                ctx.sent
+                    .iter()
+                    .all(|message| message["method"] != "Debugger.paused"),
+                "{:?}",
+                ctx.sent
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn debugger_script_events_and_source_use_v8_inspector() {
         let mut ctx = TestContext::new();
         with_loaded_document(&mut ctx).await;

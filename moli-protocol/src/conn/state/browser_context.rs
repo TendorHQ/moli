@@ -429,6 +429,7 @@ impl BrowserContext {
             BrowserContextStoragePartitionHandles::with_initial_cookies(initial_cookies),
             None,
             None,
+            false,
         )
     }
 
@@ -437,6 +438,7 @@ impl BrowserContext {
         partition: BrowserContextStoragePartitionHandles,
         http_cache_root: Option<PathBuf>,
         http_cache_max_bytes: Option<u64>,
+        debugger_enabled: bool,
     ) -> Self {
         let storage_partition = BrowserContextStoragePartitionIdentity::ephemeral(id.as_str());
         Self::new_with_storage_partition_and_storage_partition_identity(
@@ -445,6 +447,7 @@ impl BrowserContext {
             http_cache_root,
             http_cache_max_bytes,
             storage_partition,
+            debugger_enabled,
         )
     }
 
@@ -452,12 +455,14 @@ impl BrowserContext {
         id: String,
         http_cache_root: Option<PathBuf>,
         http_cache_max_bytes: Option<u64>,
+        debugger_enabled: bool,
     ) -> Self {
         Self::new_ephemeral_with_storage_partition_handles(
             id,
             BrowserContextStoragePartitionHandles::memory(),
             http_cache_root,
             http_cache_max_bytes,
+            debugger_enabled,
         )
     }
 
@@ -466,6 +471,7 @@ impl BrowserContext {
         partition: BrowserContextStoragePartitionHandles,
         http_cache_root: Option<PathBuf>,
         http_cache_max_bytes: Option<u64>,
+        debugger_enabled: bool,
     ) -> Self {
         Self::new_with_storage_partition_and_storage_partition_identity(
             id,
@@ -473,6 +479,7 @@ impl BrowserContext {
             http_cache_root,
             http_cache_max_bytes,
             BrowserContextStoragePartitionIdentity::profile_backed_default(),
+            debugger_enabled,
         )
     }
 
@@ -481,12 +488,14 @@ impl BrowserContext {
         partition: BrowserContextStoragePartitionHandles,
         http_cache_root: Option<PathBuf>,
         http_cache_max_bytes: Option<u64>,
+        debugger_enabled: bool,
     ) -> Self {
         Self::new_with_storage_partition_and_http_cache(
             id,
             partition,
             http_cache_root,
             http_cache_max_bytes,
+            debugger_enabled,
         )
     }
 
@@ -496,6 +505,7 @@ impl BrowserContext {
         http_cache_root: Option<PathBuf>,
         http_cache_max_bytes: Option<u64>,
         identity: BrowserContextStoragePartitionIdentity,
+        debugger_enabled: bool,
     ) -> Self {
         let storage_partition = BrowserContextStoragePartition::new(identity, partition);
 
@@ -537,7 +547,9 @@ impl BrowserContext {
             http_cache_max_bytes,
             page_navigation_runtime_config: None,
             renderer_output_transport_sender: None,
-            renderer_runtime_owner: Some(RendererBrowserContextRuntime::new()),
+            renderer_runtime_owner: Some(RendererBrowserContextRuntime::new_with_debugger_enabled(
+                debugger_enabled,
+            )),
         }
     }
 

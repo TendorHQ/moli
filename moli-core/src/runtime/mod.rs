@@ -286,6 +286,7 @@ impl Browser {
             RendererBrowserContextRuntime::new_owned_with_service_worker_resource_store_and_browser_resource_runtime(
                 partition.service_worker_resource_store(),
                 resource_runtime,
+                config.debugger_enabled(),
             );
         let browser_context_access = browser_context_owner.owner_access();
         let resource_runtime = browser_context_access
@@ -1194,6 +1195,7 @@ impl Browser {
             .document_settings
             .script_execution_disabled = self.config.script_execution_disabled();
         create_page_request.wpt_extensions_enabled = self.config.wpt_extensions_enabled();
+        create_page_request.document_settings.debugger_enabled = self.config.debugger_enabled();
         create_page_request.reply_boundary = reply_boundary;
         create_page_request.lifecycle_decider = lifecycle_decider;
         create_page_request.indexed_db_manager = Some(self.partition.weak_indexed_db_manager());
@@ -1333,6 +1335,7 @@ impl Browser {
                     document_start_scripts,
                     document_settings: moli_page_types::DocumentSettings {
                         script_execution_disabled: self.config.script_execution_disabled(),
+                        debugger_enabled: self.config.debugger_enabled(),
                         ..Default::default()
                     },
                     ..Default::default()

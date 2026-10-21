@@ -382,6 +382,7 @@ pub struct NavigationRuntimeConfig {
     optional_resource_fetch_mask: OptionalResourceFetchMask,
     subframe_loading_enabled: bool,
     layout_configuration: LayoutConfiguration,
+    debugger_enabled: bool,
 }
 
 impl NavigationRuntimeConfig {
@@ -413,6 +414,7 @@ impl NavigationRuntimeConfig {
             optional_resource_fetch_mask,
             subframe_loading_enabled,
             layout_configuration,
+            debugger_enabled: false,
         }
     }
 
@@ -448,6 +450,15 @@ impl NavigationRuntimeConfig {
     pub fn layout_configuration(&self) -> LayoutConfiguration {
         self.layout_configuration
     }
+
+    pub fn debugger_enabled(&self) -> bool {
+        self.debugger_enabled
+    }
+
+    pub fn with_debugger_enabled(mut self, enabled: bool) -> Self {
+        self.debugger_enabled = enabled;
+        self
+    }
 }
 
 impl Default for NavigationRuntimeConfig {
@@ -469,6 +480,7 @@ impl From<&crate::config::BrowserConfig> for NavigationRuntimeConfig {
             config.subframe_loading_enabled(),
             config.layout_configuration(),
         )
+        .with_debugger_enabled(config.debugger_enabled())
     }
 }
 
@@ -477,6 +489,7 @@ pub struct NavigationEngine {
     fetch_config: FetchConfig,
     page_network_policy: PageNetworkPolicy,
     layout_configuration: LayoutConfiguration,
+    debugger_enabled: bool,
     emulated_scrollbars_hidden: bool,
     js_runtime: JsRuntime,
     resource_runtime: Option<BrowserResourceRuntime>,
@@ -566,6 +579,7 @@ impl NavigationEngine {
             RendererBrowserContextRuntime::new_owned_with_service_worker_resource_store_and_browser_resource_runtime(
                 moli_renderer_v8::new_shared_service_worker_resource_store(),
                 resource_runtime,
+                config.debugger_enabled(),
             );
         let browser_context_access = browser_context_owner.owner_access();
         Self::new_with_runtime_config_and_browser_context_access_inner(
@@ -630,6 +644,7 @@ impl NavigationEngine {
             optional_resource_fetch_mask,
             subframe_loading_enabled,
             layout_configuration,
+            debugger_enabled,
         } = config;
         let resource_runtime = browser_context_access
             .current_browser_resource_runtime()
@@ -665,6 +680,7 @@ impl NavigationEngine {
                 false,
             ),
             layout_configuration,
+            debugger_enabled,
             emulated_scrollbars_hidden: false,
             js_runtime,
             resource_runtime: Some(resource_runtime),
@@ -686,7 +702,8 @@ impl NavigationEngine {
                 optional_resource_fetch_mask,
                 subframe_loading_enabled,
                 renderer_owner_source.layout_configuration,
-            ),
+            )
+            .with_debugger_enabled(renderer_owner_source.debugger_enabled),
             renderer_owner_source,
         )
     }
@@ -700,6 +717,7 @@ impl NavigationEngine {
             optional_resource_fetch_mask,
             subframe_loading_enabled,
             layout_configuration,
+            debugger_enabled,
         } = config;
         renderer_owner_source
             .js_runtime
@@ -717,6 +735,7 @@ impl NavigationEngine {
                 false,
             ),
             layout_configuration,
+            debugger_enabled,
             emulated_scrollbars_hidden: false,
             js_runtime: renderer_owner_source.js_runtime.clone(),
             resource_runtime: Some(resource_runtime),
@@ -790,6 +809,11 @@ impl NavigationEngine {
             self.subframe_loading_enabled(),
             self.layout_configuration,
         )
+        .with_debugger_enabled(self.debugger_enabled)
+    }
+
+    pub fn debugger_enabled(&self) -> bool {
+        self.debugger_enabled
     }
 
     pub fn layout_policy(&self) -> LayoutPolicy {
@@ -1605,6 +1629,7 @@ impl NavigationEngine {
                 extra_http_headers,
                 document_settings: moli_page_types::DocumentSettings {
                     script_execution_disabled,
+                    debugger_enabled: self.debugger_enabled,
                     scrollbars_hidden: self.emulated_scrollbars_hidden,
                     bypass_content_security_policy,
                     emulated_media,
@@ -1760,6 +1785,7 @@ impl NavigationEngine {
                     extra_http_headers,
                     document_settings: moli_page_types::DocumentSettings {
                         script_execution_disabled,
+                        debugger_enabled: self.debugger_enabled,
                         scrollbars_hidden: self.emulated_scrollbars_hidden,
                         bypass_content_security_policy,
                         emulated_media,
@@ -1894,6 +1920,7 @@ impl NavigationEngine {
                     extra_http_headers: options.extra_http_headers,
                     document_settings: moli_page_types::DocumentSettings {
                         script_execution_disabled: options.script_execution_disabled,
+                        debugger_enabled: self.debugger_enabled,
                         scrollbars_hidden: self.emulated_scrollbars_hidden,
                         bypass_content_security_policy: options.bypass_content_security_policy,
                         emulated_media: options.emulated_media,
