@@ -521,6 +521,109 @@ async fn navigate_passes_referrer_header() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn protocol_navigate_removing_fragment_loads_a_new_document() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let request_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let server_request_count = request_count.clone();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new().route(
+                "/page",
+                axum::routing::get(move || {
+                    let request_count = server_request_count.clone();
+                    async move {
+                        request_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        axum::response::Html("<!doctype html><body>loaded")
+                    }
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    });
+    let url = format!("http://{addr}/page");
+    for fragment in ["#frag", "#"] {
+        let mut ctx = TestContext::new();
+        load_bc_with_session(&mut ctx, "BID-1", "TID-1", "SID-1", "about:blank");
+        ensure_initial_document_for_session(&mut ctx, Some("SID-1")).await;
+        for (id, method) in [(410, "Page.enable"), (411, "Runtime.enable")] {
+            ctx.process_async(json!({"id":id,"method":method,"sessionId":"SID-1"}))
+                .await;
+            ctx.expect_result(id, json!({}), Some("SID-1"));
+        }
+        ctx.sent.clear();
+        ctx.process_async(json!({
+            "id": 412,
+            "method": "Page.navigate",
+            "sessionId": "SID-1",
+            "params": { "url": format!("{url}{fragment}") }
+        }))
+        .await;
+        let initial = take_response_by_id(&mut ctx, 412);
+        let initial_loader = initial["result"]["loaderId"]
+            .as_str()
+            .expect("initial loader");
+        wait_until_message(
+            &mut ctx,
+            Some("SID-1"),
+            "initial document load",
+            |message| message["method"] == "Page.loadEventFired",
+        )
+        .await;
+        ctx.sent.clear();
+
+        ctx.process_async(json!({
+            "id": 413,
+            "method": "Page.navigate",
+            "sessionId": "SID-1",
+            "params": { "url": url }
+        }))
+        .await;
+        let navigated = take_response_by_id(&mut ctx, 413);
+        let loader = navigated["result"]["loaderId"]
+            .as_str()
+            .expect("removing a fragment must return a new document loader");
+        assert_ne!(loader, initial_loader);
+        wait_until_message(
+            &mut ctx,
+            Some("SID-1"),
+            "fragment removal commit",
+            |message| {
+                message["method"] == "Page.frameNavigated"
+                    && message["params"]["frame"]["url"] == url
+            },
+        )
+        .await;
+        wait_until_message(
+            &mut ctx,
+            Some("SID-1"),
+            "fragment removal load",
+            |message| message["method"] == "Page.loadEventFired",
+        )
+        .await;
+        assert!(
+            !ctx.sent
+                .iter()
+                .any(|message| message["method"] == "Page.navigatedWithinDocument")
+        );
+        assert_runtime_navigation_context_reset(&ctx.sent, "SID-1", "TID-1");
+        assert_eq!(
+            ctx.conn.browser_context.as_ref().unwrap().target_url(),
+            url,
+            "the committed URL must no longer contain {fragment}"
+        );
+    }
+    assert_eq!(
+        request_count.load(std::sync::atomic::Ordering::SeqCst),
+        4,
+        "both fragment removals must fetch a fresh document"
+    );
+    server.abort();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn repeated_protocol_navigate_to_same_url_does_not_inherit_referrer_or_reload_headers() {
     async fn page(headers: axum::http::HeaderMap) -> impl axum::response::IntoResponse {
         let referer = headers

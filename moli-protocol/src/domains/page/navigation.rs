@@ -1416,10 +1416,10 @@ fn session_owner_navigation_is_same_document_fragment(
     let (Ok(mut current), Ok(mut target)) = (Url::parse(&current), Url::parse(target)) else {
         return false;
     };
-    // Chromium treats an exact repeat of a fragment-free URL as a new
-    // document navigation. Removing or changing a fragment is same-document,
-    // including a repeat of the exact same fragment URL.
-    if current.fragment().is_none() && target.fragment().is_none() {
+    // A fragment navigation requires a fragment in the destination, even an
+    // empty one. Removing a fragment loads a new document, as does repeating a
+    // fragment-free URL. History traversal has separate same-document rules.
+    if target.fragment().is_none() {
         return false;
     }
     current.set_fragment(None);
