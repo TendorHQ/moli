@@ -97,7 +97,7 @@ pub(super) fn resolver_from_slot<'s>(
     object: v8::Local<'s, v8::Object>,
     slot: &'static str,
 ) -> Option<v8::Local<'s, v8::PromiseResolver>> {
-    let value = get_private_value(scope, object, slot)?;
+    let value = get_private_value(scope, object, slot).filter(|value| value.is_object())?;
     // SAFETY: these private slots are populated only by PromiseResolver::new
     // above (and FontFaceSet.ready). They are never writable by page code.
     Some(unsafe { v8::Local::<v8::PromiseResolver>::cast_unchecked(value) })

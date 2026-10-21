@@ -271,24 +271,33 @@ pub(super) fn font_face_loading_started<'s>(
     face: v8::Local<'s, v8::Object>,
 ) {
     for owner in font_face_set_owner_snapshot(scope, face) {
-        if super::loading::string_slot(scope, owner, FONT_FACE_SET_STATUS_SLOT) == "loading" {
-            continue;
-        }
-        set_font_face_set_status(scope, owner, "loading");
-        let resolver = v8::PromiseResolver::new(scope).expect("FontFaceSet ready resolver");
-        set_private_value(scope, owner, READY_RESOLVER, resolver.into());
-        set_private_value(
-            scope,
-            owner,
-            FONT_FACE_SET_READY_SLOT,
-            resolver.get_promise(scope).into(),
-        );
-        for slot in [LOADED_FACES, FAILED_FACES] {
-            let array = v8::Array::new(scope, 0);
-            set_private_value(scope, owner, slot, array.into());
-        }
-        let _ = dispatch_font_face_set_event(scope, owner, "loading", None);
+        font_face_set_loading_started(scope, owner);
     }
+}
+
+/// CSS resource discovery and JS FontFace.load share one loading cycle and
+/// one ready promise. Additional arrivals must not replace a pending promise.
+pub(super) fn font_face_set_loading_started<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    owner: v8::Local<'s, v8::Object>,
+) {
+    if super::loading::string_slot(scope, owner, FONT_FACE_SET_STATUS_SLOT) == "loading" {
+        return;
+    }
+    set_font_face_set_status(scope, owner, "loading");
+    let resolver = v8::PromiseResolver::new(scope).expect("FontFaceSet ready resolver");
+    set_private_value(scope, owner, READY_RESOLVER, resolver.into());
+    set_private_value(
+        scope,
+        owner,
+        FONT_FACE_SET_READY_SLOT,
+        resolver.get_promise(scope).into(),
+    );
+    for slot in [LOADED_FACES, FAILED_FACES] {
+        let array = v8::Array::new(scope, 0);
+        set_private_value(scope, owner, slot, array.into());
+    }
+    let _ = dispatch_font_face_set_event(scope, owner, "loading", None);
 }
 
 pub(super) fn notify_font_face_set_owners_of_load<'s>(
@@ -334,6 +343,11 @@ pub(super) fn finish_font_set_if_idle<'s>(
     if super::loading::string_slot(scope, owner, FONT_FACE_SET_STATUS_SLOT) != "loading" {
         return;
     }
+    // Native CSS requests can be pending before a JS wrapper is projected.
+    // Conversely, the native CSS queue does not contain JS-created faces.
+    if super::storage::document_font_face_set_has_pending_requests(scope, owner) {
+        return;
+    }
     let pending = super::storage::font_face_set_faces_array(scope, owner).is_some_and(|faces| {
         (0..faces.length()).any(|index| {
             faces
@@ -348,16 +362,23 @@ pub(super) fn finish_font_set_if_idle<'s>(
     if pending {
         return;
     }
-    set_font_face_set_status(scope, owner, "loaded");
-    if let Some(resolver) = super::loading::resolver_from_slot(scope, owner, READY_RESOLVER) {
-        let _ = resolver.resolve(scope, owner.into());
-    }
-    for (slot, event) in [
+    let events = [
         (LOADED_FACES, "loadingdone"),
         (FAILED_FACES, "loadingerror"),
-    ] {
-        if let Some(array) = get_private_value(scope, owner, slot)
-            .and_then(|v| v8::Local::<v8::Array>::try_from(v).ok())
+    ]
+    .map(|(slot, event)| {
+        let faces = get_private_value(scope, owner, slot)
+            .and_then(|v| v8::Local::<v8::Array>::try_from(v).ok());
+        (faces, event)
+    });
+    set_font_face_set_status(scope, owner, "loaded");
+    if let Some(resolver) = super::loading::resolver_from_slot(scope, owner, READY_RESOLVER) {
+        set_private_value(scope, owner, READY_RESOLVER, v8::undefined(scope).into());
+        let _ = resolver.resolve(scope, owner.into());
+    }
+    // A loadingdone handler may begin another cycle and replace its arrays.
+    for (faces, event) in events {
+        if let Some(array) = faces
             && (event == "loadingdone" || array.length() > 0)
         {
             let _ = dispatch_font_face_set_event(scope, owner, event, Some(array));

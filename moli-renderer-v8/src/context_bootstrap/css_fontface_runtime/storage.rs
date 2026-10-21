@@ -112,50 +112,45 @@ fn font_face_set_attribute_getter_callback<'s>(
 }
 
 const DOCUMENT_FONT_FACE_SET_OWNER: &str = "__moliFontFaceSetOwnerDocument";
-const DOCUMENT_FONT_FACE_SET_READY_RESOLVER: &str = "__moliDocumentFontFaceSetReadyResolver";
+
+fn font_face_set_document_context<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    fonts: v8::Local<'s, v8::Object>,
+) -> Option<(
+    *mut crate::native_bridge::JsContextHost,
+    crate::document_runtime::DomHandle,
+)> {
+    let document = get_private_value(scope, fonts, DOCUMENT_FONT_FACE_SET_OWNER)
+        .and_then(|value| v8::Local::<v8::Object>::try_from(value).ok())?;
+    let (host_ptr, handle) =
+        crate::native_bridge::node_runtime_and_handle_from_object(scope, document).ok()?;
+    unsafe { &*host_ptr }.owner_dispatch_scope_for_node(handle)?;
+    Some((host_ptr, handle))
+}
+
+pub(super) fn document_font_face_set_has_pending_requests<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    fonts: v8::Local<'s, v8::Object>,
+) -> bool {
+    font_face_set_document_context(scope, fonts).is_some_and(|(host_ptr, document)| {
+        unsafe { &*host_ptr }.document_web_fonts_have_pending_requests(document)
+    })
+}
 
 fn reconcile_document_font_face_set_ready<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     fonts: v8::Local<'s, v8::Object>,
 ) {
-    let Some(document) = get_private_value(scope, fonts, DOCUMENT_FONT_FACE_SET_OWNER)
-        .and_then(|value| v8::Local::<v8::Object>::try_from(value).ok())
-    else {
+    let Some((host_ptr, handle)) = font_face_set_document_context(scope, fonts) else {
         return;
     };
-    let Ok((host_ptr, handle)) =
-        crate::native_bridge::node_runtime_and_handle_from_object(scope, document)
-    else {
-        return;
-    };
-    if unsafe { &*host_ptr }
-        .owner_dispatch_scope_for_node(handle)
-        .is_none()
-    {
-        return;
-    }
     crate::document_runtime::DocumentRuntime::reconcile_web_fonts_for_document_in_current_scope(
         scope, host_ptr, handle,
     );
     if unsafe { &*host_ptr }.document_web_fonts_have_pending_requests(handle) {
-        if get_private_value(scope, fonts, DOCUMENT_FONT_FACE_SET_READY_RESOLVER)
-            .is_some_and(|value| value.is_object())
-        {
-            return;
-        }
-        if let Some(resolver) = v8::PromiseResolver::new(scope) {
-            let promise = resolver.get_promise(scope);
-            set_private_value(
-                scope,
-                fonts,
-                DOCUMENT_FONT_FACE_SET_READY_RESOLVER,
-                resolver.into(),
-            );
-            set_font_face_set_slot_value(scope, fonts, FONT_FACE_SET_READY_SLOT, promise.into());
-            set_font_face_set_status(scope, fonts, "loading");
-        }
+        super::events::font_face_set_loading_started(scope, fonts);
     } else {
-        settle_document_font_face_set_ready(scope, host_ptr, handle);
+        super::events::finish_font_set_if_idle(scope, fonts);
     }
 }
 
@@ -177,21 +172,7 @@ pub(crate) fn settle_document_font_face_set_ready(
     else {
         return;
     };
-    let Some(resolver) = get_private_value(scope, fonts, DOCUMENT_FONT_FACE_SET_READY_RESOLVER)
-        .filter(|value| value.is_object())
-    else {
-        return;
-    };
-    // Only a native PromiseResolver can occupy this private slot.
-    let resolver = unsafe { v8::Local::<v8::PromiseResolver>::cast_unchecked(resolver) };
-    set_font_face_set_status(scope, fonts, "loaded");
-    set_private_value(
-        scope,
-        fonts,
-        DOCUMENT_FONT_FACE_SET_READY_RESOLVER,
-        v8::undefined(scope).into(),
-    );
-    let _ = resolver.resolve(scope, fonts.into());
+    super::events::finish_font_set_if_idle(scope, fonts);
 }
 
 pub(crate) fn new_font_face_set<'s>(

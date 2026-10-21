@@ -2,6 +2,8 @@ use super::*;
 use base64::Engine;
 use std::time::Duration;
 
+mod readiness;
+
 pub(super) fn fixture_font_url() -> String {
     let bytes = include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),

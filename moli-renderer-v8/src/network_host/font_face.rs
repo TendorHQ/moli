@@ -20,6 +20,33 @@ pub(crate) enum FontFaceFetchStart {
     Pending,
 }
 
+/// Resolve URL sources at construction, before a later base mutation or source
+/// fallback. Invalid URLs remain unavailable sources, not CSS syntax errors;
+/// source exhaustion is reported only when loading is requested.
+pub(crate) fn resolve_font_face_sources(
+    scope: &mut v8::PinScope<'_, '_>,
+    sources: Vec<moli_css_parse::CssFontSource>,
+) -> Vec<moli_css_parse::CssFontSource> {
+    use moli_css_parse::CssFontSource;
+
+    let base = crate::util::context_host_ptr_from_global_bridge(scope).and_then(|host_ptr| {
+        let host = unsafe { &*host_ptr };
+        let owner = effective_subresource_request_owner(scope, host);
+        subresource_api_base_url(scope, host, owner)
+    });
+    sources
+        .into_iter()
+        .filter_map(|source| match source {
+            CssFontSource::Local(_) => Some(source),
+            CssFontSource::Url(url) => base
+                .as_ref()
+                .map_or_else(|| url::Url::parse(&url), |base| base.join(&url))
+                .ok()
+                .map(|url| CssFontSource::Url(url.into())),
+        })
+        .collect()
+}
+
 /// Explicit CSS Font Loading requests share document ownership, CORS and the
 /// renderer network queue with other resources. Never call page-defined fetch.
 pub(crate) fn start_font_face_fetch(

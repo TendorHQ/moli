@@ -313,7 +313,8 @@ pub(in crate::context_bootstrap) fn font_face_constructor_callback<'s>(
     let this = args.this();
     let (source, sources, binary) = match parsed.source {
         FontFaceConstructorSource::Css(source) => {
-            let sources = moli_css_parse::parse_font_face_sources(&source);
+            let sources = moli_css_parse::parse_font_face_sources(&source)
+                .map(|sources| crate::network_host::resolve_font_face_sources(scope, sources));
             (source, sources, None)
         }
         FontFaceConstructorSource::Binary(value) => {
