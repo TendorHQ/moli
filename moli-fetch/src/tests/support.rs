@@ -844,7 +844,7 @@ fn http2_and_http11_tls_acceptor() -> tokio_rustls::TlsAcceptor {
     tokio_rustls::TlsAcceptor::from(Arc::new(config))
 }
 
-fn http11_tls_acceptor() -> tokio_rustls::TlsAcceptor {
+pub(super) fn http11_tls_acceptor() -> tokio_rustls::TlsAcceptor {
     use tokio_rustls::rustls::{
         ServerConfig,
         pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer},
