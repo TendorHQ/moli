@@ -252,6 +252,28 @@ pub(in crate::native_bridge::document) fn set_detached_document_content_type<'a>
     Some(())
 }
 
+pub(in crate::native_bridge::document) fn detached_document_character_set_value<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    document: v8::Local<'s, v8::Object>,
+) -> Option<String> {
+    let (runtime_ptr, handle) = document_receiver_runtime_and_handle(scope, document)?;
+    unsafe { &*runtime_ptr }
+        .document_character_set_for_handle(handle)
+        .map(str::to_owned)
+}
+
+pub(in crate::native_bridge::document) fn set_detached_document_character_set<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    document: v8::Local<'s, v8::Object>,
+    character_set: &str,
+) -> Option<()> {
+    let (runtime_ptr, handle) = document_receiver_runtime_and_handle(scope, document)?;
+    unsafe { &mut *runtime_ptr }
+        .dom_host_mut()
+        .set_document_character_set_for_handle(handle, character_set);
+    Some(())
+}
+
 pub(in crate::native_bridge) fn bridge_detached_document_character_set_callback<'a>(
     scope: &mut v8::PinScope<'a, '_>,
     args: v8::FunctionCallbackArguments<'a>,
@@ -261,7 +283,10 @@ pub(in crate::native_bridge) fn bridge_detached_document_character_set_callback<
         rv.set_empty_string();
         return;
     };
-    let character_set = detached_document_state_string(scope, document, "characterSet", "UTF-8");
+    let Some(character_set) = detached_document_character_set_value(scope, document) else {
+        rv.set_empty_string();
+        return;
+    };
     set_string_return_value(scope, &mut rv, &character_set);
 }
 

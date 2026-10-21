@@ -66,6 +66,8 @@ fn clone_detached_document_shell<'s>(
         .and_then(|value| v8::Local::<v8::Object>::try_from(value).ok())?;
     let content_type = detached_document_content_type_value(scope, document)?;
     set_detached_document_content_type(scope, cloned, &content_type)?;
+    let character_set = detached_document_character_set_value(scope, document)?;
+    set_detached_document_character_set(scope, cloned, &character_set)?;
     if html_shell {
         for child in detached_child_node_objects(scope, cloned) {
             detached_detach_from_parent(scope, child);

@@ -207,6 +207,7 @@ pub(crate) fn build_detached_document_object_from_dom_host_with_content_type<'s>
         "CSS1Compat"
     };
     let content_type = content_type.unwrap_or(parsed.dom().document()?.content_type());
+    let character_set = character_set.unwrap_or(parsed.dom().document()?.character_set());
     let document = new_detached_document_shell(scope, kind, content_type, url)?;
     if let Some(state) = detached_state_object(scope, document) {
         let _ = state.set(
@@ -214,13 +215,6 @@ pub(crate) fn build_detached_document_object_from_dom_host_with_content_type<'s>
             v8str(scope, "compatMode").into(),
             v8_string(scope, compat_mode)?.into(),
         );
-        if let Some(character_set) = character_set {
-            let _ = state.set(
-                scope,
-                v8str(scope, "characterSet").into(),
-                v8_string(scope, character_set)?.into(),
-            );
-        }
     }
     if let Some(document_handle) = detached_native_handle(scope, document)
         && let Some(runtime_ptr) = context_host_ptr_from_global_bridge(scope)
@@ -229,6 +223,7 @@ pub(crate) fn build_detached_document_object_from_dom_host_with_content_type<'s>
             .dom_host_mut()
             .set_document_quirks_mode_for_handle(document_handle, quirks_mode);
     }
+    set_detached_document_character_set(scope, document, character_set)?;
     import_detached_document_children_from_host(scope, document, &parsed)?;
     Some(document)
 }

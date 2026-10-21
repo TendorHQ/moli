@@ -209,7 +209,6 @@ pub(in crate::native_bridge) use detached_objects::{
     detached_shadow_root_active_element_value, detached_shadow_root_selection_value,
 };
 pub(in crate::native_bridge::document) use detached_surface::create_detached_element_for_document;
-pub(in crate::native_bridge::document) use detached_surface::set_detached_document_content_type;
 pub(super) use detached_surface::{
     bridge_adopt_node_into_document_callback, bridge_clone_node_into_document_callback,
     bridge_create_cdata_section_not_supported_callback, bridge_create_detached_comment_callback,
@@ -262,6 +261,9 @@ pub(super) use detached_surface::{
 };
 pub(in crate::native_bridge) use detached_surface::{
     detached_element_local_name, detached_element_namespace_uri, detached_element_prefix,
+};
+pub(in crate::native_bridge::document) use detached_surface::{
+    set_detached_document_character_set, set_detached_document_content_type,
 };
 pub(crate) use hit_test::install_caret_position_template_bindings;
 pub(super) use hit_test::{
@@ -900,20 +902,14 @@ fn document_character_set_getter_function<'s>(
     mut rv: v8::ReturnValue<'s, v8::Value>,
 ) {
     let receiver = args.this();
-    if detached_state_object(scope, receiver).is_some() {
-        let character_set = detached_state_string(scope, receiver, "characterSet")
-            .unwrap_or_else(|| "UTF-8".into());
-        set_document_string_return_value(scope, &mut rv, &character_set);
-        return;
-    }
     let Some((runtime_ptr, handle)) = document_receiver_runtime_and_handle(scope, receiver) else {
         rv.set_undefined();
         return;
     };
     let runtime = unsafe { &*runtime_ptr };
     let character_set = runtime
-        .child_browsing_context_character_set_for_document_handle(handle)
-        .unwrap_or_else(|| runtime.document_character_set())
+        .document_character_set_for_handle(handle)
+        .unwrap_or("UTF-8")
         .to_owned();
     set_document_string_return_value(scope, &mut rv, &character_set);
 }

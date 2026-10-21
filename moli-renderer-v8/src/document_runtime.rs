@@ -733,7 +733,6 @@ pub(super) struct DocumentRuntime {
     policy_container: DocumentPolicyContainer,
     delivered_meta_content_security_policies: RefCell<HashMap<DomHandle, Vec<String>>>,
     processed_meta_content_security_policy_handles: RefCell<HashSet<(DomHandle, DomHandle)>>,
-    document_character_set: String,
     resource_loader_binding: Option<DocumentResourceLoaderBinding>,
     script_context_stack: Vec<CurrentScriptContext>,
     root_document_parser: Option<DocumentParserSession>,
