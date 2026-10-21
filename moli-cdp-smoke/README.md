@@ -23,6 +23,13 @@ Use managed `--browser chromium` runs for the full oracle, including process
 resource sampling; sharing an external `--endpoint` does not provide the same
 process isolation or owned PID.
 
+The `Browser.close` lifecycle contract requires an acknowledgment followed by a
+natural, zero-status exit of the owned browser process before cleanup. It
+observes the parent's return code independently of stdout/stderr EOF: a
+descendant may retain an inherited output pipe after the browser has exited,
+which can leave `asyncio.subprocess.Process.wait()` pending. Failures identify
+the session case and lifecycle stage, including acknowledgment and process exit.
+
 Lifecycle artifacts retain total FDs for both engines. Chromium also records
 FDs for regular files inside its owned profile: delayed database initialization
 opens these independently of target churn. Its fixed FD budget covers the

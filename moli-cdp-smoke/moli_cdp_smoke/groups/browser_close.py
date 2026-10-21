@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from ..assertions import SmokeError, assert_equal, wait_until
+from ..process import wait_for_process_exit
 from ..raw_cdp import RawCdpClient, connect_raw_cdp, connect_raw_cdp_websocket
 from ..serve import browser_identity, start_browser, stop_browser, wait_for_browser_endpoint
 
@@ -132,6 +133,7 @@ async def browser_close_instance_lifecycle(endpoint: str, fixture: str) -> dict[
         # scenario. The supplied endpoint is only an oracle and a survivor.
         serving = await start_browser()
         clients: list[RawCdpClient] = []
+        stage = "startup"
         try:
             child_endpoint = await wait_for_browser_endpoint(serving)
             await browser_identity(child_endpoint, identity["engine"])
@@ -139,6 +141,7 @@ async def browser_close_instance_lifecycle(endpoint: str, fixture: str) -> dict[
             clients.append(root)
             rejected = None
             if scope in ("unknown", "null", "foreign"):
+                stage = "invalid session rejection"
                 selected, session = root, _OMITTED
                 if scope == "foreign":
                     attached = await _command(root, "Target.attachToBrowserTarget")
@@ -152,17 +155,20 @@ async def browser_close_instance_lifecycle(endpoint: str, fixture: str) -> dict[
                 await _command(root, "Browser.getVersion")
                 assert_equal(serving.process.returncode, None, "invalid command keeps instance alive")
             else:
+                stage = "session setup"
                 selected, session = await _route(root, child_endpoint, fixture, scope, clients)
+            stage = "close acknowledgment"
             response = await _close_request(selected, params=params, session=session)
             expected: dict[str, Any] = {"id": 1000, "result": {}}
             if session is not _OMITTED:
                 expected["sessionId"] = session
             assert_equal(response, expected, "close acknowledgment before EOF")
-            code = await asyncio.wait_for(serving.process.wait(), 10)
+            stage = "natural process exit"
+            code = await wait_for_process_exit(serving.process, timeout_seconds=10)
             assert_equal(code, 0, "natural process exit")
             observed.append({"case": name, "response": response, "exitCode": code, "rejected": rejected})
         except Exception as error:
-            raise SmokeError(f"{name}: {type(error).__name__}: {error}") from error
+            raise SmokeError(f"{name} ({stage}): {type(error).__name__}: {error}") from error
         finally:
             await asyncio.gather(
                 *(client.websocket.close() for client in clients), return_exceptions=True,

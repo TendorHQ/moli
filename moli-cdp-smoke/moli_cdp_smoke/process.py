@@ -39,6 +39,19 @@ class CapturedProcessTimeout(TimeoutError):
         self.output_closed = output_closed
 
 
+async def wait_for_process_exit(
+    process: asyncio.subprocess.Process,
+    *,
+    timeout_seconds: float,
+) -> int:
+    # Process.wait() may also wait for stdout/stderr EOF. Descendants can keep
+    # those pipes open after the owned browser has exited and been reaped.
+    async with asyncio.timeout(timeout_seconds):
+        while process.returncode is None:
+            await asyncio.sleep(0.01)
+    return process.returncode
+
+
 def _consume_task_result(task: asyncio.Task[object]) -> None:
     try:
         task.exception()
