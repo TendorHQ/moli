@@ -301,7 +301,7 @@ fn parsed_web_font_face(css_text: &str) -> Option<ParsedWebFontFace> {
     })
 }
 
-fn parse_font_unicode_ranges(value: &str) -> Option<Vec<WebFontUnicodeRange>> {
+pub(crate) fn parse_font_unicode_ranges(value: &str) -> Option<Vec<WebFontUnicodeRange>> {
     let input = value;
     let mut input = Parser::new(input);
     input

@@ -565,6 +565,19 @@ fn refresh_layout_for_test(vm: &mut StandaloneScriptVmHarness) {
     );
 }
 
+// These font domain tests supply network bodies directly. Run their queued
+// event tasks and checkpoints explicitly; Page dispatcher behavior is covered
+// separately by the font event ordering and Window retirement tests.
+fn run_font_tasks(vm: &mut ScriptVm) {
+    for _ in 0..16 {
+        if !vm.has_ready_timeout() {
+            return;
+        }
+        assert!(vm.run_next_timeout_for_test().unwrap().consumed_heap_head());
+    }
+    panic!("font loading tasks did not become idle");
+}
+
 fn publish_layout_for_test(vm: &mut StandaloneScriptVmHarness) {
     vm.publish_layout_for_test()
         .expect("fixture screenshot should succeed");

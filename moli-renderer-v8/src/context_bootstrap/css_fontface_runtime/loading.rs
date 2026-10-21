@@ -5,6 +5,7 @@ use crate::font_loading::{FontFaceLoad, FontFaceResource, FontFaceStatus};
 use crate::util::{get_private_value, set_private_value};
 
 const RESOLVER: &str = "__moliFontFaceResolver";
+const PROMISE_OWNER: &str = "__moliFontFacePromiseOwner";
 const OWNER_DOCUMENT: &str = "__moliFontFaceSetOwnerDocument";
 static NEXT_REGISTRATION: AtomicU64 = AtomicU64::new(1);
 const QUERY_RESOLVER: &str = "__moliFontQueryResolver";
@@ -147,6 +148,7 @@ fn descriptor<'s>(
         &string_slot(scope, face, FONT_FACE_WEIGHT_SLOT),
         &string_slot(scope, face, FONT_FACE_STRETCH_SLOT),
         &string_slot(scope, face, FONT_FACE_STYLE_SLOT),
+        &string_slot(scope, face, FONT_FACE_UNICODE_RANGE_SLOT),
     )
 }
 
@@ -166,6 +168,16 @@ pub(super) fn initialize_resolver<'s>(
     resource: FontFaceLoad,
 ) {
     set_private_value(scope, face, RESOLVER, resolver.into());
+    // A retained pending .loaded promise must retain its settlement endpoint,
+    // including CSS-started loads with no explicit JS network request root.
+    // Keep this edge in the JS heap so an otherwise unreachable cycle remains
+    // collectible; no isolate-wide Global may keep a retired document alive.
+    set_private_value(
+        scope,
+        resolver.get_promise(scope).into(),
+        PROMISE_OWNER,
+        face.into(),
+    );
     super::state::initialize(scope, face, resource);
     publish_state(scope, face);
 }
@@ -187,6 +199,7 @@ fn publish_state<'s>(scope: &mut v8::PinScope<'s, '_>, face: v8::Local<'s, v8::O
         FontFaceStatus::Loaded => {
             sync_owners(scope, face);
             if let Some(resolver) = resolver_from_slot(scope, face, RESOLVER) {
+                release_promise_owner(scope, face, resolver);
                 let _ = resolver.resolve(scope, face.into());
             }
         }
@@ -194,6 +207,7 @@ fn publish_state<'s>(scope: &mut v8::PinScope<'s, '_>, face: v8::Local<'s, v8::O
             if let Some(resolver) = resolver_from_slot(scope, face, RESOLVER) {
                 let error = error.expect("native failed font has an error");
                 let exception = new_dom_exception_value(scope, error.message, error.name);
+                release_promise_owner(scope, face, resolver);
                 let _ = resolver.reject(scope, exception);
             }
         }
@@ -202,6 +216,20 @@ fn publish_state<'s>(scope: &mut v8::PinScope<'s, '_>, face: v8::Local<'s, v8::O
     if started {
         super::events::notify_font_face_set_owners_of_load(scope, face);
     }
+}
+
+fn release_promise_owner<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    face: v8::Local<'s, v8::Object>,
+    resolver: v8::Local<'s, v8::PromiseResolver>,
+) {
+    set_private_value(
+        scope,
+        resolver.get_promise(scope).into(),
+        PROMISE_OWNER,
+        v8::undefined(scope).into(),
+    );
+    set_private_value(scope, face, RESOLVER, v8::undefined(scope).into());
 }
 
 pub(crate) fn publish_font_face_load_changes(scope: &mut v8::PinScope<'_, '_>) {
@@ -307,14 +335,25 @@ pub(super) fn sync_registration<'s>(
     // SAFETY: this is the owner document's live bridge; the native font service
     // does not invoke V8 or page code while borrowed.
     let host = unsafe { &*host_ptr };
-    host.with_font_services(document, |services| {
+    let changed = host.with_font_services(document, |services| {
         let load = load.borrow();
         if present {
-            if let Err(error) = load.register(services) {
-                tracing::warn!(%error, "failed to register FontFace");
+            match load.register(services) {
+                Ok(Some(
+                    moli_layout::WebFontRegistrationOutcome::Added
+                    | moli_layout::WebFontRegistrationOutcome::Replaced,
+                )) => true,
+                Ok(_) => false,
+                Err(error) => {
+                    tracing::warn!(%error, "failed to register FontFace");
+                    false
+                }
             }
         } else {
-            load.unregister(services);
+            load.unregister(services)
         }
     });
+    if changed {
+        host.invalidate_document_font_layout(document);
+    }
 }

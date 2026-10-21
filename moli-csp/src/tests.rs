@@ -701,6 +701,36 @@ fn worker_src_none_blocks_shared_worker_script() {
 }
 
 #[test]
+fn document_font_requests_use_font_src_and_default_src() {
+    let kind = ContentSecurityPolicyResourceKind::DocumentFont;
+    assert!(!allowed(
+        "font-src 'none'; connect-src *",
+        kind,
+        "https://app.test/font.woff2"
+    ));
+    assert!(allowed(
+        "font-src 'self'; default-src 'none'; connect-src 'none'",
+        kind,
+        "https://app.test/font.woff2"
+    ));
+    assert!(!allowed(
+        "font-src 'self'; default-src *",
+        kind,
+        "https://cdn.test/font.woff2"
+    ));
+    assert!(!allowed(
+        "default-src 'none'; connect-src *",
+        kind,
+        "https://app.test/font.woff2"
+    ));
+    assert!(allowed(
+        "default-src 'self'; connect-src 'none'",
+        kind,
+        "https://app.test/font.woff2"
+    ));
+}
+
+#[test]
 fn shared_worker_script_uses_script_src_and_default_src_fallbacks() {
     assert!(!allowed(
         "script-src 'none'",

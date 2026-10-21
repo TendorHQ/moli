@@ -2315,6 +2315,14 @@ pub(super) fn build_router() -> Router {
             get(asset_dynamic_preparation_context_open_script),
         )
         .route(
+            "/assets/dynamic_preparation_context_replaced",
+            get(asset_dynamic_preparation_context_replaced),
+        )
+        .route(
+            "/assets/runtime_owned_async_fast_executed",
+            get(asset_runtime_owned_async_fast_executed),
+        )
+        .route(
             "/assets/document_write_implicit_replace_async.js",
             get(asset_document_write_implicit_replace_async_script),
         )

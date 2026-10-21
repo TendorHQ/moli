@@ -248,9 +248,11 @@ pub(crate) fn rebuild_font_face_set_faces<'s>(
     }
     let combined =
         serialize_v8_iter_array(scope, combined).unwrap_or_else(|| v8::Array::new(scope, 0));
-    sync_font_face_set_owners(scope, object, previous, combined);
     set_font_face_set_slot_value(scope, object, FONT_FACE_SET_FACES_SLOT, combined.into());
     sync_font_face_set_size(scope, object);
+    // Publish membership before changing owners can start a loading cycle.
+    // Reentrant FontFaceSet queries must see the same members as that cycle.
+    sync_font_face_set_owners(scope, object, previous, combined);
     super::events::finish_font_set_if_idle(scope, object);
 }
 

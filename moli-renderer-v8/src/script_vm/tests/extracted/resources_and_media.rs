@@ -55,6 +55,8 @@ async fn document_fonts_ready_waits_for_shadow_font_and_refreshes_cached_geometr
     vm.perform_owner_lane_task_microtask_checkpoints()
         .expect("font completion checkpoint");
     assert_eq!(vm.document_web_font_counts_for_test(), (1, 1, 1));
+    assert_eq!(vm.eval("fontReadyResolved").unwrap(), "false");
+    run_font_tasks(&mut vm);
     assert_eq!(vm.eval("JSON.stringify([fontReadyResolved,document.fonts.status,fontProbe.getBoundingClientRect().width])").unwrap(),r#"[true,"loaded",48]"#);
 }
 

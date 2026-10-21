@@ -19,9 +19,11 @@ pub(crate) fn script_font_descriptor(
     weight: &str,
     stretch: &str,
     style: &str,
+    unicode_range: &str,
 ) -> WebFontFace {
     use crate::css_resource_urls::{
-        parse_font_stretch_lower_bound, parse_font_style_lower_bound, parse_font_weight_lower_bound,
+        parse_font_stretch_lower_bound, parse_font_style_lower_bound, parse_font_unicode_ranges,
+        parse_font_weight_lower_bound,
     };
     WebFontFace::new(moli_css_parse::unquote_css_string(family))
         .with_weight(parse_font_weight_lower_bound(weight).unwrap_or(400.0))
@@ -29,6 +31,7 @@ pub(crate) fn script_font_descriptor(
         .with_style(
             parse_font_style_lower_bound(style).unwrap_or(moli_layout::WebFontStyle::Normal),
         )
+        .with_unicode_ranges(parse_font_unicode_ranges(unicode_range).unwrap_or_default())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -96,7 +99,7 @@ impl FontFaceResource {
     }
 
     pub(crate) fn set_descriptor(&mut self, descriptor: WebFontFace) {
-        self.descriptor = descriptor.with_unicode_ranges(self.descriptor.unicode_ranges().to_vec());
+        self.descriptor = descriptor;
     }
 
     pub(crate) fn status(&self) -> FontFaceStatus {
@@ -195,7 +198,7 @@ impl FontFaceResource {
         services.register_web_font(registration).map(Some)
     }
 
-    pub(crate) fn unregister(&self, services: &mut DocumentLayoutServices) {
-        services.remove_web_font(&self.slot);
+    pub(crate) fn unregister(&self, services: &mut DocumentLayoutServices) -> bool {
+        services.remove_web_font(&self.slot)
     }
 }

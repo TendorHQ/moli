@@ -3,6 +3,7 @@ use base64::Engine;
 use std::time::Duration;
 
 mod readiness;
+mod unicode_ranges;
 
 pub(super) fn fixture_font_url() -> String {
     let bytes = include_bytes!(concat!(
@@ -180,6 +181,7 @@ document.fonts.load('12px "Network Face"').then(faces => fontResult.push(faces[0
         .unwrap();
     vm.finish_async_subresource_body_checkpoint_for_test(activity)
         .unwrap();
+    run_font_tasks(&mut vm);
     assert_eq!(
         vm.eval("JSON.stringify(fontResult)").unwrap(),
         "[true,\"loaded\"]"
@@ -273,6 +275,7 @@ fontPromise.then(value => fontResult.push(value === face, face.status));
         .unwrap();
     vm.finish_async_subresource_body_checkpoint_for_test(activity)
         .unwrap();
+    run_font_tasks(&mut vm);
     assert_eq!(
         vm.eval("JSON.stringify(fontResult)").unwrap(),
         r#"[true,"loaded"]"#

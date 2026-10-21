@@ -105,6 +105,7 @@ fn construct_font_face_from_parts<'s>(
                 "font-feature-settings" => "featureSettings",
                 "font-variation-settings" => "variationSettings",
                 "font-display" => "display",
+                "unicode-range" => "unicodeRange",
                 _ => continue,
             };
             let value = v8_string(scope, &entry.value)?;

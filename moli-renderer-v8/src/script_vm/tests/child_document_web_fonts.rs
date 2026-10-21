@@ -179,6 +179,8 @@ async fn child_document_fonts_ready_waits_for_its_own_resource() {
         .unwrap();
     vm.perform_owner_lane_task_microtask_checkpoints().unwrap();
     refresh_child_geometry_without_paint(&vm);
+    assert_eq!(vm.eval("childReady").unwrap(), "false");
+    run_font_tasks(&mut vm);
     assert_eq!(vm.eval("JSON.stringify([rootReady,childReady,child.document.fonts.status,childTarget.offsetWidth,childFace.status,childFaceLoaded])").unwrap(), r#"[true,true,"loaded",48,"loaded",true]"#);
     assert_eq!(vm.eval("String(parentTarget.offsetWidth)").unwrap(), parent);
     assert_eq!(vm.document_web_font_counts_for_test(), (0, 0, 0));

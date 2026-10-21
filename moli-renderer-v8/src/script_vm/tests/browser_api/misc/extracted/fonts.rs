@@ -205,9 +205,8 @@ fn font_face_set_load_event_copies_and_freezes_fontfaces() {
     ))
     .unwrap();
 
-    let result = vm
-        .eval(
-            r#"
+    vm.eval(
+        r#"
 (() => {
   const face = new FontFace('Demo', fixtureFontSource);
   const source = [face];
@@ -257,7 +256,7 @@ fn font_face_set_load_event_copies_and_freezes_fontfaces() {
     FontFaceSetLoadEvent.prototype,
     'fontfaces'
   );
-  return JSON.stringify({
+  globalThis.__fontFaceSetEventProbe = {
     surface: [
       typeof FontFaceSetLoadEvent,
       FontFaceSetLoadEvent.length,
@@ -294,13 +293,17 @@ fn font_face_set_load_event_copies_and_freezes_fontfaces() {
       throwsTypeError(() => new FontFaceSetLoadEvent('loading', { fontfaces: [{}] })),
       throwsTypeError(() => new FontFaceSetLoadEvent('loading', { fontfaces: null }))
     ],
-    dispatched: [loadingShape, doneShape]
-  });
+    get dispatched() { return [loadingShape, doneShape]; }
+  };
 })()
 "#,
-        )
-        .expect("FontFaceSetLoadEvent FrozenArray semantics should evaluate");
+    )
+    .expect("FontFaceSetLoadEvent FrozenArray semantics should evaluate");
 
+    run_font_tasks(&mut vm);
+    let result = vm
+        .eval("JSON.stringify(globalThis.__fontFaceSetEventProbe)")
+        .unwrap();
     assert_eq!(
         result,
         r#"{"surface":["function",1,true,true,"[object FontFaceSetLoadEvent]"],"empty":[true,0,true,true],"configured":["loadingdone",true,true,true,1,true,true,true],"descriptor":["function","undefined","true","true","false"],"errors":[true,true,true,true],"dispatched":["true:true:true:0","true:true:true:1:true:true"]}"#
@@ -475,9 +478,8 @@ fn font_face_load_updates_owner_sets_once_and_unlinks_removed_faces() {
     ))
     .unwrap();
 
-    let result = vm
-        .eval(
-            r#"
+    vm.eval(
+        r#"
 (() => {
   const face = new FontFace('Demo', fixtureFontSource);
   const documentFonts = document.fonts;
@@ -528,7 +530,7 @@ fn font_face_load_updates_owner_sets_once_and_unlinks_removed_faces() {
   const eventCountBeforeClearedLoad = events.length;
   cleared.load();
 
-  return JSON.stringify({
+  globalThis.__fontFaceOwnerProbe = {
     loads: [firstLoad === face.loaded, secondLoad === face.loaded],
     ready: [
       documentReadyBefore !== documentReadyAfter,
@@ -536,7 +538,7 @@ fn font_face_load_updates_owner_sets_once_and_unlinks_removed_faces() {
       documentReadyAfter === documentFonts.ready,
       secondaryReadyAfter === secondary.ready
     ],
-    status: [documentFonts.status, secondary.status],
+    get status() { return [documentFonts.status, secondary.status]; },
     events,
     repeated: events.length === eventCountAfterFirstLoad,
     removed: [
@@ -549,12 +551,16 @@ fn font_face_load_updates_owner_sets_once_and_unlinks_removed_faces() {
       clearedSet.ready === clearedReadyBeforeLoad,
       clearedSet.status === 'loaded'
     ]
-  });
+  };
 })()
 "#,
-        )
-        .expect("FontFace loads should update each current owner set once");
+    )
+    .expect("FontFace loads should update each current owner set once");
 
+    run_font_tasks(&mut vm);
+    let result = vm
+        .eval("JSON.stringify(globalThis.__fontFaceOwnerProbe)")
+        .unwrap();
     assert_eq!(
         result,
         r#"{"loads":[true,true],"ready":[true,true,true,true],"status":["loaded","loaded"],"events":["document:loading:true:true:true:0:true:true","secondary:loading:true:true:true:0:true:true","document:loadingdone:true:true:true:1:true:true","secondary:loadingdone:true:true:true:1:true:true"],"repeated":true,"removed":[true,true,true],"cleared":[true,true,true]}"#
@@ -572,9 +578,8 @@ fn stylesheet_font_face_load_updates_document_font_set() {
     ))
     .unwrap();
 
-    let result = vm
-        .eval(
-            r#"
+    vm.eval(
+        r#"
 (() => {
   const observed = [];
   let face;
@@ -594,18 +599,22 @@ fn stylesheet_font_face_load_updates_document_font_set() {
   face = [...document.fonts].find(face => face.family === 'StylesheetOwner');
   const readyBefore = document.fonts.ready;
   const loaded = face.load();
-  return JSON.stringify({
+  globalThis.__stylesheetFontFaceProbe = {
     face: face instanceof FontFace,
     loaded: loaded === face.loaded,
     ready: readyBefore !== document.fonts.ready,
-    status: document.fonts.status,
+    get status() { return document.fonts.status; },
     observed
-  });
+  };
 })()
 "#,
-        )
-        .expect("stylesheet FontFace loads should update document.fonts");
+    )
+    .expect("stylesheet FontFace loads should update document.fonts");
 
+    run_font_tasks(&mut vm);
+    let result = vm
+        .eval("JSON.stringify(globalThis.__stylesheetFontFaceProbe)")
+        .unwrap();
     assert_eq!(
         result,
         r#"{"face":true,"loaded":true,"ready":true,"status":"loaded","observed":["loading:0:true:true","loadingdone:1:true:true"]}"#

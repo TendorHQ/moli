@@ -317,6 +317,22 @@ impl JsContextHost {
             })
     }
 
+    pub(crate) fn invalidate_document_font_layout(&self, document: DomHandle) {
+        if document != self.document_handle()
+            && self
+                .child_browsing_context_host_for_document_handle(document)
+                .is_none()
+        {
+            return;
+        }
+        // A real font registration change invalidates sampled glyph advances.
+        // Unchanged registration and read-only projections retain the tree.
+        self.clear_layout_rect_cache();
+        self.document_layout_state
+            .borrow_mut()
+            .clear_latest_layout();
+    }
+
     pub(crate) fn build_layout_pass_for_document(
         &self,
         document: DomHandle,
