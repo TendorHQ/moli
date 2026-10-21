@@ -255,6 +255,19 @@ both sessions. The identical probe timed out at the replacement evaluation after
 10,000 ms when Moli's parent-session renderer-inspector detach fix was removed,
 and passed after the fix was restored.
 
+The Puppeteer DedicatedWorker probe waits for an asserted fixture-message reply
+before its first `WebWorker.evaluate()`. `workercreated` and
+`Runtime.executionContextCreated` can arrive before worker initialization is
+complete. Reading `self.location.pathname` at that point crashed the pinned
+Chromium 145.0.7632.6 renderer in 6 of 20 runs with four workers on four CPU
+cores, matching the CI `Runtime.callFunctionOn: Target closed` failure. Holding
+the worker's `Runtime.runIfWaitingForDebugger` command for 500 ms reproduced
+the failure in all three controlled runs; the same runs passed after adding
+the fixture round trip. The full Puppeteer group then passed 30 of 30 runs
+under the same CPU and worker limits. The original global-value, exact-once
+console routing, explicit termination, and navigation teardown checks still
+run after readiness is established.
+
 The Puppeteer Shadow DOM accessibility workflow was calibrated on 2026-10-08
 with puppeteer-core 24.30.0 against `/usr/bin/chromium` 145.0.7632.116, then run
 unchanged against Moli. `puppeteer_shadow_accessibility.mjs` checks default and
