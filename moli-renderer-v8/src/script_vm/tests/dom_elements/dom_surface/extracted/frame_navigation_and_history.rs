@@ -1503,6 +1503,61 @@ async fn child_meta_refresh_identical_candidate_keeps_the_original_deadline() {
     assert_child_meta_refresh_candidate_priority(1, 1, "early", "early", true).await;
 }
 
+#[tokio::test]
+async fn child_meta_refresh_candidates_and_deadlines_are_independent_between_frames() {
+    let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).expect("loader");
+    let mut vm = new_storage_test_vm_with_loader("https://child-refresh-isolation.test/", &loader);
+    vm.eval(
+        r##"
+globalThis.loads = [0, 0];
+const root = document.documentElement || document.appendChild(document.createElement('html'));
+globalThis.framesToRefresh = [1, 30].map((delay, index) => {
+  const frame = document.createElement('iframe');
+  frame.onload = () => ++loads[index];
+  frame.srcdoc = '<!doctype html><meta http-equiv="refresh" content="' + delay + ';url=about:srcdoc#original-' + index + '"><p>child</p>';
+  root.appendChild(frame);
+  return frame;
+});
+'queued'
+"##,
+    ).unwrap();
+    vm.drain_pending_child_frame_work_for_test();
+    assert_eq!(vm.eval("JSON.stringify(loads)").unwrap(), "[1,1]");
+    let original_deadline = vm.next_timeout_deadline().expect("first frame timer");
+    vm.eval(
+        r##"
+globalThis.retainedDocuments = framesToRefresh.map(frame => frame.contentDocument);
+[30, 1].forEach((delay, index) => {
+  const document = framesToRefresh[index].contentDocument;
+  const meta = document.createElement('meta');
+  meta.httpEquiv = 'refresh';
+  meta.content = delay + ';url=about:srcdoc#replacement-' + index;
+  document.head.appendChild(meta);
+});
+'updated'
+"##,
+    )
+    .unwrap();
+    assert_eq!(
+        vm.next_timeout_deadline(),
+        Some(original_deadline),
+        "changing the second frame and adding a slower first-frame candidate must preserve the first deadline",
+    );
+    for _ in 0..2 {
+        if vm.ms_to_next_timeout().is_none() {
+            break;
+        }
+        vm.advance_timers_until_deadline_for_test(&loader)
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        vm.eval("JSON.stringify(framesToRefresh.map((frame, index) => [frame.contentWindow.location.hash, loads[index], frame.contentDocument === retainedDocuments[index]]))").unwrap(),
+        r##"[["#original-0",1,true],["#replacement-1",1,true]]"##,
+        "each frame must consume its own selected candidate without replacing its Document",
+    );
+}
+
 async fn assert_child_meta_refresh_can_be_inserted_during_load(in_window_load: bool) {
     let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).expect("loader");
     let mut vm = new_storage_test_vm_with_loader("https://child-meta-refresh.test/", &loader);

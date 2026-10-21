@@ -10,6 +10,7 @@ use crate::{
         FrameDocumentLoadDeliveryProgress,
     },
     host::HostTimerOwner,
+    meta_refresh_scheduler::MetaRefreshScheduler,
     util::{call_object_method, v8_string, v8str},
 };
 use serde::Serialize;
@@ -18,9 +19,8 @@ use std::convert::TryFrom;
 pub(in crate::native_bridge::context_host) struct ChildMetaRefreshNavigationTask {
     timer_id: Option<u32>,
     owner: crate::frame_owner_model::FrameDocumentTaskOwner,
-    target_url: url::Url,
+    scheduler: MetaRefreshScheduler,
     navigation_kind: LocationNavigationKind,
-    delay_ms: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -689,31 +689,26 @@ impl JsContextHost {
         if self
             .child_meta_refresh_navigations
             .get(&handle)
-            .is_some_and(|task| {
-                task.owner == owner
-                    && (task.delay_ms < navigation.delay_ms
-                        || (task.target_url == navigation.url
-                            && task.navigation_kind == navigation_kind
-                            && task.delay_ms == navigation.delay_ms))
-            })
-        {
-            // Match the top-level scheduler: keep a faster pending refresh,
-            // and preserve the original deadline for identical declarations.
-            self.arm_child_meta_refresh_navigation(scope, runtime, handle);
-            return;
-        }
-        if let Some(previous) = self.child_meta_refresh_navigations.insert(
-            handle,
-            ChildMetaRefreshNavigationTask {
-                timer_id: None,
-                owner,
-                target_url: navigation.url,
-                navigation_kind,
-                delay_ms: navigation.delay_ms,
-            },
-        ) && let Some(timer_id) = previous.timer_id
+            .is_some_and(|task| task.owner != owner)
+            && let Some(previous) = self.child_meta_refresh_navigations.remove(&handle)
+            && let Some(timer_id) = previous.timer_id
         {
             runtime.cancel_timer(timer_id);
+        }
+        let task = self
+            .child_meta_refresh_navigations
+            .entry(handle)
+            .or_insert_with(|| ChildMetaRefreshNavigationTask {
+                timer_id: None,
+                owner,
+                scheduler: MetaRefreshScheduler::default(),
+                navigation_kind,
+            });
+        if task.scheduler.note_candidates([navigation]) {
+            task.navigation_kind = navigation_kind;
+            if let Some(timer_id) = task.timer_id.take() {
+                runtime.cancel_timer(timer_id);
+            }
         }
         self.arm_child_meta_refresh_navigation(scope, runtime, handle);
     }
@@ -737,7 +732,6 @@ impl JsContextHost {
             return;
         }
         let owner = task.owner;
-        let delay_ms = task.delay_ms;
         let Some(window) = self.child_window_proxy_records.live_window(scope, handle) else {
             return;
         };
@@ -752,12 +746,41 @@ impl JsContextHost {
         else {
             return;
         };
+        let Some(task) = self.child_meta_refresh_navigations.get_mut(&handle) else {
+            return;
+        };
+        // Retrying a failed timer post must keep the scheduler's original deadline.
+        let Some(scheduled) = task
+            .scheduler
+            .finish_load(owner)
+            .or_else(|| task.scheduler.armed_navigation())
+        else {
+            return;
+        };
+        let delay_ms = u64::try_from(
+            scheduled
+                .ready_at
+                .saturating_duration_since(std::time::Instant::now())
+                .as_nanos()
+                .div_ceil(1_000_000),
+        )
+        .unwrap_or(u64::MAX);
+        let Some(target_url) = v8_string(scope, scheduled.navigation.url.as_str()) else {
+            return;
+        };
+        let original_delay: v8::Local<v8::Value> =
+            v8::Integer::new_from_unsigned(scope, scheduled.navigation.delay_ms).into();
+        let target_url: v8::Local<v8::Value> = target_url.into();
+        let extra_args = vec![
+            v8::Global::new(scope, original_delay),
+            v8::Global::new(scope, target_url),
+        ];
         let timer_id = runtime.queue_timeout(
             scope,
             callback,
-            u64::from(delay_ms),
+            delay_ms,
             HostTimerOwner::ChildWindow(handle),
-            Vec::new(),
+            extra_args,
         );
         if timer_id == 0 {
             return;
@@ -897,12 +920,31 @@ fn child_meta_refresh_callback<'s>(
     {
         return;
     }
+    let Some(delay_ms) = args.get(0).uint32_value(scope) else {
+        return;
+    };
+    let Ok(target_url) = v8::Local::<v8::String>::try_from(args.get(1)) else {
+        return;
+    };
+    let Ok(target_url) = url::Url::parse(&target_url.to_rust_string_lossy(scope)) else {
+        return;
+    };
+    let Some(owner) = host.current_child_document_task_owner(handle) else {
+        return;
+    };
+    let Some(task) = host.child_meta_refresh_navigations.get_mut(&handle) else {
+        return;
+    };
+    if task.owner != owner
+        || !task
+            .scheduler
+            .consume_if_matches(owner, delay_ms, &target_url)
+    {
+        return;
+    }
     let Some(task) = host.child_meta_refresh_navigations.remove(&handle) else {
         return;
     };
-    if host.current_child_document_task_owner(handle) != Some(task.owner) {
-        return;
-    }
     let Some(window) = host.child_browsing_context_window_wrapper(scope, handle) else {
         return;
     };
@@ -916,7 +958,7 @@ fn child_meta_refresh_callback<'s>(
         scope,
         location,
         task.navigation_kind,
-        Some(task.target_url.to_string()),
+        Some(target_url.to_string()),
     );
 }
 
