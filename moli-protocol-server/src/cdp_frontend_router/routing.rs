@@ -23,6 +23,10 @@ impl CdpRoutedFrontend {
     pub(super) fn enqueue_message(self, message: Value) -> bool {
         self.sink.enqueue_owned_message(message)
     }
+
+    pub(super) fn into_sink(self) -> CdpSocketSink {
+        self.sink
+    }
 }
 
 #[derive(Default)]

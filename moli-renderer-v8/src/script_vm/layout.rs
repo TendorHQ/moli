@@ -154,8 +154,19 @@ impl ScriptVm {
         reason: moli_layout::LayoutFlushReason,
         capture: moli_layout::PaintCaptureRequest,
     ) -> anyhow::Result<Option<moli_layout::PaintSnapshot>> {
-        self.with_fresh_layout_pass(
+        self.paint_layout_snapshot_with_capture_in_environment(viewport, reason, capture, None)
+    }
+
+    pub(crate) fn paint_layout_snapshot_with_capture_in_environment(
+        &mut self,
+        viewport: moli_layout::PaintViewport,
+        reason: moli_layout::LayoutFlushReason,
+        capture: moli_layout::PaintCaptureRequest,
+        environment_override: Option<crate::style_engine::StyloStyleEnvironment>,
+    ) -> anyhow::Result<Option<moli_layout::PaintSnapshot>> {
+        self.with_fresh_layout_pass_in_environment(
             moli_layout::LayoutPassRequest::with_capture(viewport, reason, capture),
+            environment_override,
             moli_layout::LayoutPassResult::take_paint_snapshot,
         )
         .map_err(anyhow::Error::new)
@@ -188,12 +199,25 @@ impl ScriptVm {
             &mut moli_layout::LayoutPassResult<DomHandle>,
         ) -> Result<T, moli_layout::LayoutError>,
     ) -> Result<Option<T>, moli_layout::LayoutError> {
+        self.with_fresh_layout_pass_in_environment(request, None, consume)
+    }
+
+    fn with_fresh_layout_pass_in_environment<T>(
+        &mut self,
+        request: moli_layout::LayoutPassRequest,
+        environment_override: Option<crate::style_engine::StyloStyleEnvironment>,
+        consume: impl FnOnce(
+            &mut moli_layout::LayoutPassResult<DomHandle>,
+        ) -> Result<T, moli_layout::LayoutError>,
+    ) -> Result<Option<T>, moli_layout::LayoutError> {
         // Font-source reconciliation is a pre-pass lifecycle step. CSS image
         // URLs come back from the actual box-construction traversal below.
         // Once the guard is entered, layout performs no JS, event-loop,
         // observer, or resource completion work and owns no state beyond this
         // call.
-        self.reconcile_document_web_fonts_for_layout();
+        if environment_override.is_none() {
+            self.reconcile_document_web_fonts_for_layout();
+        }
         let requests_paint = request.requests_paint();
         // Printing consumes a temporary projection. Screenshots, screencast
         // frames and explicit refreshes publish geometry for subsequent reads.
@@ -202,7 +226,11 @@ impl ScriptVm {
             let context_host = self._context_host.borrow();
             let document = context_host.document_handle();
             let result = context_host
-                .build_layout_pass_for_document(document, request)
+                .build_layout_pass_for_document_in_environment(
+                    document,
+                    request,
+                    environment_override,
+                )
                 .and_then(|pass| {
                     let Some(mut pass) = pass else {
                         return Ok(None);
@@ -426,12 +454,20 @@ impl ScriptVm {
 
     pub(super) fn complete_document_web_font(
         &mut self,
+        binding: crate::frame_owner_model::StylesheetSubresourceLoadDelayBinding,
         terminal: crate::css_resource_urls::CompletedStylesheetWebFont,
     ) {
+        let Some(document) = self
+            ._context_host
+            .borrow()
+            .stylesheet_web_font_document(binding)
+        else {
+            return;
+        };
         match self
             ._context_host
             .borrow()
-            .complete_document_web_font(terminal)
+            .complete_document_web_font(document, terminal)
         {
             web_fonts::DocumentWebFontCompletion::Registered(outcome) => tracing::debug!(
                 ?outcome,
@@ -449,7 +485,9 @@ impl ScriptVm {
             }
         }
         if let Err(error) = self.with_default_context_scope(|scope, host_ptr| {
-            crate::context_bootstrap::settle_document_font_face_set_ready(scope, host_ptr);
+            crate::context_bootstrap::settle_document_font_face_set_ready(
+                scope, host_ptr, document,
+            );
             Ok(())
         }) {
             tracing::warn!(%error, "failed to settle current document font readiness");
@@ -489,6 +527,7 @@ impl ScriptVm {
             &mut services,
             &mut embedded_document_services,
             request,
+            None,
         )
     }
 

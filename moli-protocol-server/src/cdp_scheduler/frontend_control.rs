@@ -1,7 +1,10 @@
 use moli_cookie_jar::StoredCookie;
 use tokio::sync::mpsc;
 
-use crate::{cdp_frontend::CdpFrontendControlRequest, cdp_frontend_router::CdpFrontendRouter};
+use crate::{
+    BrowserInstanceControl, cdp_frontend::CdpFrontendControlRequest,
+    cdp_frontend_router::CdpFrontendRouter,
+};
 
 use self::target_control::CdpFrontendTargetControl;
 use super::CdpScheduler;
@@ -27,6 +30,7 @@ impl CdpCookieSnapshot {
 
 pub(crate) struct CdpOwnerActorLifecycle {
     pub(crate) checkpoint_tx: mpsc::UnboundedSender<CdpCookieSnapshot>,
+    pub(crate) instance_control: BrowserInstanceControl,
 }
 
 #[derive(Default)]

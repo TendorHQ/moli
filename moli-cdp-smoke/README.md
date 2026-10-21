@@ -337,6 +337,21 @@ Chromium source revision `a03603fe9af6` was also inspected to explain the
 access-mode and auto-attach machinery; the executable probe remains the
 behavioral authority.
 
+The real-URL debugger-wait lifecycle contract was checked again on 2026-10-20
+against Playwright 1.58.0's Chrome for Testing 145.0.7632.6, matching CI.
+The probe creates the script-free `/semantic-frames?debugger-wait=1` target
+under `waitForDebuggerOnStart`, enables Page lifecycle events and Runtime, and
+then sends `Runtime.runIfWaitingForDebugger`. Chromium can emit the requested
+main document's `load` before replying to `Runtime.enable`; the attach event's
+`waitingForDebugger=true` does not guarantee that this HTML load waits for the
+explicit resume. Retain events from both Runtime commands and require the
+owning session, main frame, and the committed frame tree's loader. The initial
+document load check and child document checks still apply. With four browsers
+restricted to two CPUs, discarding the Runtime-enable batch caused 3/300
+timeouts; retaining it passed 300/300, including three loads from that batch.
+Repeat the whole group with
+`--browser chromium --group target-semantics --repeat 30 --jobs 4`.
+
 The expanded `multi-page` group was calibrated again on 2026-08-31 against
 Debian `/usr/bin/chromium` 145.0.7632.116 and local Chromium source revision
 `a03603fe9af6`. Five new executable contracts cover target-local Debugger

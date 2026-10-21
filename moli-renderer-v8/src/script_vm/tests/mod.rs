@@ -1,4 +1,5 @@
 mod beforeinput_target_validation;
+mod child_document_web_fonts;
 mod credential_container;
 mod credential_json_options;
 mod cross_origin_navigation;
@@ -2220,6 +2221,7 @@ mod svg_length_validation;
 mod svg_number_validation;
 mod svg_root_factory_receivers;
 mod svg_switch_mpath_interfaces;
+mod svg_value_factories;
 mod text_encoder_utf16_progress;
 mod time_ranges;
 mod url_components;

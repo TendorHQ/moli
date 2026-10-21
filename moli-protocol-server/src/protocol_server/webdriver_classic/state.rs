@@ -37,7 +37,10 @@ use crate::cdp_scheduler::{
 use super::super::webdriver_bidi::{
     BidiSocketActor, BidiSocketActorInput, SharedBidiSessionRegistry,
 };
-use super::super::{CookieProfileCommit, protocol_local_executor::spawn_protocol_local_task};
+use super::super::{
+    CookieProfileCommit, SharedCookieProfile, instance_shutdown::InstanceConnection,
+    protocol_local_executor::spawn_protocol_local_task,
+};
 
 const CLASSIC_SCRIPT_TERMINATION_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -47,6 +50,35 @@ pub(in crate::protocol_server) struct SharedClassicSessionRegistry {
 }
 
 impl SharedClassicSessionRegistry {
+    pub(in crate::protocol_server) async fn shutdown(
+        &self,
+        cookie_profile: &SharedCookieProfile,
+    ) -> anyhow::Result<()> {
+        let runtimes = {
+            let mut manager = self.inner.lock();
+            let session_ids = manager.runtimes.keys().cloned().collect::<Vec<_>>();
+            session_ids
+                .iter()
+                .filter_map(|id| manager.release_session(id))
+                .collect::<Vec<_>>()
+        };
+        let commits = futures_util::future::join_all(
+            runtimes
+                .into_iter()
+                .map(ClassicSessionRuntimeHandle::shutdown_and_join),
+        )
+        .await;
+        let mut result = Ok(());
+        for commit in commits {
+            if let Err(error) = commit.and_then(|commit| cookie_profile.commit_and_save(commit))
+                && result.is_ok()
+            {
+                result = Err(error);
+            }
+        }
+        result
+    }
+
     pub(super) fn lock(&self) -> parking_lot::MutexGuard<'_, ClassicSessionManager> {
         self.inner.lock()
     }
@@ -473,6 +505,7 @@ impl ClassicSessionBinding {
 #[derive(Debug, Clone)]
 pub(in crate::protocol_server) struct ClassicSessionRuntimeHandle {
     tx: mpsc::UnboundedSender<ClassicSessionRuntimeRequest>,
+    completion: Arc<tokio::sync::Mutex<Option<oneshot::Receiver<CookieProfileCommit>>>>,
 }
 
 impl ClassicSessionRuntimeHandle {
@@ -480,17 +513,24 @@ impl ClassicSessionRuntimeHandle {
         initial_cookie_snapshot: Vec<StoredCookie>,
         initial_storage_partition: CdpInitialStoragePartition,
         navigation_runtime_config: NavigationRuntimeConfig,
+        instance_connection: InstanceConnection,
     ) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
-        let _runtime_finished_rx = spawn_protocol_local_task("classic-session", move || {
-            classic_session_runtime_loop(
-                rx,
-                initial_cookie_snapshot,
-                initial_storage_partition,
-                navigation_runtime_config,
-            )
-        });
-        Self { tx }
+        let runtime_finished_rx =
+            spawn_protocol_local_task("classic-session", move || async move {
+                let _instance_connection = instance_connection;
+                classic_session_runtime_loop(
+                    rx,
+                    initial_cookie_snapshot,
+                    initial_storage_partition,
+                    navigation_runtime_config,
+                )
+                .await
+            });
+        Self {
+            tx,
+            completion: Arc::new(tokio::sync::Mutex::new(Some(runtime_finished_rx))),
+        }
     }
 
     pub(super) async fn execute(
@@ -809,6 +849,19 @@ impl ClassicSessionRuntimeHandle {
         response_rx
             .await
             .unwrap_or_else(|_| CookieProfileCommit::unchanged())
+    }
+
+    async fn shutdown_and_join(self) -> anyhow::Result<CookieProfileCommit> {
+        let completion = self.completion.clone();
+        let _ = self.shutdown().await;
+        let receiver = completion
+            .lock()
+            .await
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("Classic runtime completion already consumed"))?;
+        receiver
+            .await
+            .map_err(|_| anyhow::anyhow!("Classic runtime stopped before checkpoint completion"))
     }
 
     pub(in crate::protocol_server) async fn attach_bidi_socket(

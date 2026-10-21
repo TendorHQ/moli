@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, bail};
+use moli_protocol_cdp::{CdpCommandParseError, ParsedCdpCommand};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::cdp_writer::CdpSocketSink;
@@ -56,7 +57,7 @@ pub(crate) enum CdpFrontendControlRequest {
 
 pub(crate) struct CdpFrontendCommand {
     pub(crate) frontend_id: u64,
-    pub(crate) raw: String,
+    pub(crate) command: Result<ParsedCdpCommand, CdpCommandParseError>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -126,11 +127,15 @@ impl CdpFrontendEndpoint {
         }
     }
 
-    pub(crate) async fn command(&self, frontend_id: u64, raw: String) -> bool {
+    pub(crate) async fn command(
+        &self,
+        frontend_id: u64,
+        command: Result<ParsedCdpCommand, CdpCommandParseError>,
+    ) -> bool {
         tokio::select! {
             biased;
             _ = self.wait_for_shutdown() => false,
-            result = self.command_tx.send(CdpFrontendCommand { frontend_id, raw }) => result.is_ok(),
+            result = self.command_tx.send(CdpFrontendCommand { frontend_id, command }) => result.is_ok(),
         }
     }
 

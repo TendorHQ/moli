@@ -1607,6 +1607,12 @@ pub(super) async fn webdriver_classic_new_session(
     State(state): State<AppState>,
     body: Bytes,
 ) -> Response {
+    let Some(instance_connection) = state.control.connection() else {
+        return classic_error_into_response(ClassicError::new(
+            ClassicErrorCode::SessionNotCreated,
+            "protocol server is shutting down",
+        ));
+    };
     let params = match classic_json_body(&body) {
         Ok(params) => params,
         Err(error) => return classic_error_into_response(error),
@@ -1671,6 +1677,7 @@ pub(super) async fn webdriver_classic_new_session(
             state.subframe_loading_enabled,
             state.layout_configuration,
         ),
+        instance_connection,
     );
     let create_context = ClassicDevToolsCommandContext::new(session.session_id.as_str());
     let target_id = match runtime

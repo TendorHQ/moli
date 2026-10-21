@@ -1,5 +1,6 @@
 use anyhow::Context;
 use moli_protocol::ParsedCdpCommand;
+use moli_protocol_cdp::CdpCommandParseError;
 use serde_json::Value;
 
 use super::{
@@ -26,12 +27,21 @@ fn immediate_error_response(
 }
 
 impl CdpFrontendRoutingState {
+    #[cfg(test)]
     pub(in crate::cdp_frontend_router) fn prepare_command_str(
         &mut self,
         frontend_id: u64,
         raw: String,
     ) -> Option<CdpPreparedFrontendCommand> {
-        match ParsedCdpCommand::parse_str(raw) {
+        self.prepare_parsed_command(frontend_id, ParsedCdpCommand::parse_str(raw))
+    }
+
+    pub(in crate::cdp_frontend_router) fn prepare_parsed_command(
+        &mut self,
+        frontend_id: u64,
+        command: Result<ParsedCdpCommand, CdpCommandParseError>,
+    ) -> Option<CdpPreparedFrontendCommand> {
+        match command {
             Ok(command) => self.prepare_command(frontend_id, command),
             Err(error) => Some(immediate_error_response(
                 frontend_id,

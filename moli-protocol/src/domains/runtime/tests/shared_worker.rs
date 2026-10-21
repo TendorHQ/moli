@@ -3716,7 +3716,11 @@ async fn worker_navigator_query_overrides_are_independent_of_the_page() {
             (99017, None, true),
             (99018, Some(worker.as_str()), worker_expected),
         ] {
-            ctx.process_and_wait_for_response_async(json!({"id":id,"sessionId":session,"method":"Runtime.evaluate","params":{"expression":"globalThis.heldConnection ??= navigator.connection; [heldConnection.saveData, heldConnection === navigator.connection]","returnByValue":true}})).await;
+            let mut request = json!({"id":id,"method":"Runtime.evaluate","params":{"expression":"globalThis.heldConnection ??= navigator.connection; [heldConnection.saveData, heldConnection === navigator.connection]","returnByValue":true}});
+            if let Some(session) = session {
+                request["sessionId"] = json!(session);
+            }
+            ctx.process_and_wait_for_response_async(request).await;
             assert_eq!(
                 take_response_by_id(&mut ctx, id)["result"]["result"]["value"],
                 json!([expected, true])
@@ -3724,7 +3728,11 @@ async fn worker_navigator_query_overrides_are_independent_of_the_page() {
         }
     }
     for (id, session, expected) in [(99010, None, 2), (99011, Some(worker.as_str()), 4)] {
-        ctx.process_and_wait_for_response_async(json!({"id":id,"sessionId":session,"method":"Runtime.evaluate","params":{"expression":"navigator.hardwareConcurrency","returnByValue":true}})).await;
+        let mut request = json!({"id":id,"method":"Runtime.evaluate","params":{"expression":"navigator.hardwareConcurrency","returnByValue":true}});
+        if let Some(session) = session {
+            request["sessionId"] = json!(session);
+        }
+        ctx.process_and_wait_for_response_async(request).await;
         assert_eq!(
             take_response_by_id(&mut ctx, id)["result"]["result"]["value"],
             json!(expected)
@@ -3739,7 +3747,11 @@ async fn worker_navigator_query_overrides_are_independent_of_the_page() {
             assert_eq!(reply["error"]["code"], -32602, "{reply}");
         }
         for (id, session, expected) in [(99013, None, 2), (99014, Some(worker.as_str()), 3)] {
-            ctx.process_and_wait_for_response_async(json!({"id":id,"sessionId":session,"method":"Runtime.evaluate","params":{"expression":"navigator.hardwareConcurrency","returnByValue":true}})).await;
+            let mut request = json!({"id":id,"method":"Runtime.evaluate","params":{"expression":"navigator.hardwareConcurrency","returnByValue":true}});
+            if let Some(session) = session {
+                request["sessionId"] = json!(session);
+            }
+            ctx.process_and_wait_for_response_async(request).await;
             assert_eq!(
                 take_response_by_id(&mut ctx, id)["result"]["result"]["value"],
                 json!(expected)
@@ -3751,13 +3763,17 @@ async fn worker_navigator_query_overrides_are_independent_of_the_page() {
 #[tokio::test(flavor = "multi_thread")]
 async fn shared_worker_emulation_activation_tracks_user_agent_commands() {
     async fn snapshot(ctx: &mut TestContext, session_id: Option<&str>) -> serde_json::Value {
-        ctx.process_and_wait_for_response_async(json!({
-            "id": 99190, "sessionId": session_id, "method": "Runtime.evaluate",
+        let mut request = json!({
+            "id": 99190, "method": "Runtime.evaluate",
             "params": {
                 "expression": "globalThis.heldNavigator ??= navigator; globalThis.heldConnection ??= navigator.connection; [heldNavigator.hardwareConcurrency, heldConnection.saveData, heldNavigator.userAgent]",
                 "returnByValue": true
             }
-        })).await;
+        });
+        if let Some(session_id) = session_id {
+            request["sessionId"] = json!(session_id);
+        }
+        ctx.process_and_wait_for_response_async(request).await;
         take_response_by_id(ctx, 99190)["result"]["result"]["value"].clone()
     }
 
