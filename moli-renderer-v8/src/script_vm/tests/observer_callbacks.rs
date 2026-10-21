@@ -1,5 +1,105 @@
 use super::*;
 
+fn run_mutation_observer_init_checks(group: &str, total: usize) {
+    let mut vm = new_storage_html_test_vm("https://mutation-observer-init.test/");
+    vm.eval(&format!(
+        "document.body.innerHTML='<iframe id=child></iframe>'; \
+         globalThis.__mutationObserverGroup={group:?};"
+    ))
+    .unwrap();
+    vm.eval(include_str!(
+        "../../../tests/fixtures/mutation-observer-init.js"
+    ))
+    .unwrap();
+    assert_eq!(vm.eval("__uiEventResults.complete").unwrap(), "true");
+    assert_eq!(
+        vm.eval("JSON.stringify(__uiEventResults.checks.filter(row=>!row.passed))")
+            .unwrap(),
+        "[]"
+    );
+    assert_eq!(
+        vm.eval("__uiEventResults.total").unwrap(),
+        total.to_string()
+    );
+    let names: Vec<String> = serde_json::from_str(
+        &vm.eval("JSON.stringify(__uiEventResults.checks.map(row=>row.name))")
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(names.len(), total);
+    assert_eq!(
+        names
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        total
+    );
+}
+
+#[test]
+fn mutation_observer_init_converts_iterables_and_preserves_dictionary_order_and_registration() {
+    run_mutation_observer_init_checks("conversion", 128);
+}
+
+#[test]
+fn mutation_observer_filters_match_exact_names_namespaces_and_utf16_identity() {
+    run_mutation_observer_init_checks("filters", 52);
+}
+
+#[test]
+fn mutation_observer_observe_accepts_registered_native_proxy_targets_and_receivers() {
+    fn register_proxy<'s>(
+        scope: &mut v8::PinScope<'s, '_>,
+        args: v8::FunctionCallbackArguments<'s>,
+        mut rv: v8::ReturnValue<'s>,
+    ) {
+        let target = v8::Local::<v8::Object>::try_from(args.get(0)).unwrap();
+        let handler = crate::util::new_null_prototype_object(scope);
+        let proxy = v8::Proxy::new(scope, target, handler).unwrap();
+        moli_webapi_declare::register_web_api_proxy(scope, proxy).unwrap();
+        rv.set(proxy.into());
+    }
+    let mut vm = new_storage_html_test_vm("https://mutation-observer-native-proxy.test/");
+    let context_ptr = &vm.page_default_runtime.context as *const _;
+    vm.with_context_scope_by_ptr_and_checkpoint_for_test(context_ptr, |scope, _| {
+        let global = scope.get_current_context().global(scope);
+        let function = v8::Function::new(scope, register_proxy).unwrap();
+        let key = crate::util::v8str(scope, "registerNativeProxy");
+        assert_eq!(
+            global.create_data_property(scope, key.into(), function.into()),
+            Some(true)
+        );
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(vm.eval(r#"(() => {
+        const observer = new MutationObserver(() => {});
+        const target = document.createElement('div');
+        const observerProxy = registerNativeProxy(observer);
+        const targetProxy = registerNativeProxy(target);
+        MutationObserver.prototype.observe.call(observerProxy, targetProxy, {
+            attributeFilter: new Set(['keep'])
+        });
+        target.setAttribute('drop', 'x'); target.setAttribute('keep', 'y');
+        const records = MutationObserver.prototype.takeRecords.call(observerProxy);
+        if (records.length !== 1 || records[0].target !== target || records[0].attributeName !== 'keep')
+            throw Error('registered native identity');
+        let gets = 0, traps = 0;
+        for (const [receiver, node] of [
+            [new Proxy(observerProxy, {get(){traps++;}}), targetProxy],
+            [observerProxy, new Proxy(targetProxy, {get(){traps++;}})]
+        ]) {
+            let error;
+            try {MutationObserver.prototype.observe.call(receiver, node, {
+                get childList(){gets++;return true;}
+            });} catch(caught) {error = caught;}
+            if (!(error instanceof TypeError)) throw Error('author Proxy was accepted');
+        }
+        MutationObserver.prototype.disconnect.call(observerProxy);
+        return gets === 0 && traps === 0;
+    })()"#).unwrap(), "true");
+}
+
 fn observer_callback_test_vm(url: &str) -> StandaloneScriptVmHarness {
     let mut vm = new_storage_test_vm(url);
     vm.eval(
