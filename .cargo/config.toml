@@ -28,6 +28,10 @@ ALL_PROXY = { value = "", force = true }
 HTTP_PROXY = { value = "", force = true }
 HTTPS_PROXY = { value = "", force = true }
 
+# Avoid AWS-LC's CPU jitter entropy startup cost. OS entropy, TLS random
+# number generation, and libcurl hash seed randomization remain enabled.
+AWS_LC_SYS_NO_JITTER_ENTROPY = "1"
+
 # Browser imports only query ordinary SQLite tables. libsqlite3-sys enables
 # these extensions in its bundled C build regardless of rusqlite features.
 # Its LIBSQLITE3_FLAGS are appended after the defaults: use -U, since defining
