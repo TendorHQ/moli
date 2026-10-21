@@ -2183,6 +2183,7 @@ mod svg_animation_interfaces;
 mod svg_computed_path_precision;
 mod svg_detached_lengths;
 mod svg_transform_sync_consolidation;
+mod video_color_space;
 
 mod audio_event_interfaces;
 mod audio_value_owner_interface_exposure_interfaces;
@@ -2190,6 +2191,7 @@ mod cross_origin_named_children;
 mod declarative_receivers;
 mod frame_owner_origin_access;
 mod hyperlink_null_url_protocol;
+mod idb_rejected_request;
 mod import_meta;
 mod indexed_db;
 mod inspector_unwrap;
