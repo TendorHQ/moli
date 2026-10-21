@@ -143,6 +143,10 @@ Generated files live under `dist/` and `artifacts/` and are ignored. The runner 
 fixture-tree hash against the manifest before starting browsers. A failed case gets its own
 artifact directory with final DOM JSON, diagnostics, timeline metadata, normalized DOM JSON for
 every captured frame, and per-frame unified diffs when both engines produced a tree.
+For a CDP timeout, diagnostics also include the pending method, request and session ids,
+observation stage, and last observed checkpoint. This distinguishes waiting for the next
+checkpoint from resuming the previous one, which can otherwise report the same `Runtime.evaluate`
+timeout with identical partial frames.
 
 Validate the expected artifact set, recompute DOM hashes/node counts and diffs, and print
 non-gating diagnostic projections:
