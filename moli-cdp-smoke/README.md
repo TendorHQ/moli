@@ -923,11 +923,14 @@ Useful environment variables:
 
 Moli runs do not need Playwright-managed browser binaries. Chromium runs require
 the browser installed by the locked Playwright version, or an explicit override.
-The runner starts `moli serve` with `--layout --resource` so screenshot
+The runner starts `moli serve` with `--layout --resource --debugger` so screenshot
 coverage uses the real renderer and the Chromium-derived Network matrix can
 observe every optional resource family, including images, audio, video, and
-text tracks. These are smoke-only opt-ins; normal moli defaults remain
-Mock layout with optional resources disabled.
+text tracks. Debugger scenarios require real pauses, which `moli serve` skips
+by default. When testing an external Moli `--endpoint`, start that server with
+`--debugger` to run scenarios that assert debugger statements or breakpoints.
+These options enable the capabilities exercised by this suite; normal Moli
+defaults use Mock layout with optional resources and debugger pauses disabled.
 
 ## Relationship to the Node smoke
 

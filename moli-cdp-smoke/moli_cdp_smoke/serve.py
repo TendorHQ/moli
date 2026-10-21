@@ -102,6 +102,7 @@ async def start_moli_serve(
     command = [
         str(binary),
         "serve",
+        "--debugger",
         "--host",
         "127.0.0.1",
         "--port",
