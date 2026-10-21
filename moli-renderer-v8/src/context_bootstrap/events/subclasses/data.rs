@@ -290,18 +290,7 @@ pub(super) fn parse_storage_event_init<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     args: &v8::FunctionCallbackArguments<'s>,
 ) -> Option<StorageEventInitMembers<'s>> {
-    let parsed = webidl::dictionary_arg(args, 1, webidl::Context::argument("StorageEvent", 2))
-        .and_then(|object| match object {
-            Some(object) => webidl::parse_dictionary_object(scope, object),
-            None => Ok(StorageEventInitMembers::default()),
-        });
-    match parsed {
-        Ok(init) => Some(init),
-        Err(error) => {
-            webidl::throw_error(scope, &error);
-            None
-        }
-    }
+    crate::context_bootstrap::events::parse_event_dictionary(scope, args, "StorageEvent")
 }
 
 pub(in crate::context_bootstrap::events::subclasses) fn initialize_drag_event<'s>(

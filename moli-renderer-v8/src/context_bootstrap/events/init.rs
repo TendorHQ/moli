@@ -14,6 +14,25 @@ pub(in crate::context_bootstrap) struct EventInit {
     pub(in crate::context_bootstrap) composed: bool,
 }
 
+pub(in crate::context_bootstrap) fn parse_event_dictionary<'s, T: webidl::WebIdlDictionary<'s>>(
+    scope: &mut v8::PinScope<'s, '_>,
+    args: &v8::FunctionCallbackArguments<'s>,
+    constructor: &'static str,
+) -> Option<T> {
+    let parsed = webidl::convert::<webidl::Dictionary<T>>(
+        scope,
+        args.get(1),
+        webidl::Context::argument(constructor, 2),
+    );
+    match parsed {
+        Ok(init) => Some(init.0),
+        Err(error) => {
+            webidl::throw_error(scope, &error);
+            None
+        }
+    }
+}
+
 pub(super) fn init_bool_property<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     init: Option<v8::Local<'s, v8::Object>>,
