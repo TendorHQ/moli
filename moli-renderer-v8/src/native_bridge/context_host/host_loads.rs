@@ -691,11 +691,14 @@ impl JsContextHost {
             .get(&handle)
             .is_some_and(|task| {
                 task.owner == owner
-                    && task.target_url == navigation.url
-                    && task.navigation_kind == navigation_kind
-                    && task.delay_ms == navigation.delay_ms
+                    && (task.delay_ms < navigation.delay_ms
+                        || (task.target_url == navigation.url
+                            && task.navigation_kind == navigation_kind
+                            && task.delay_ms == navigation.delay_ms))
             })
         {
+            // Match the top-level scheduler: keep a faster pending refresh,
+            // and preserve the original deadline for identical declarations.
             self.arm_child_meta_refresh_navigation(scope, runtime, handle);
             return;
         }

@@ -1409,6 +1409,100 @@ root.appendChild(frame);
     );
 }
 
+async fn assert_child_meta_refresh_candidate_priority(
+    initial_delay: u32,
+    inserted_delay: u32,
+    inserted_target: &str,
+    expected_target: &str,
+    preserves_deadline: bool,
+) {
+    let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).expect("loader");
+    for insert_during_owner_load in [false, true] {
+        let mut vm =
+            new_storage_test_vm_with_loader("https://child-refresh-priority.test/", &loader);
+        vm.eval(&format!(
+            r##"
+globalThis.loads = 0;
+const root = document.documentElement || document.appendChild(document.createElement('html'));
+const frame = document.createElement('iframe');
+function insertRefresh() {{
+  const meta = frame.contentDocument.createElement('meta');
+  meta.httpEquiv = 'refresh';
+  meta.content = '{inserted_delay};url=about:srcdoc#{inserted_target}';
+  frame.contentDocument.head.appendChild(meta);
+}}
+frame.onload = () => {{
+  ++loads;
+  if ({insert_during_owner_load}) insertRefresh();
+}};
+frame.srcdoc = '<!doctype html><meta http-equiv="refresh" content="{initial_delay};url=about:srcdoc#early"><p>child</p>';
+root.appendChild(frame);
+'queued'
+"##
+        ))
+        .expect("the child refresh priority fixture should attach");
+        vm.drain_pending_child_frame_work_for_test();
+        assert_eq!(vm.eval("String(loads)").unwrap(), "1");
+        vm.eval("globalThis.retainedChildDocument = frame.contentDocument")
+            .unwrap();
+
+        if !insert_during_owner_load {
+            let original_deadline = vm.next_timeout_deadline().expect("original refresh timer");
+            vm.eval("insertRefresh(); 'inserted'").unwrap();
+            let updated_deadline = vm.next_timeout_deadline().expect("selected refresh timer");
+            if preserves_deadline {
+                assert_eq!(
+                    updated_deadline, original_deadline,
+                    "a slower or identical declaration must retain the original deadline"
+                );
+            } else if inserted_delay < initial_delay {
+                assert!(
+                    updated_deadline < original_deadline,
+                    "a faster declaration must replace the pending refresh"
+                );
+            } else {
+                assert!(
+                    updated_deadline > original_deadline,
+                    "an equal-delay declaration with a new target must replace the old refresh"
+                );
+            }
+        }
+        assert!(
+            vm.ms_to_next_timeout().is_some_and(|delay| delay <= 1_000),
+            "the one-second refresh must win, including before owner load finishes"
+        );
+        vm.advance_timers_until_deadline_for_test(&loader)
+            .await
+            .expect("the selected refresh should execute");
+        assert_eq!(
+            vm.eval("JSON.stringify([frame.contentWindow.location.hash, loads, frame.contentDocument === retainedChildDocument])")
+                .unwrap(),
+            format!(r##"["#{expected_target}",1,true]"##),
+            "the selected declaration must navigate the original Document; insert during owner load={insert_during_owner_load}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn child_meta_refresh_slower_candidate_preserves_target_and_deadline() {
+    assert_child_meta_refresh_candidate_priority(1, 30, "late", "early", true).await;
+}
+
+#[tokio::test]
+async fn child_meta_refresh_faster_candidate_replaces_pending_refresh() {
+    assert_child_meta_refresh_candidate_priority(30, 1, "late", "late", false).await;
+}
+
+#[tokio::test]
+async fn child_meta_refresh_equal_delay_uses_the_latest_target() {
+    assert_child_meta_refresh_candidate_priority(1, 1, "late", "late", false).await;
+}
+
+#[tokio::test]
+async fn child_meta_refresh_identical_candidate_keeps_the_original_deadline() {
+    assert_child_meta_refresh_candidate_priority(1, 1, "early", "early", true).await;
+}
+
 async fn assert_child_meta_refresh_can_be_inserted_during_load(in_window_load: bool) {
     let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).expect("loader");
     let mut vm = new_storage_test_vm_with_loader("https://child-meta-refresh.test/", &loader);
