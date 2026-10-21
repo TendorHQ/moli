@@ -1,6 +1,6 @@
 use super::location_runtime::{
     is_same_document_fragment_navigation, location_href_slot, resolve_location_navigation_target,
-    sync_location_object, urls_equal_ignoring_fragment,
+    sync_location_object,
 };
 use super::navigation_activation::install_navigation_transition;
 use super::navigation_callbacks::cancel_active_intercepted_same_document_navigation;
@@ -48,13 +48,6 @@ pub(crate) enum LocationNavigationKind {
     Reload,
 }
 
-#[derive(Default)]
-struct LocationNavigationOptions {
-    dispatch_child_navigate_event_for_all_kinds: bool,
-    force_exact_same_document_navigation: bool,
-    hash_setter: bool,
-}
-
 pub(crate) fn resolve_cross_window_location_target(
     scope: &mut v8::PinScope<'_, '_>,
     raw: &str,
@@ -91,30 +84,7 @@ pub(crate) fn navigate_location_object<'s>(
     raw_target: Option<String>,
 ) {
     navigate_location_object_with_source_element_and_child_navigate_event(
-        scope,
-        location,
-        kind,
-        raw_target,
-        None,
-        LocationNavigationOptions::default(),
-    );
-}
-
-pub(in crate::context_bootstrap) fn navigate_location_hash<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    location: v8::Local<'s, v8::Object>,
-    target: String,
-) {
-    navigate_location_object_with_source_element_and_child_navigate_event(
-        scope,
-        location,
-        LocationNavigationKind::Assign,
-        Some(target),
-        None,
-        LocationNavigationOptions {
-            hash_setter: true,
-            ..Default::default()
-        },
+        scope, location, kind, raw_target, None, false, false,
     );
 }
 
@@ -161,10 +131,8 @@ pub(crate) fn navigate_top_level_same_document_from_browser(
         kind,
         Some(target),
         None,
-        LocationNavigationOptions {
-            force_exact_same_document_navigation: true,
-            ..Default::default()
-        },
+        false,
+        true,
     );
     true
 }
@@ -218,10 +186,8 @@ pub(crate) fn navigate_top_level_meta_refresh(
         kind,
         Some(target.to_string()),
         None,
-        LocationNavigationOptions {
-            force_exact_same_document_navigation: same_document_fragment,
-            ..Default::default()
-        },
+        false,
+        same_document_fragment,
     );
     context_host_ptr_from_global_bridge(scope)
         .is_some_and(|host_ptr| unsafe { &*host_ptr }.has_pending_location_navigation())
@@ -242,7 +208,8 @@ pub(crate) fn navigate_location_object_with_source_element<'s>(
         kind,
         raw_target,
         source_element,
-        LocationNavigationOptions::default(),
+        false,
+        false,
     );
 }
 
@@ -253,15 +220,7 @@ pub(crate) fn navigate_location_object_with_child_navigate_event<'s>(
     raw_target: Option<String>,
 ) {
     navigate_location_object_with_source_element_and_child_navigate_event(
-        scope,
-        location,
-        kind,
-        raw_target,
-        None,
-        LocationNavigationOptions {
-            dispatch_child_navigate_event_for_all_kinds: true,
-            ..Default::default()
-        },
+        scope, location, kind, raw_target, None, true, false,
     );
 }
 
@@ -271,13 +230,9 @@ fn navigate_location_object_with_source_element_and_child_navigate_event<'s>(
     kind: LocationNavigationKind,
     raw_target: Option<String>,
     source_element: Option<v8::Local<'s, v8::Object>>,
-    options: LocationNavigationOptions,
+    dispatch_child_navigate_event_for_all_kinds: bool,
+    force_exact_same_document_navigation: bool,
 ) {
-    let LocationNavigationOptions {
-        dispatch_child_navigate_event_for_all_kinds,
-        force_exact_same_document_navigation,
-        hash_setter,
-    } = options;
     let owner = runtime_window_owner(scope, location);
     if let Some(context) = location.get_creation_context(scope)
         && let Some(host_ptr) = crate::util::context_host_ptr_from_context_slot(context)
@@ -345,7 +300,7 @@ fn navigate_location_object_with_source_element_and_child_navigate_event<'s>(
     if !matches!(kind, LocationNavigationKind::Reload)
         && exact_same_href
         && source_element.is_none()
-        && (raw_target_is_fragment_only || hash_setter)
+        && raw_target_is_fragment_only
         && !force_exact_same_document_navigation
     {
         return;
@@ -382,18 +337,9 @@ fn navigate_location_object_with_source_element_and_child_navigate_event<'s>(
         return;
     }
 
-    // A hash setter can remove the fragment entirely. Full URL assignments
-    // without a target fragment still take the cross-document route.
-    let same_document_fragment = if hash_setter {
-        current_url
-            .as_ref()
-            .is_some_and(|current| urls_equal_ignoring_fragment(current, &resolved))
-    } else {
-        is_same_document_fragment_navigation(current_url.as_ref(), &resolved)
-    };
     if !matches!(kind, LocationNavigationKind::Reload)
         && (!exact_same_href || force_exact_same_document_navigation)
-        && same_document_fragment
+        && is_same_document_fragment_navigation(current_url.as_ref(), &resolved)
     {
         let opaque_origin = navigation_document_has_opaque_origin(scope, owner);
         if !opaque_origin

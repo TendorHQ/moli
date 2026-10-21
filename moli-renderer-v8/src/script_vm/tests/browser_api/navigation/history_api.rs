@@ -420,7 +420,7 @@ fn location_hash_clear_stays_in_the_current_document() {
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&result).unwrap(),
         serde_json::json!({
-            "href": "https://location-hash-clear.test/index.html",
+            "href": "https://location-hash-clear.test/index.html#",
             "hash": "",
             "sameDocument": true,
             "events": [[true, true]]
@@ -451,6 +451,47 @@ fn location_hash_reassignment_compares_the_encoded_fragment() {
     assert!(vm.take_pending_location_navigation_with_seed().is_none());
 }
 
+#[test]
+fn location_hash_empty_and_absent_fragments_are_equal_for_assignment() {
+    for (initial, value) in [("", ""), ("", "#"), ("#", ""), ("#", "#")] {
+        let href = format!("https://location-hash-noop.test/index.html{initial}");
+        let mut vm = new_storage_test_vm(&href);
+        let value = serde_json::to_string(value).unwrap();
+        let result = vm
+            .eval(&format!(
+                r#"
+                (() => {{
+                  const before = document;
+                  const length = history.length;
+                  let events = 0;
+                  navigation.onnavigate = () => ++events;
+                  location.hash = {value};
+                  return JSON.stringify({{
+                    href: location.href,
+                    hash: location.hash,
+                    sameDocument: document === before,
+                    sameHistory: history.length === length,
+                    events
+                  }});
+                }})()
+                "#,
+            ))
+            .expect("assigning an equivalent empty hash should be a no-op");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&result).unwrap(),
+            serde_json::json!({
+                "href": href,
+                "hash": "",
+                "sameDocument": true,
+                "sameHistory": true,
+                "events": 0
+            }),
+            "initial fragment {initial:?}, assigned hash {value}"
+        );
+        assert!(vm.take_pending_location_navigation_with_seed().is_none());
+    }
+}
+
 #[tokio::test]
 async fn clearing_a_srcdoc_hash_preserves_the_child_document_and_origin() {
     let mut vm = new_storage_test_vm("https://srcdoc-hash-clear.test/");
@@ -479,10 +520,15 @@ async fn clearing_a_srcdoc_hash_preserves_the_child_document_and_origin() {
               hashChild.navigation.onnavigate = event => events.push([
                 event.destination.sameDocument, event.hashChange
               ]);
+              hashChild.location.hash = '#';
+              const emptyHashNoOpHref = hashChild.location.href;
               hashChild.location.hash = 'start';
               hashChild.location.hash = '';
+              hashChild.location.hash = '';
+              hashChild.location.hash = '#';
               return JSON.stringify({
                 initialHref,
+                emptyHashNoOpHref,
                 href: hashChild.location.href,
                 sameDocument: hashChild.document === before,
                 sameOrigin: hashChild.origin === window.origin,
@@ -496,7 +542,8 @@ async fn clearing_a_srcdoc_hash_preserves_the_child_document_and_origin() {
         serde_json::from_str::<serde_json::Value>(&result).unwrap(),
         serde_json::json!({
             "initialHref": "about:srcdoc",
-            "href": "about:srcdoc",
+            "emptyHashNoOpHref": "about:srcdoc",
+            "href": "about:srcdoc#",
             "sameDocument": true,
             "sameOrigin": true,
             "events": [[true, true], [true, true]]
