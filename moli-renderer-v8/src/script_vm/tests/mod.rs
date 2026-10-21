@@ -6,7 +6,6 @@ mod credential_json_options;
 mod cross_origin_navigation;
 mod current_pass_css_fonts;
 mod document_encodings;
-mod message_port_transfer;
 mod dom_rect_factory_descriptors;
 mod offline_audio_float;
 mod picture_in_picture_interfaces;
