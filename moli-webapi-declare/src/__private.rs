@@ -171,9 +171,12 @@ pub fn install_function_template_methods<'s>(
 
 /// Static metadata for a string-named accessor without callback data.
 /// Mappings preserve constant tables while using V8's original call-time path.
+/// The derive prefixes getter names with "get "; the suffix is the property key.
 #[doc(hidden)]
 pub struct FunctionTemplateAccessor {
-    pub name: &'static str,
+    pub getter_name: &'static str,
+    /// Empty when no setter is declared.
+    pub setter_name: &'static str,
     pub getter: fn() -> v8::FunctionCallback,
     pub setter: Option<fn() -> v8::FunctionCallback>,
     pub enumerable: bool,
@@ -192,7 +195,7 @@ pub fn install_function_template_accessors<'s>(
     accessors: &[FunctionTemplateAccessor],
 ) {
     for accessor in accessors {
-        let key = v8str(scope, accessor.name);
+        let key = v8str(scope, &accessor.getter_name["get ".len()..]);
         let mut attributes = v8::PropertyAttribute::NONE;
         if !accessor.enumerable {
             attributes = attributes | v8::PropertyAttribute::DONT_ENUM;
@@ -207,14 +210,14 @@ pub fn install_function_template_accessors<'s>(
             callback: (accessor.getter)(),
             length: 0,
             data: None,
-            class_name: v8::String::new(scope, &format!("get {}", accessor.name)),
+            class_name: v8::String::new(scope, accessor.getter_name),
             receiver_access_check: accessor.getter_receiver_access_check,
         };
         let setter = accessor.setter.map(|mapping| FunctionTemplateMember {
             callback: mapping(),
             length: 1,
             data: None,
-            class_name: v8::String::new(scope, &format!("set {}", accessor.name)),
+            class_name: v8::String::new(scope, accessor.setter_name),
             receiver_access_check: accessor.setter_receiver_access_check,
         });
         install_function_template_accessor(scope, target, key.into(), getter, setter, attributes);

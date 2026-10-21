@@ -582,6 +582,15 @@ fn static_template_accessor(
     let Some(name) = webapi_field_name_literal(attrs.name.as_ref()) else {
         return Ok(None);
     };
+    let getter_name = LitStr::new(&format!("get {}", name.value()), name.span());
+    let setter_name = LitStr::new(
+        &if attrs.setter.is_some() {
+            format!("set {}", name.value())
+        } else {
+            String::new()
+        },
+        name.span(),
+    );
     let getter = attrs.getter.as_ref().ok_or_else(|| {
         Error::new(
             field.span(),
@@ -604,7 +613,8 @@ fn static_template_accessor(
     let setter_receiver = receiver.checks_setter();
     Ok(Some(quote! {
         ::moli_webapi_declare::__private::FunctionTemplateAccessor {
-            name: #name,
+            getter_name: #getter_name,
+            setter_name: #setter_name,
             getter: #getter,
             setter: #setter,
             enumerable: #enumerable,
@@ -2254,6 +2264,8 @@ mod tests {
             struct SampleTemplate {
                 #[webapi(accessor_property, getter = sample_getter)]
                 value: (),
+                #[webapi(accessor_property = "mutable-Δ", getter = sample_getter, setter = sample_setter)]
+                mutable: (),
                 #[webapi(accessor_property = "named", getter = sample_getter, setter = sample_setter, data = getter_data, setter_data = setter_data, dont_delete)]
                 named: (),
             }
@@ -2262,6 +2274,10 @@ mod tests {
             .expect("template accessors should expand")
             .to_string();
         assert!(tokens.contains("FunctionTemplateAccessor"));
+        assert!(tokens.contains("getter_name : \"get value\""));
+        assert!(tokens.contains("setter_name : \"\""));
+        assert!(tokens.contains("getter_name : \"get mutable-Δ\""));
+        assert!(tokens.contains("setter_name : \"set mutable-Δ\""));
         assert!(tokens.contains("String :: new (scope , \"get named\")"));
         assert!(tokens.contains("String :: new (scope , \"set named\")"));
         assert!(tokens.contains("install_function_template_accessor"));

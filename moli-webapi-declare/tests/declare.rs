@@ -439,7 +439,7 @@ const DYNAMIC_ATTRIBUTE_NAME: &str = "runtimeAttribute";
 struct AttributeMetadataTemplateDeclaration {
     #[webapi(accessor_property, getter = sample_receiver_getter)]
     implicit_name: (),
-    #[webapi(accessor_property = "explicit-name", getter = sample_receiver_getter)]
+    #[webapi(accessor_property = "explicit-name-Δ", getter = sample_receiver_getter)]
     explicit: (),
     #[webapi(native_data_property, getter = sample_native_holder_getter)]
     native_holder: (),
@@ -466,7 +466,7 @@ fn prototype_attribute_metadata_tracks_static_attribute_keys() {
     let attributes = AttributeMetadataTemplateDeclaration::PROTOTYPE_ATTRIBUTE_NAMES;
     assert_eq!(
         attributes,
-        ["implicitName", "explicit-name", "nativeHolder"]
+        ["implicitName", "explicit-name-Δ", "nativeHolder"]
     );
     for attribute in attributes {
         assert!(
@@ -477,6 +477,17 @@ fn prototype_attribute_metadata_tracks_static_attribute_keys() {
             .boolean_value(scope)
         );
     }
+    assert!(
+        run_script(
+            scope,
+            r#"['implicitName', 'explicit-name-Δ'].every(key => {
+                const descriptor = Object.getOwnPropertyDescriptor(AttributeMetadata.prototype, key);
+                return descriptor.get.name === `get ${key}`
+                    && descriptor.get.length === 0 && descriptor.set === undefined;
+            })"#
+        )
+        .boolean_value(scope)
+    );
     assert!(
         run_script(
             scope,
