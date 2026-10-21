@@ -31,17 +31,19 @@ class CdpCommandError(CdpError):
 _DOM_ENABLE_PARAMS = {"includeWhitespace": "all"}
 
 
-def _read_json_url(url: str) -> dict[str, Any]:
+def _read_json_url(url: str, *, timeout: float = 2.0) -> dict[str, Any]:
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    with opener.open(url, timeout=2) as response:
+    with opener.open(url, timeout=timeout) as response:
         value = json.loads(response.read().decode("utf-8"))
     if not isinstance(value, dict):
         raise CdpError(f"unexpected CDP discovery response: {value!r}")
     return value
 
 
-async def discover_websocket_url(endpoint: str) -> str:
-    payload = await asyncio.to_thread(_read_json_url, endpoint.rstrip("/") + "/json/version")
+async def discover_websocket_url(endpoint: str, *, timeout: float = 2.0) -> str:
+    payload = await asyncio.to_thread(
+        _read_json_url, endpoint.rstrip("/") + "/json/version", timeout=timeout,
+    )
     url = payload.get("webSocketDebuggerUrl")
     if not isinstance(url, str) or not url:
         raise CdpError(f"CDP discovery did not include webSocketDebuggerUrl: {payload}")
@@ -90,11 +92,15 @@ class RawCdpClient:
     ) -> dict[str, Any]:
         message_id = await self.send(method, params, session_id=session_id)
         deadline = asyncio.get_running_loop().time() + timeout
+        timeout_message = f"timed out waiting for {method} response after {timeout:g}s"
         while True:
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
-                raise CdpError(f"timed out waiting for {method} response")
-            message = await asyncio.wait_for(self.recv(), timeout=remaining)
+                raise CdpError(timeout_message)
+            try:
+                message = await asyncio.wait_for(self.recv(), timeout=remaining)
+            except TimeoutError as error:
+                raise CdpError(timeout_message) from error
             if message.get("id") == message_id:
                 if "error" in message:
                     raise CdpCommandError(method, message["error"])
@@ -121,24 +127,29 @@ class RawCdpClient:
             if matches(message):
                 return message
         deadline = asyncio.get_running_loop().time() + timeout
+        timeout_message = f"timed out waiting for {method} event after {timeout:g}s"
         while True:
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
-                raise CdpError(f"timed out waiting for {method}")
-            message = await asyncio.wait_for(self.recv(), timeout=remaining)
+                raise CdpError(timeout_message)
+            try:
+                message = await asyncio.wait_for(self.recv(), timeout=remaining)
+            except TimeoutError as error:
+                raise CdpError(timeout_message) from error
             self.events.append(message)
             if matches(message):
                 return message
 
 
-async def connect(endpoint: str) -> RawCdpClient:
-    url = await discover_websocket_url(endpoint)
-    websocket = await websockets.connect(
-        url,
-        open_timeout=5,
-        max_size=32 * 1024 * 1024,
-        proxy=None,
-    )
+async def connect(endpoint: str, *, timeout: float = 10.0) -> RawCdpClient:
+    async with asyncio.timeout(timeout):
+        url = await discover_websocket_url(endpoint, timeout=timeout)
+        websocket = await websockets.connect(
+            url,
+            open_timeout=timeout,
+            max_size=32 * 1024 * 1024,
+            proxy=None,
+        )
     return RawCdpClient(websocket=websocket)
 
 
@@ -425,18 +436,20 @@ async def observe_case(
     frames: list[DomFrameObservation] = []
     final_root: dict[str, Any] | None = None
     diagnostics: dict[str, Any] = {}
+    command_timeout = max(10.0, timeout_ms / 1000 + 2.0)
     try:
         if client is None:
-            client = await connect(endpoint)
+            client = await connect(endpoint, timeout=command_timeout)
         else:
             client.events.clear()
-        context = await client.command("Target.createBrowserContext")
+        context = await client.command("Target.createBrowserContext", timeout=command_timeout)
         context_id = context.get("browserContextId")
         if not isinstance(context_id, str) or not context_id:
             raise CdpError(f"Target.createBrowserContext returned {context}")
         target = await client.command(
             "Target.createTarget",
             {"browserContextId": context_id, "url": "about:blank"},
+            timeout=command_timeout,
         )
         target_id = target.get("targetId")
         if not isinstance(target_id, str) or not target_id:
@@ -444,12 +457,12 @@ async def observe_case(
         attached = await client.command(
             "Target.attachToTarget",
             {"targetId": target_id, "flatten": True},
+            timeout=command_timeout,
         )
         session_id = attached.get("sessionId")
         if not isinstance(session_id, str) or not session_id:
             raise CdpError(f"Target.attachToTarget returned {attached}")
 
-        command_timeout = max(10.0, timeout_ms / 1000 + 2.0)
         await client.command("Runtime.enable", session_id=session_id, timeout=command_timeout)
         await client.command("Page.enable", session_id=session_id, timeout=command_timeout)
         await client.command(

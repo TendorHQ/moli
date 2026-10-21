@@ -96,7 +96,10 @@ concurrency, but a release conclusion should also repeat the reference run and c
 hash across scheduling modes.
 
 Each worker keeps one browser-level CDP connection and creates an isolated browser context per
-case. CI may pass `--reference-infrastructure-retries 1` to re-observe a case after a Chromium
+case. Discovery, the WebSocket handshake, and context/target setup use the configured observation
+timeout plus protocol headroom, just like the later observation commands. Discovery and the
+handshake share one connection deadline. Timeout diagnostics identify the command or event that
+was pending. CI may pass `--reference-infrastructure-retries 1` to re-observe a case after a Chromium
 connection or protocol failure. The retry does not apply to fixture errors, normalization errors,
 Moli failures, or DOM differences, and the original failure remains recorded in `summary.json`.
 
