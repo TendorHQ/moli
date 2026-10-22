@@ -1726,6 +1726,7 @@ impl LiveStylesheet {
                 .all_rules
                 .push(crate::style_engine::StylesheetFontFaceRuleProjection {
                     rule_identity: identity,
+                    rule_address,
                     rule_fingerprint: native_rule.rule_fingerprint.clone(),
                     descriptor: native_rule.descriptor.clone(),
                     resource: crate::css_resource_urls::stylesheet_web_font_resource_with_resolved_sources(
