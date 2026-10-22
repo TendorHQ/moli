@@ -1,5 +1,4 @@
 use super::base::{define_event_property, event_type_argument, initialize_event_object_with_type};
-use super::init::{init_bool_property, init_string_property, init_value_property, read_event_init};
 use super::kind::EventSubclassKind;
 use super::*;
 
@@ -9,6 +8,7 @@ mod data;
 mod error;
 mod input;
 mod keyboard;
+mod navigation_init;
 mod payload;
 mod pointer;
 mod security_policy;

@@ -30,38 +30,6 @@ pub(in crate::context_bootstrap) fn parse_event_dictionary<'s, T: webidl::WebIdl
     }
 }
 
-pub(super) fn init_bool_property<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    init: Option<v8::Local<'s, v8::Object>>,
-    key: &'static str,
-    default: bool,
-) -> bool {
-    let Some(object) = init else {
-        return default;
-    };
-    webidl::legacy_bool_member_or(scope, object, "EventInit", key, default)
-}
-
-pub(super) fn init_string_property<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    init: Option<v8::Local<'s, v8::Object>>,
-    key: &'static str,
-    default: &str,
-) -> String {
-    let Some(object) = init else {
-        return default.to_owned();
-    };
-    webidl::legacy_string_member_or(scope, object, "EventInit", key, default)
-}
-
-pub(super) fn init_value_property<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    init: Option<v8::Local<'s, v8::Object>>,
-    key: &'static str,
-) -> Option<v8::Local<'s, v8::Value>> {
-    init.and_then(|object| webidl::property_non_undefined(scope, object, key))
-}
-
 pub(super) fn read_event_init<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     args: &v8::FunctionCallbackArguments<'s>,
