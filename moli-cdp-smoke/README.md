@@ -29,6 +29,13 @@ observes the parent's return code independently of stdout/stderr EOF: a
 descendant may retain an inherited output pipe after the browser has exited,
 which can leave `asyncio.subprocess.Process.wait()` pending. Failures identify
 the session case and lifecycle stage, including acknowledgment and process exit.
+Failed cases retain their close response, completed cases, browser log tail, and
+connection state in the worker's `observed` result before any socket or process
+cleanup. On Linux they also capture the owned PID's status, thread wait channels
+and syscalls, and descendant process states. This distinguishes a live or stuck
+browser from an already reaped browser whose descendants still own output pipes;
+diagnostic collection does not relax the natural-exit deadline or count forced
+cleanup as a successful exit.
 
 Lifecycle artifacts retain total FDs for both engines. Chromium also records
 FDs for regular files inside its owned profile: delayed database initialization

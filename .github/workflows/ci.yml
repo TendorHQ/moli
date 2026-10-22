@@ -478,6 +478,11 @@ jobs:
           uv sync --project moli-cdp-smoke --locked
           npm ci --prefix moli-cdp-smoke
           uv run --project moli-cdp-smoke --no-sync playwright install --with-deps chromium
+      - name: Repeat target semantics for shutdown investigation
+        run: |
+          uv run --project moli-cdp-smoke --no-sync moli-cdp-smoke \
+            --browser chromium --group target-semantics --repeat 20 --jobs 4 \
+            --output-dir target/smoke/cdp-chromium-ci/shutdown-repeat
       - name: Run full CDP smoke on Chromium
         run: |
           # Piped core handlers ignore ulimit, and can block Page.crash teardown.
