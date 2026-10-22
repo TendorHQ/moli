@@ -632,7 +632,7 @@ async fn markdown_with_frames_preserves_document_positions_nested_and_cross_orig
     let (_other_browser, other_page, other_server) = load_page("<base href='/assets/'><p>Cross origin body</p><a href='./details'>Foreign link</a><img src='./cover.png' alt='Foreign image'>").await?;
     let cross_url = other_page.final_url().to_string();
     let html = format!(
-        r#"<p>Before</p><a href="./parent-details">Parent link</a><iframe srcdoc="&lt;p&gt;Child body&lt;/p&gt;&lt;a href='./local-details'&gt;Local link&lt;/a&gt;&lt;iframe srcdoc='&amp;lt;p&amp;gt;Nested body&amp;lt;/p&amp;gt;'&gt;&lt;/iframe&gt;"></iframe><p>Between</p><iframe src="{cross_url}"></iframe><p>After</p><iframe srcdoc=""></iframe>"#
+        r#"<p>Before</p><a href="./parent-details">Parent link</a><iframe srcdoc="&lt;p style='display:none'&gt;Hidden child&lt;/p&gt;&lt;p&gt;Child body&lt;/p&gt;&lt;a href='./local-details'&gt;Local link&lt;/a&gt;&lt;iframe srcdoc='&amp;lt;p&amp;gt;Nested body&amp;lt;/p&amp;gt;'&gt;&lt;/iframe&gt;"></iframe><p>Between</p><iframe src="{cross_url}"></iframe><p>After</p><iframe srcdoc=""></iframe>"#
     );
     let (_browser, mut page, server) = load_page(&html).await?;
     let parent_url = page.final_url().to_string();
@@ -647,7 +647,10 @@ async fn markdown_with_frames_preserves_document_positions_nested_and_cross_orig
     )
     .await?;
     assert!(!plain.contains("Child body") && !plain.contains("Cross origin body"));
-    assert!(plain.contains("[Parent link](./parent-details)"), "{plain}");
+    assert!(
+        plain.contains(&format!("[Parent link]({parent_url}parent-details)")),
+        "{plain}"
+    );
     let framed = render_page_dump_with_options_async(
         &mut page,
         DumpFormat::Markdown,
@@ -659,7 +662,7 @@ async fn markdown_with_frames_preserves_document_positions_nested_and_cross_orig
     )
     .await?;
     assert!(
-        framed.contains("[Parent link](./parent-details)"),
+        framed.contains(&format!("[Parent link]({parent_url}parent-details)")),
         "{framed}"
     );
     let positions = [
@@ -669,7 +672,6 @@ async fn markdown_with_frames_preserves_document_positions_nested_and_cross_orig
         "Between",
         "Cross origin body",
         "After",
-        "Embedded content",
     ]
     .map(|text| {
         framed
@@ -692,6 +694,8 @@ async fn markdown_with_frames_preserves_document_positions_nested_and_cross_orig
         framed.contains(&format!("![Foreign image]({}assets/cover.png)", cross_url)),
         "{framed}"
     );
+    assert!(!framed.contains("Embedded content"), "{framed}");
+    assert!(!framed.contains("Hidden child"), "{framed}");
     server.abort();
     other_server.abort();
     Ok(())
@@ -756,8 +760,14 @@ async fn iframe_media_urls_use_their_own_document_base() -> Result<()> {
         "{rendered}"
     );
     for output in [&plain, &rendered] {
-        assert!(output.contains("![Video poster](parent.jpg)"), "{output}");
-        assert!(output.contains("[Video](parent.mp4)"), "{output}");
+        assert!(
+            output.contains("![Video poster](https://parent.example/page/parent.jpg)"),
+            "{output}"
+        );
+        assert!(
+            output.contains("[Video](https://parent.example/page/parent.mp4)"),
+            "{output}"
+        );
     }
     Ok(())
 }

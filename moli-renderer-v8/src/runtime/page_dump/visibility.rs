@@ -25,6 +25,7 @@ pub(super) struct ExportStyle {
 /// its tab or section is closed. Other non-rendered UI is not document text.
 pub(super) struct MarkdownDom<'a> {
     dom: &'a NativeDom,
+    frame_roots: HashMap<NativeNodeId, NativeNodeId>,
     suppressed: HashSet<NativeNodeId>,
     invisible: HashSet<NativeNodeId>,
     blocks: HashSet<NativeNodeId>,
@@ -48,46 +49,66 @@ impl<'a> MarkdownDom<'a> {
     pub(super) fn new(
         dom: &'a NativeDom,
         styles: impl IntoIterator<Item = (NativeNodeId, ExportStyle)>,
-        base_url: Option<&Url>,
+        document_bases: HashMap<NativeNodeId, Url>,
+        frame_roots: HashMap<NativeNodeId, NativeNodeId>,
     ) -> Self {
         // The caller supplies element styles in DOM pre-order. Inherited state
         // below is computed once, after the parent has been visited.
         let styles: Vec<_> = styles.into_iter().collect();
-        let document_element = dom.document_element_node_id();
-        let body = dom.body_node_id();
-        let document_visibility_is_hidden = styles.iter().any(|(node, values)| {
-            (Some(*node) == document_element || Some(*node) == body)
-                && matches!(values.visibility.as_str(), "hidden" | "collapse")
-        });
+        let owner_document = |node_id: NativeNodeId| {
+            dom.node(node_id).and_then(|node| {
+                if node.is_document() {
+                    Some(node_id)
+                } else {
+                    node.owner_document()
+                }
+            })
+        };
+        let documents: HashSet<_> = styles
+            .iter()
+            .filter_map(|(node, _)| owner_document(*node))
+            .collect();
+        let mut document_roots = HashSet::new();
+        for document in &documents {
+            document_roots.extend(dom.document_element_handle_for_document(*document));
+            document_roots.extend(dom.document_body_handle_for_document(*document));
+        }
+        let hidden_documents: HashSet<_> = styles
+            .iter()
+            .filter_map(|(node, values)| {
+                (document_roots.contains(node)
+                    && matches!(values.visibility.as_str(), "hidden" | "collapse"))
+                .then(|| owner_document(*node))
+                .flatten()
+            })
+            .collect();
         let fragment_links = styles.iter().any(|(node, _)| {
             Dom::attribute(dom, *node, "href").is_some_and(|href| {
                 href.strip_prefix('#')
                     .is_some_and(|fragment| !fragment.is_empty())
             })
         });
-        let mut disclosures = HashSet::new();
+        let mut disclosure_roots = HashSet::new();
         let mut targets = HashMap::new();
         for (node, _) in &styles {
-            if let Some(id) = Dom::attribute(dom, *node, "id") {
-                targets.entry(id).or_insert(*node);
+            if let (Some(document), Some(id)) =
+                (owner_document(*node), Dom::attribute(dom, *node, "id"))
+            {
+                targets.entry((document, id)).or_insert(*node);
             }
         }
         for (node, _) in &styles {
             if (Dom::attribute(dom, *node, "aria-expanded").is_some()
                 || Dom::attribute(dom, *node, "role").is_some_and(|role| has_role(role, "tab")))
+                && let Some(document) = owner_document(*node)
                 && let Some(controlled) = Dom::attribute(dom, *node, "aria-controls")
             {
-                disclosures.extend(
-                    controlled
-                        .split_ascii_whitespace()
-                        .filter(|id| target_is_disclosure(dom, &targets, id)),
-                );
+                disclosure_roots.extend(controlled.split_ascii_whitespace().filter_map(|id| {
+                    let target = targets.get(&(document, id)).copied()?;
+                    target_is_disclosure(dom, target).then_some(target)
+                }));
             }
         }
-        let mut disclosure_roots: HashSet<_> = disclosures
-            .iter()
-            .filter_map(|id| targets.get(id).copied())
-            .collect();
         disclosure_roots.extend(styles.iter().filter_map(|(node, _)| {
             let panel =
                 Dom::attribute(dom, *node, "role").is_some_and(|role| has_role(role, "tabpanel"));
@@ -185,7 +206,8 @@ impl<'a> MarkdownDom<'a> {
             if disclosure_path {
                 invisible.insert(node);
             }
-            let document_root = Some(node) == document_element || Some(node) == body;
+            let document = owner_document(node);
+            let document_root = document_roots.contains(&node);
             let parent_visibility = dom
                 .parent_node(node)
                 .and_then(|parent| visibility_modes.get(&parent).copied())
@@ -194,7 +216,7 @@ impl<'a> MarkdownDom<'a> {
             let visibility_mode = if in_source {
                 VisibilityMode::Normal
             } else if document_root
-                && document_visibility_is_hidden
+                && document.is_some_and(|document| hidden_documents.contains(&document))
                 && matches!(computed_visibility, "hidden" | "collapse")
             {
                 VisibilityMode::RootVeil
@@ -278,7 +300,7 @@ impl<'a> MarkdownDom<'a> {
                     subscripts.insert(node);
                 }
             }
-            if let Some(base_url) = base_url {
+            if let Some(base_url) = document.and_then(|document| document_bases.get(&document)) {
                 let tag = match Dom::node_kind(dom, node) {
                     NodeKind::Element(tag) => tag,
                     _ => "",
@@ -327,6 +349,7 @@ impl<'a> MarkdownDom<'a> {
         }
         Self {
             dom,
+            frame_roots,
             suppressed,
             invisible,
             blocks,
@@ -378,18 +401,16 @@ fn content_context(dom: &NativeDom, mut node: NativeNodeId) -> bool {
     }
 }
 
-fn target_is_disclosure(dom: &NativeDom, targets: &HashMap<&str, NativeNodeId>, id: &str) -> bool {
-    targets.get(id).is_some_and(|&target| {
-        content_context(dom, target)
-            && (matches!(
-                Dom::node_kind(dom, target),
-                NodeKind::Element("section" | "article" | "details")
-            ) || Dom::attribute(dom, target, "role").is_some_and(|role| {
-                ["tabpanel", "region"]
-                    .iter()
-                    .any(|value| has_role(role, value))
-            }))
-    })
+fn target_is_disclosure(dom: &NativeDom, target: NativeNodeId) -> bool {
+    content_context(dom, target)
+        && (matches!(
+            Dom::node_kind(dom, target),
+            NodeKind::Element("section" | "article" | "details")
+        ) || Dom::attribute(dom, target, "role").is_some_and(|role| {
+            ["tabpanel", "region"]
+                .iter()
+                .any(|value| has_role(role, value))
+        }))
 }
 
 fn has_role(value: &str, expected: &str) -> bool {
@@ -460,10 +481,18 @@ impl Dom for MarkdownDom<'_> {
         if self.subscripts.contains(&node) {
             return NodeKind::Element("sub");
         }
+        if self.frame_roots.contains_key(&node)
+            && matches!(kind, NodeKind::Element("iframe" | "frame"))
+        {
+            return NodeKind::Element("div");
+        }
         kind
     }
 
     fn first_child(&self, node: Self::NodeId) -> Option<Self::NodeId> {
+        if let Some(root) = self.frame_roots.get(&node).copied() {
+            return self.next_retained(Some(root));
+        }
         self.next_retained(self.dom.first_child(node))
     }
 
