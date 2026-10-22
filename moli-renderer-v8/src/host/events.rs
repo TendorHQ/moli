@@ -1269,6 +1269,32 @@ pub(crate) fn dispatch_public_event_with_original_target<'s, 'i>(
     propagation_path: &[EventTargetHandle],
     event: v8::Local<'s, v8::Object>,
 ) -> std::result::Result<PublicEventDispatchResult, String> {
+    let result = dispatch_public_event_with_original_target_impl(
+        registry,
+        scope,
+        host_ptr,
+        dispatch_target,
+        original_target,
+        propagation_path,
+        event,
+    );
+    // InputEvent's live ranges end with Node dispatch, including error exits.
+    // Direct Window and ordinary EventTarget dispatch retain them in Chromium.
+    if matches!(dispatch_target, EventTargetHandle::Node(_)) {
+        crate::context_bootstrap::clear_input_event_target_ranges(scope, event);
+    }
+    result
+}
+
+fn dispatch_public_event_with_original_target_impl<'s, 'i>(
+    registry: &mut HostEventTargetRegistry,
+    scope: &mut v8::PinScope<'s, 'i>,
+    host_ptr: *mut JsContextHost,
+    dispatch_target: EventTargetHandle,
+    original_target: EventTargetHandle,
+    propagation_path: &[EventTargetHandle],
+    event: v8::Local<'s, v8::Object>,
+) -> std::result::Result<PublicEventDispatchResult, String> {
     unsafe { &*host_ptr }.debug_assert_not_in_structural_mutation("public event dispatch");
     let target_object = event_target_object(scope, host_ptr, dispatch_target)?;
     let event_type = normalize_public_event_record(scope, event, target_object.into())?;

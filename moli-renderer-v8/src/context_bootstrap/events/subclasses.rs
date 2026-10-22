@@ -31,4 +31,5 @@ pub(crate) use error::construct_original_error_event;
 pub(in crate::context_bootstrap) use keyboard::keyboard_event_init_callback;
 pub(crate) use security_policy::initialize_native_security_policy_violation_event;
 
+pub(crate) use input::clear_input_event_target_ranges;
 pub(in crate::context_bootstrap) use input::input_event_get_target_ranges_callback;

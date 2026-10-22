@@ -7,6 +7,21 @@ use webidl::WebIdlDictionarySerialize;
 
 const INPUT_EVENT_TARGET_RANGES_SLOT: &str = "__moliInputEventTargetRanges";
 
+pub(crate) fn clear_input_event_target_ranges<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    event: v8::Local<'s, v8::Object>,
+) {
+    let event = event_backing(scope, event);
+    if web_api_interfaces::InputEvent::is_instance(scope, event) {
+        crate::util::set_private_value(
+            scope,
+            event,
+            INPUT_EVENT_TARGET_RANGES_SLOT,
+            v8::undefined(scope).into(),
+        );
+    }
+}
+
 #[derive(webidl::WebIdlDictionary)]
 #[webidl(prefix = "InputEventInit", snapshot)]
 pub(super) struct InputEventInit<'s> {

@@ -1,6 +1,46 @@
 use super::*;
 
 #[test]
+fn input_event_node_dispatch_releases_ranges_after_all_listeners() {
+    let mut vm = new_storage_html_test_vm("https://input-range-dispatch.test/");
+    assert_eq!(
+        vm.eval(include_str!(
+            "../../../../tests/fixtures/input-range-dispatch.js"
+        ))
+        .unwrap(),
+        "true"
+    );
+}
+
+#[test]
+fn retained_input_event_does_not_root_live_ranges_after_node_dispatch() {
+    let mut vm = new_storage_html_test_vm("https://input-range-gc.test/");
+    assert!(vm._context_host.borrow_mut().live_ranges_is_empty());
+    vm.eval(
+        r#"
+      const text=document.createTextNode('abc');document.body.append(text);
+      globalThis.retainedInputRangeEvent=new InputEvent('beforeinput',{targetRanges:[
+        new StaticRange({startContainer:text,startOffset:0,endContainer:text,endOffset:2})
+      ]});
+      globalThis.retainedInputRangeSnapshots=retainedInputRangeEvent.getTargetRanges();
+    "#,
+    )
+    .unwrap();
+    assert!(!vm._context_host.borrow_mut().live_ranges_is_empty());
+    vm.eval("document.body.dispatchEvent(retainedInputRangeEvent)")
+        .unwrap();
+    for _ in 0..2 {
+        vm.renderer_document_isolate
+            .with_renderer_document_isolate_mut(|isolate| isolate.low_memory_notification());
+    }
+    assert!(
+        vm._context_host.borrow_mut().live_ranges_is_empty(),
+        "retaining the event and static snapshots must not retain its internal live Range"
+    );
+    assert_eq!(vm.eval("retainedInputRangeEvent instanceof InputEvent && retainedInputRangeEvent.getTargetRanges().length===0 && retainedInputRangeSnapshots[0].endOffset===2").unwrap(), "true");
+}
+
+#[test]
 fn input_event_live_ranges_validate_and_normalize_native_boundaries() {
     let mut vm = new_storage_html_test_vm("https://input-range-boundaries.test/");
     assert_eq!(
