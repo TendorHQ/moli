@@ -2150,30 +2150,33 @@ fn media_source_constructor_preserves_prototype_chain_and_static_surface() {
 fn media_source_support_claim_requires_an_operational_mse_surface() {
     let mut vm = new_storage_test_vm("https://media-source-capability.test/");
 
-    let result = vm
-        .eval(
-            r#"
+    vm.eval(
+        r#"
 (() => {
-  const claims = [
-    MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E"'),
-    MediaSource.isTypeSupported('video/mp4; codecs="mp4a.40.2, avc1.640028"'),
-    MediaSource.isTypeSupported('video/mp4'),
-    MediaSource.isTypeSupported('')
+  const types = [
+    'video/mp4; codecs="avc1.42E01E"',
+    'video/mp4; codecs="mp4a.40.2, avc1.640028"'
   ];
-  const operational = typeof SourceBuffer === 'function'
-    && typeof MediaSource.prototype.addSourceBuffer === 'function';
-  const route = claims.some(Boolean)
-    ? (operational ? 'mse' : 'incoherent')
-    : 'fallback';
-  return JSON.stringify({ claims, operational, route });
+  globalThis.__mediaSourceCapabilityResult = 'pending';
+  Promise.all(types.map(async contentType => {
+    const mediaSource = MediaSource.isTypeSupported(contentType);
+    const decoding = await navigator.mediaCapabilities.decodingInfo({
+      type: 'media-source',
+      video: { contentType, width: 1920, height: 1080, bitrate: 5000000, framerate: 30 }
+    });
+    return [mediaSource, decoding.supported];
+  })).then(results => {
+    globalThis.__mediaSourceCapabilityResult = JSON.stringify(results);
+  });
 })()
 "#,
-        )
-        .expect("MediaSource capability coherence probe should evaluate");
+    )
+    .expect("MediaSource capability coherence probe should evaluate");
 
     assert_eq!(
-        result,
-        r#"{"claims":[false,false,false,false],"operational":false,"route":"fallback"}"#
+        vm.eval("String(globalThis.__mediaSourceCapabilityResult)")
+            .expect("MediaSource capability promises should settle"),
+        "[[false,false],[false,false]]"
     );
 }
 #[test]

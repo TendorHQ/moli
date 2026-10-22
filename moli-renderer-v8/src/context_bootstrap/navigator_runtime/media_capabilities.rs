@@ -519,6 +519,13 @@ fn configuration_supported(
     configuration: &MediaConfiguration,
     configuration_type: MediaConfigurationType,
 ) -> bool {
+    if matches!(
+        configuration_type,
+        MediaConfigurationType::Decoding(MediaDecodingType::MediaSource)
+    ) && !moli_web_mime::media_source_available()
+    {
+        return false;
+    }
     // File MIME support does not provide an RTP codec backend.
     if configuration_type.is_webrtc() {
         return false;
