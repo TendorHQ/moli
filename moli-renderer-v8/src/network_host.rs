@@ -18,6 +18,7 @@ mod request;
 mod request_scope;
 mod response;
 mod stylesheet_subresource;
+mod subresource;
 mod text_track;
 mod url_helpers;
 mod xhr;

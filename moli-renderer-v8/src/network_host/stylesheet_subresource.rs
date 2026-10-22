@@ -1,3 +1,4 @@
+use super::subresource::{PreparedSubresourceFetch, SubresourceFetchOptions};
 use super::*;
 use crate::{
     css_resource_urls::{
@@ -6,18 +7,7 @@ use crate::{
     },
     frame_owner_model::StylesheetSubresourceLoadDelayBinding,
     native_bridge::{JsContextHost, OwnerDispatchScope},
-    service_worker_runtime::{
-        ServiceWorkerFetchDispatch, ServiceWorkerRequestDestination,
-        service_worker_fetch_request_metadata,
-    },
-    types::{
-        AsyncSubresourceFetchCompletion, AsyncSubresourceNetworkContext,
-        PendingSubresourceFetchInfo, SubresourceRequestInitiatorType, SubresourceResourceType,
-    },
-};
-use moli_fetch::{
-    BrowserRequestMetadata, FetchCancelHandle, RequestCredentialsMode, RequestMode,
-    RequestRedirectMode, RequestResourceType,
+    types::SubresourceRequestInitiatorType,
 };
 
 #[derive(Debug)]
@@ -50,12 +40,6 @@ pub(crate) fn start_stylesheet_subresource_fetch(
     let environment = host
         .subresource_request_environment(&resource_loader, owner)
         .ok_or_else(|| "stylesheet Document request environment is unavailable".to_owned())?;
-    let crate::network::context::SubresourceRequestEnvironment {
-        document_url,
-        request_origin,
-        frame_id,
-        ..
-    } = environment;
     let resource_kind = resource.kind();
     if css_image.is_some() && resource_kind != StylesheetLoadBlockingResourceKind::Image {
         return Err("a stylesheet CSS image identity was bound to a non-image resource".to_owned());
@@ -72,31 +56,11 @@ pub(crate) fn start_stylesheet_subresource_fetch(
         }
     }
     let (request_url, web_font) = resource.into_parts();
-    let (
-        resource_type,
-        request_resource_type,
-        metadata,
-        destination,
-        request_mode,
-        credentials_mode,
-    ) = match resource_kind {
-        StylesheetLoadBlockingResourceKind::Image => (
-            SubresourceResourceType::Image,
-            RequestResourceType::Image,
-            BrowserRequestMetadata::Image,
-            ServiceWorkerRequestDestination::Image,
-            RequestMode::NoCors,
-            RequestCredentialsMode::Include,
-        ),
-        StylesheetLoadBlockingResourceKind::Font => (
-            SubresourceResourceType::Font,
-            RequestResourceType::Font,
-            BrowserRequestMetadata::Font,
-            ServiceWorkerRequestDestination::Font,
-            RequestMode::Cors,
-            RequestCredentialsMode::SameOrigin,
-        ),
+    let options = match resource_kind {
+        StylesheetLoadBlockingResourceKind::Image => SubresourceFetchOptions::CSS_IMAGE,
+        StylesheetLoadBlockingResourceKind::Font => SubresourceFetchOptions::FONT,
     };
+    let resource_type = options.resource_type;
 
     if let Some(response) = local_url_response(&request_url) {
         let mut response: crate::protocol_types::NavigationResponse = response.into();
@@ -143,8 +107,8 @@ pub(crate) fn start_stylesheet_subresource_fetch(
         let result = Ok(response);
         if let Some(encoded) = encoded {
             host.record_get_subresource_network_result_with_body_and_initiator(
-                frame_id,
-                document_url,
+                environment.frame_id,
+                environment.document_url,
                 request_url,
                 resource_type,
                 SubresourceRequestInitiatorType::Css,
@@ -153,8 +117,8 @@ pub(crate) fn start_stylesheet_subresource_fetch(
             );
         } else {
             host.record_get_subresource_network_result_with_initiator(
-                frame_id,
-                document_url,
+                environment.frame_id,
+                environment.document_url,
                 request_url,
                 resource_type,
                 SubresourceRequestInitiatorType::Css,
@@ -165,141 +129,45 @@ pub(crate) fn start_stylesheet_subresource_fetch(
         return Ok(terminal);
     }
 
-    let loader = resource_loader.request_client().clone();
-    if !loader.optional_resource_fetch_enabled(resource_type) {
+    if !resource_loader
+        .request_client()
+        .optional_resource_fetch_enabled(resource_type)
+    {
         if let Some(identity) = css_image.as_ref() {
             let _ = host.fail_stylesheet_css_image(identity);
         }
         host.settle_stylesheet_subresource_load_delay(binding);
         return Ok(synchronous_failure_terminal(is_web_font, web_font));
     }
-    let network_partition_key = active_subresource_network_partition_key(host, owner);
-    let policy_context = effective_subresource_policy_context(scope, host, owner);
-    let request_cookie_report = observe_subresource_request_cookie_report(
-        &loader,
-        &document_url,
-        &request_origin,
-        &request_url,
-        "GET",
-        credentials_mode,
-    );
-    let request = Request::new("GET", request_url.as_str(), None, Vec::new())
-        .map_err(|error| error.to_string())?
-        .with_initiator_url(&document_url)
-        .with_request_origin(request_origin.clone())
-        .with_resource_type(request_resource_type)
-        .with_page_network_policy()
-        .with_request_mode(request_mode)
-        .with_credentials_mode(credentials_mode)
-        .with_network_partition_key(network_partition_key.clone())
-        .with_redirect_mode(RequestRedirectMode::Follow)
-        .with_browser_request_metadata(metadata)
-        .with_subframe_context(frame_id.is_some());
-    let cancel_handle = FetchCancelHandle::new();
+    let prepared = PreparedSubresourceFetch::prepare(
+        scope,
+        host,
+        owner,
+        &resource_loader,
+        environment,
+        request_url,
+        options,
+    )?;
     let Some(internal_id) = host.record_async_stylesheet_subresource_fetch(
         v8::Global::new(scope, scope.get_current_context()),
         binding,
         owner,
-        cancel_handle.clone(),
-        credentials_mode,
-        request_mode,
-        network_partition_key,
-        policy_context,
+        prepared.cancel_handle.clone(),
+        options.credentials_mode,
+        options.request_mode,
+        prepared.network_partition_key.clone(),
+        prepared.network_context.policy_context,
         web_font,
         css_image,
-        PendingSubresourceFetchInfo {
-            internal_id: 0,
-            network_request_handle: None,
-            frame_id: frame_id.clone(),
-            document_url: document_url.clone(),
-            url: request_url.clone(),
-            websocket_socket_id: None,
-            method: "GET".to_owned(),
-            request_headers: Default::default(),
-            request_body: None,
-            request_body_bytes: None,
-            resource_type,
-            request_cookie_report: request_cookie_report.clone(),
-        },
+        prepared.pending_info.clone(),
     ) else {
         return Err("stylesheet subresource owner changed before request binding".to_owned());
     };
 
-    let client_id = host.service_worker_client_id_for_subresource_owner(owner);
-    if matches!(request_url.scheme(), "http" | "https")
-        && host
-            .service_worker_controller_for_fetch(client_id, &document_url, &request_url)
-            .is_some()
-    {
-        let dispatch = ServiceWorkerFetchDispatch {
-            internal_id,
-            request: host.service_worker_fetch_request(
-                client_id,
-                request_url.clone(),
-                "GET".to_owned(),
-                Vec::new(),
-                None,
-                destination,
-                request_mode,
-                credentials_mode,
-                RequestRedirectMode::Follow,
-                request.priority_hints.fetch_priority,
-                service_worker_fetch_request_metadata(&request),
-            ),
-            cors_preflight_request_headers: Vec::new(),
-            request_cookie_report,
-            network_context: AsyncSubresourceNetworkContext {
-                frame_id,
-                request_origin: request_origin.clone(),
-                document_url,
-                resource_type,
-                policy_context,
-            },
-            completion_tx: host.resource_completion_sender(),
-            request_client: loader,
-            resource_task_runner: resource_loader.task_runner(),
-            cancel_handle,
-            direct_completion_tx: None,
-        };
-        if !host.dispatch_service_worker_fetch(dispatch) {
-            let _ = host.resource_completion_sender().send_async_subresource(
-                AsyncSubresourceFetchCompletion {
-                    internal_id,
-                    request_url,
-                    request_method: "GET".to_owned(),
-                    request_headers: Default::default(),
-                    request_body: None,
-                    response_status_text: None,
-                    skip_fetch_security_validation: false,
-                    response_filter: None,
-                    network_error_text: None,
-                    result: Err("service worker stylesheet subresource dispatch failed".to_owned())
-                        .into(),
-                },
-            );
-        }
-        return Ok(StylesheetSubresourceFetchStart::Pending);
-    }
-
-    spawn_async_subresource_fetch(
-        resource_loader.task_runner(),
-        host.resource_completion_sender(),
-        loader,
-        request,
-        Some(cancel_handle),
-        Vec::new(),
+    prepared.dispatch(
+        host,
         internal_id,
-        AsyncSubresourceNetworkContext {
-            frame_id,
-            request_origin: request_origin.clone(),
-            document_url,
-            resource_type,
-            policy_context,
-        },
-        request_url,
-        "GET".to_owned(),
-        Default::default(),
-        None,
+        "service worker stylesheet subresource dispatch failed",
     );
     Ok(StylesheetSubresourceFetchStart::Pending)
 }
