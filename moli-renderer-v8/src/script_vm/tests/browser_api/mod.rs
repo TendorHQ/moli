@@ -60,6 +60,7 @@ mod structured_clone;
 mod transferable_streams;
 mod traversal;
 mod traversal_coordinator;
+mod traversal_receivers;
 mod trusted_types;
 mod value_events;
 mod web_audio;
