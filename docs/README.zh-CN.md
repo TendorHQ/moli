@@ -231,8 +231,6 @@ Moli 是一个独立的浏览器内核，而不是对 Chromium 的封装。它�
 
 ## 评测
 
-不同评测回答不同问题。网页转 Markdown 看内容保真度，自动化任务看接口与行为兼容性，资源测试看完成特定工作所需的开销；这些分数不合并成一个浏览器排名。
-
 | 评测方式 | 评测集 | 指标 |
 | --- | --- | --- |
 | Web Fetch 任务 | [LexBench WebFetch](https://github.com/lexmount/lexbench-webfetch) · 七类场景，共 430 道任务 | 题目要求是否满足 |
@@ -240,6 +238,9 @@ Moli 是一个独立的浏览器内核，而不是对 Chromium 的封装。它�
 | 浏览器自动化 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · 1,308 项浏览器操作与 Web 测试 | 操作与功能测试通过率 |
 | CPU 与内存开销 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · 557 项 CDP/Web 任务中四个本地浏览器共同完成的部分 | CPU 时间、内存峰值 |
 | 标准与回归测试 | 选定的 [WPT](https://github.com/web-platform-tests/wpt) 测试与 [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) 回归测试 | 测试通过项数、功能回退 |
+
+
+下面的实测数据展示了 Moli 目前的能力区间。测试覆盖真实网站、自动化客户端、Chromium/WPT 行为验证，以及大规模的 nextest 回归测试套件。
 
 ### 网页内容提取
 
@@ -263,20 +264,6 @@ Moli 是一个独立的浏览器内核，而不是对 Chromium 的封装。它�
 [完整报告、任务要求及失败证据](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo).
 
 </details>
-
-### WebMainBench：545 页快照的内容提取
-
-下表是 Moli 内容修复开发构建的历史测量，不是已发布版本的成绩。五种方法处理相同的 545 份 HTML 快照，与人工整理的正文参考比较。该构建在全部页面中提取到正文，综合相似度（五项均值）为 39.27%，代码相似度为 91.06%，两项均为五种方法中最高。
-
-| 方法 | 生成正文 | 综合 | 全文 | 代码 | 公式 | 表格内容 | 表格结构 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Moli | 545/545 | **39.27%** | 40.73% | **91.06%** | 28.20% | 22.62% | 13.75% |
-| Lightpanda 0.4.1 | 545/545 | 35.00% | 41.52% | 84.71% | 12.97% | 21.81% | **14.00%** |
-| Obscura 0.2.2 | 543/545 | 31.03% | **41.88%** | 81.82% | **31.39%** | 0.03% | 0.00% |
-| Chrome for Testing 154.0.8037.57 | 545/545 | 27.02% | 39.40% | 35.86% | 21.12% | **25.01%** | 13.73% |
-| Kitesurf（托管服务） | 524/545 | 33.43% | 36.99% | 80.70% | 19.32% | 18.25% | 11.87% |
-
-[用 browser-eval 复现](https://github.com/lexmount/browser-eval)。Moli 实测提交：[`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe)。 [固定测量配置](https://github.com/lexmount/browser-eval/blob/345ea09370a633e871670fde2de4ec25b53a4d05/evaluation/webmainbench-full/moli-content-fixed-report.json).
 
 ### 智能体工作负载样例
 
@@ -308,6 +295,21 @@ Moli 是一个独立的浏览器内核，而不是对 Chromium 的封装。它�
 </picture>
 
 Kitesurf 是远程服务，无法测量 CPU、内存和进程数，因此资源对比只覆盖四个本地引擎。在另一轮 557 道任务的测试中，只统计四个引擎都完成的工作。Moli 单题 CPU 中位数为 **100.6 ms**，内存峰值中位数为 **92 MiB**；Chrome 分别为 **687 ms** 和 **697 MiB**。Moli 的 CPU 时间约为 Chrome 的 15%，内存峰值约为 13%。测试方法和完整数据见 benchmark 的[资源报告](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md)。
+
+### WebMainBench：545 页快照的内容提取
+
+下表是 Moli 内容修复开发构建的历史测量，不是已发布版本的成绩。五种方法处理相同的 545 份 HTML 快照，与人工整理的正文参考比较。该构建在全部页面中提取到正文，综合相似度（五项均值）为 39.27%，代码相似度为 91.06%，两项均为五种方法中最高。
+
+| 方法 | 生成正文 | 综合 | 全文 | 代码 | 公式 | 表格内容 | 表格结构 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Moli | 545/545 | **39.27%** | 40.73% | **91.06%** | 28.20% | 22.62% | 13.75% |
+| Lightpanda 0.4.1 | 545/545 | 35.00% | 41.52% | 84.71% | 12.97% | 21.81% | **14.00%** |
+| Obscura 0.2.2 | 543/545 | 31.03% | **41.88%** | 81.82% | **31.39%** | 0.03% | 0.00% |
+| Chrome for Testing 154.0.8037.57 | 545/545 | 27.02% | 39.40% | 35.86% | 21.12% | **25.01%** | 13.73% |
+| Kitesurf（托管服务） | 524/545 | 33.43% | 36.99% | 80.70% | 19.32% | 18.25% | 11.87% |
+
+[用 browser-eval 复现](https://github.com/lexmount/browser-eval)。Moli 实测提交：[`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe)。 [固定测量配置](https://github.com/lexmount/browser-eval/blob/345ea09370a633e871670fde2de4ec25b53a4d05/evaluation/webmainbench-full/moli-content-fixed-report.json).
+
 
 ## 项目范围
 
