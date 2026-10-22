@@ -30,6 +30,22 @@ fn event_subclass_constructor_callback<'s>(
         return;
     }
 
+    if matches!(
+        kind,
+        EventSubclassKind::PromiseRejectionEvent | EventSubclassKind::FormDataEvent
+    ) && args.length() < 2
+    {
+        throw_type_error(
+            scope,
+            &format!(
+                "Failed to construct '{}': 2 arguments required, but only {} present.",
+                kind.constructor_name(),
+                args.length()
+            ),
+        );
+        return;
+    }
+
     let wrapper = args.this();
     let Some(event_type) = event_type_argument(scope, &args, kind.constructor_name()) else {
         return;
@@ -78,6 +94,20 @@ fn event_subclass_constructor_callback<'s>(
             | EventSubclassKind::CapturedMouseEvent
     ) {
         let Some(init) = input::InteractionEventInit::parse(scope, &args, kind) else {
+            return;
+        };
+        Some(init)
+    } else {
+        None
+    };
+    let payload_event_init = if matches!(
+        kind,
+        EventSubclassKind::PromiseRejectionEvent
+            | EventSubclassKind::FormDataEvent
+            | EventSubclassKind::SubmitEvent
+            | EventSubclassKind::TrackEvent
+    ) {
+        let Some(init) = payload::PayloadEventInit::parse(scope, &args, kind) else {
             return;
         };
         Some(init)
@@ -185,6 +215,7 @@ fn event_subclass_constructor_callback<'s>(
         .or_else(|| font_face_init.as_ref().map(crate::context_bootstrap::css_fontface_runtime::FontFaceSetLoadEventInit::event_flags))
         .or_else(|| value_event_init.as_ref().map(values::ValueEventInit::event_flags))
         .or_else(|| interaction_event_init.as_ref().map(input::InteractionEventInit::event_flags))
+        .or_else(|| payload_event_init.as_ref().map(payload::PayloadEventInit::event_flags))
         .or_else(|| read_event_init(scope, &args))
     else {
         return;
@@ -260,14 +291,17 @@ fn event_subclass_constructor_callback<'s>(
         EventSubclassKind::ErrorEvent => error_init
             .expect("ErrorEvent init is parsed")
             .initialize(scope, event),
-        EventSubclassKind::PromiseRejectionEvent => {
-            if !data::initialize_promise_rejection_event(scope, event, init) {
-                return;
-            }
-        }
         EventSubclassKind::SecurityPolicyViolationEvent => {
             security_policy_init
                 .expect("SecurityPolicyViolationEvent init is parsed")
+                .initialize(scope, event);
+        }
+        EventSubclassKind::PromiseRejectionEvent
+        | EventSubclassKind::FormDataEvent
+        | EventSubclassKind::SubmitEvent
+        | EventSubclassKind::TrackEvent => {
+            payload_event_init
+                .expect("payload event init is parsed")
                 .initialize(scope, event);
         }
         EventSubclassKind::NavigationCurrentEntryChangeEvent => {
@@ -280,17 +314,6 @@ fn event_subclass_constructor_callback<'s>(
                 return;
             }
         }
-        EventSubclassKind::SubmitEvent => {
-            if !data::initialize_submit_event(scope, event, init) {
-                return;
-            }
-        }
-        EventSubclassKind::FormDataEvent => {
-            if !data::initialize_form_data_event(scope, event, init) {
-                return;
-            }
-        }
-        EventSubclassKind::TrackEvent => data::initialize_track_event(scope, event, init),
         EventSubclassKind::FontFaceSetLoadEvent => {
             font_face_init
                 .expect("font event init is parsed")
@@ -316,7 +339,12 @@ pub(in crate::context_bootstrap) fn build_event_subclass_template<'s>(
     kind: EventSubclassKind,
 ) -> v8::Local<'s, v8::FunctionTemplate> {
     let data: v8::Local<'s, v8::Value> = v8::Integer::new(scope, kind as i32).into();
-    let length = if matches!(kind, EventSubclassKind::NavigateEvent) {
+    let length = if matches!(
+        kind,
+        EventSubclassKind::NavigateEvent
+            | EventSubclassKind::PromiseRejectionEvent
+            | EventSubclassKind::FormDataEvent
+    ) {
         2
     } else {
         1

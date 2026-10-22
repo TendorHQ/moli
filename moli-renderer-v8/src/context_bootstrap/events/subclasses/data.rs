@@ -130,15 +130,6 @@ struct NavigateEventMethodsDeclaration {
     scroll: (),
 }
 
-#[derive(webidl::WebIdlDictionary)]
-#[webidl(prefix = "PromiseRejectionEventInit", snapshot)]
-struct PromiseRejectionEventInitMembers<'s> {
-    #[webidl(required)]
-    promise: v8::Local<'s, v8::Object>,
-    #[webidl(converter = "raw", snapshot_default = v8::undefined(scope).into())]
-    reason: Option<v8::Local<'s, v8::Value>>,
-}
-
 #[derive(WebApiObject)]
 #[webapi(plain, data_properties, enumerable)]
 struct NavigationCurrentEntryChangeEventInitDeclaration<'scope> {
@@ -222,36 +213,6 @@ pub(in crate::context_bootstrap::events::subclasses) fn initialize_storage_event
     parsed
         .initialize_snapshot(scope, event)
         .expect("StorageEvent state");
-}
-
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_promise_rejection_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) -> bool {
-    let parsed = match init {
-        Some(init) => {
-            match webidl::parse_dictionary_object::<PromiseRejectionEventInitMembers>(scope, init) {
-                Ok(parsed) => parsed,
-                Err(error) => {
-                    webidl::throw_error(scope, &error);
-                    return false;
-                }
-            }
-        }
-        None => {
-            let error = webidl::WebIdlError::missing_required(webidl::Context::member(
-                "PromiseRejectionEventInit",
-                "promise",
-            ));
-            webidl::throw_error(scope, &error);
-            return false;
-        }
-    };
-    parsed
-        .initialize_snapshot(scope, event)
-        .expect("PromiseRejectionEvent init declaration should initialize");
-    true
 }
 
 pub(in crate::context_bootstrap::events::subclasses) fn initialize_navigation_current_entry_change_event<
@@ -910,130 +871,6 @@ fn navigate_event_scroll_callback<'s>(
         let exception = v8::Exception::error(scope, message);
         scope.throw_exception(exception);
     }
-}
-
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_submit_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) -> bool {
-    let agent_invoked = init_bool_property(scope, init, "agentInvoked", false);
-    let Some(submitter) = submit_event_submitter(scope, init) else {
-        return false;
-    };
-    crate::context_bootstrap::set_event_private_value(
-        scope,
-        event,
-        SUBMIT_EVENT_SUBMITTER_SLOT,
-        submitter,
-    );
-    crate::context_bootstrap::set_event_private_value(
-        scope,
-        event,
-        SUBMIT_EVENT_AGENT_INVOKED_SLOT,
-        v8::Boolean::new(scope, agent_invoked).into(),
-    );
-    true
-}
-
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_form_data_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) -> bool {
-    let Some(init) = init else {
-        throw_type_error(
-            scope,
-            "Failed to construct 'FormDataEvent': FormDataEventInit.formData is required.",
-        );
-        return false;
-    };
-    let Some(form_data) = init_value_property(scope, Some(init), "formData") else {
-        throw_type_error(
-            scope,
-            "Failed to construct 'FormDataEvent': FormDataEventInit.formData is required.",
-        );
-        return false;
-    };
-    let Ok(form_data_object) = v8::Local::<v8::Object>::try_from(form_data) else {
-        throw_type_error(
-            scope,
-            "Failed to construct 'FormDataEvent': formData must be a FormData object.",
-        );
-        return false;
-    };
-    if !crate::context_bootstrap::form_data_runtime::form_data_is_object(scope, form_data_object) {
-        throw_type_error(
-            scope,
-            "Failed to construct 'FormDataEvent': formData must be a FormData object.",
-        );
-        return false;
-    }
-    crate::context_bootstrap::set_event_private_value(
-        scope,
-        event,
-        FORM_DATA_EVENT_FORM_DATA_SLOT,
-        form_data,
-    );
-    true
-}
-
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_track_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) {
-    let track = init_value_property(scope, init, "track").unwrap_or_else(|| v8::null(scope).into());
-    crate::context_bootstrap::set_event_private_value(scope, event, TRACK_EVENT_TRACK_SLOT, track);
-}
-
-fn submit_event_submitter<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) -> Option<v8::Local<'s, v8::Value>> {
-    let Some(value) = init_value_property(scope, init, "submitter") else {
-        return Some(v8::null(scope).into());
-    };
-    if value.is_null() {
-        return Some(v8::null(scope).into());
-    }
-    let Ok(object) = v8::Local::<v8::Object>::try_from(value) else {
-        throw_type_error(
-            scope,
-            "Failed to construct 'SubmitEvent': submitter must be an HTMLElement.",
-        );
-        return None;
-    };
-    if !submitter_is_html_element(scope, object) {
-        throw_type_error(
-            scope,
-            "Failed to construct 'SubmitEvent': submitter must be an HTMLElement.",
-        );
-        return None;
-    }
-    Some(value)
-}
-
-fn submitter_is_html_element(
-    scope: &mut v8::PinScope<'_, '_>,
-    object: v8::Local<'_, v8::Object>,
-) -> bool {
-    let Some(runtime_ptr) = context_host_ptr_from_global_bridge(scope) else {
-        return false;
-    };
-    let document_handle = unsafe { &*runtime_ptr }.dom_host().document_handle();
-    let Some(handle) = crate::native_bridge::node_or_foreign_arg_handle_allow_detached(
-        scope,
-        runtime_ptr,
-        Some(document_handle),
-        object.into(),
-    ) else {
-        return false;
-    };
-    unsafe { &*runtime_ptr }
-        .dom_host()
-        .node(handle)
-        .is_some_and(|node| node.is_element())
 }
 
 pub(in crate::context_bootstrap::events) fn initialize_navigate_event_methods<'s>(

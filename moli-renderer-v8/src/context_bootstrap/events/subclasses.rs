@@ -9,6 +9,7 @@ mod data;
 mod error;
 mod input;
 mod keyboard;
+mod payload;
 mod pointer;
 mod security_policy;
 mod values;

@@ -46,6 +46,7 @@ mod message_port_lifecycle;
 mod misc;
 mod navigation;
 mod notification_init;
+mod payload_event_init;
 mod performance;
 mod performance_memory;
 mod platform_identity;
