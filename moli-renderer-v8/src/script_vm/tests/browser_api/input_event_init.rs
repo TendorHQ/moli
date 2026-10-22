@@ -1,6 +1,18 @@
 use super::*;
 
 #[test]
+fn input_event_live_ranges_validate_and_normalize_native_boundaries() {
+    let mut vm = new_storage_html_test_vm("https://input-range-boundaries.test/");
+    assert_eq!(
+        vm.eval(include_str!(
+            "../../../../tests/fixtures/input-range-boundaries.js"
+        ))
+        .unwrap(),
+        "true"
+    );
+}
+
+#[test]
 fn input_and_touch_dictionaries_convert_before_native_sequences_and_range_state() {
     let mut vm = new_storage_html_test_vm("https://input-touch-dictionary.test/");
     assert_eq!(

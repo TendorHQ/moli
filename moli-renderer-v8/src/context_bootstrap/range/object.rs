@@ -58,8 +58,20 @@ pub(in crate::context_bootstrap) fn live_range_from_static_range<'s>(
         super::super::exposed_interfaces::build_intrinsic_interface_instance(scope, "Range")
             .ok()?;
     initialize_range_object(scope, range, document);
-    set_range_boundary(scope, range, RangeBoundarySide::Start, start, start_offset);
-    set_range_boundary(scope, range, RangeBoundarySide::End, end, end_offset);
+    super::super::range_surface::set_range_boundary_checked(
+        scope,
+        range,
+        RangeBoundarySide::Start,
+        start,
+        start_offset,
+    )?;
+    super::super::range_surface::set_range_boundary_checked(
+        scope,
+        range,
+        RangeBoundarySide::End,
+        end,
+        end_offset,
+    )?;
     crate::web_api_interfaces::initialize(scope, range, "Range").ok()?;
     Some(range)
 }

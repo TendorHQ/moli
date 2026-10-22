@@ -8,7 +8,7 @@ use crate::webidl;
 #[derive(webidl::WebIdlArgs)]
 #[webidl(prefix = "Range.setStart")]
 struct RangeSetStartArgs<'s> {
-    #[webidl(with = range_set_start_node_arg)]
+    #[webidl(required, interface = crate::web_api_interfaces::Node)]
     container: v8::Local<'s, v8::Object>,
     #[webidl(required)]
     offset: u32,
@@ -17,7 +17,7 @@ struct RangeSetStartArgs<'s> {
 #[derive(webidl::WebIdlArgs)]
 #[webidl(prefix = "Range.setEnd")]
 struct RangeSetEndArgs<'s> {
-    #[webidl(with = range_set_end_node_arg)]
+    #[webidl(required, interface = crate::web_api_interfaces::Node)]
     container: v8::Local<'s, v8::Object>,
     #[webidl(required)]
     offset: u32,
@@ -42,22 +42,6 @@ struct RangeSelectNodeArgs<'s> {
 struct RangeCollapseArgs {
     #[webidl(default = false)]
     to_start: bool,
-}
-
-fn range_set_start_node_arg<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    args: &v8::FunctionCallbackArguments<'s>,
-    index: i32,
-) -> Result<v8::Local<'s, v8::Object>, webidl::WebIdlError> {
-    webidl_node_arg(scope, args, index, "Range.setStart requires a Node")
-}
-
-fn range_set_end_node_arg<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    args: &v8::FunctionCallbackArguments<'s>,
-    index: i32,
-) -> Result<v8::Local<'s, v8::Object>, webidl::WebIdlError> {
-    webidl_node_arg(scope, args, index, "Range.setEnd requires a Node")
 }
 
 fn range_select_node_contents_node_arg<'s>(
@@ -89,34 +73,17 @@ pub(super) fn range_set_start_callback<'s>(
     let Some(parsed) = webidl::parse_args::<RangeSetStartArgs<'s>>(scope, &args) else {
         return;
     };
-    let container = parsed.container;
-    let offset = parsed.offset;
-    // Spec Range.setStart(node, offset):
-    //   1. If node is a doctype, throw InvalidNodeTypeError.
-    //   2. If offset > node.length, throw IndexSizeError.
-    if node_is_doctype(scope, container) {
-        throw_named_dom_exception(
-            scope,
-            "InvalidNodeTypeError",
-            "Range.setStart cannot target a DocumentType.",
-        );
-        return;
-    }
-    if !range_validate_boundary_point(scope, container, offset) {
-        throw_named_dom_exception(
-            scope,
-            "IndexSizeError",
-            "Index or size is negative or greater than the allowed amount.",
-        );
-        return;
-    }
-    range_set_boundary_and_sync_selection(
+    if set_range_boundary_checked(
         scope,
         args.this(),
         RangeBoundarySide::Start,
-        container,
-        offset,
-    );
+        parsed.container,
+        parsed.offset,
+    )
+    .is_none()
+    {
+        return;
+    }
     rv.set_undefined();
 }
 
@@ -128,32 +95,51 @@ pub(super) fn range_set_end_callback<'s>(
     let Some(parsed) = webidl::parse_args::<RangeSetEndArgs<'s>>(scope, &args) else {
         return;
     };
-    let container = parsed.container;
-    let offset = parsed.offset;
-    if node_is_doctype(scope, container) {
+    if set_range_boundary_checked(
+        scope,
+        args.this(),
+        RangeBoundarySide::End,
+        parsed.container,
+        parsed.offset,
+    )
+    .is_none()
+    {
+        return;
+    }
+    rv.set_undefined();
+}
+
+// Shared by public setters and native StaticRange-to-Range conversion. Inspect
+// native nodes, not author-overridable nodeType/length/parentNode properties.
+pub(in crate::context_bootstrap) fn set_range_boundary_checked<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    range: v8::Local<'s, v8::Object>,
+    side: RangeBoundarySide,
+    container: v8::Local<'s, v8::Object>,
+    offset: u32,
+) -> Option<()> {
+    let point = native_boundary_point_from_node(scope, container, offset);
+    if point.is_some_and(|point| native_boundary_point_is_doctype(scope, point)) {
         throw_named_dom_exception(
             scope,
             "InvalidNodeTypeError",
-            "Range.setEnd cannot target a DocumentType.",
+            match side {
+                RangeBoundarySide::Start => "Range.setStart cannot target a DocumentType.",
+                RangeBoundarySide::End => "Range.setEnd cannot target a DocumentType.",
+            },
         );
-        return;
+        return None;
     }
-    if !range_validate_boundary_point(scope, container, offset) {
+    if !point.is_some_and(|point| native_boundary_point_is_valid(scope, point)) {
         throw_named_dom_exception(
             scope,
             "IndexSizeError",
             "Index or size is negative or greater than the allowed amount.",
         );
-        return;
+        return None;
     }
-    range_set_boundary_and_sync_selection(
-        scope,
-        args.this(),
-        RangeBoundarySide::End,
-        container,
-        offset,
-    );
-    rv.set_undefined();
+    range_set_boundary_and_sync_selection(scope, range, side, container, offset);
+    Some(())
 }
 
 pub(super) fn range_select_node_contents_callback<'s>(
@@ -387,18 +373,14 @@ fn range_set_boundary_and_sync_selection<'s>(
         RangeBoundarySide::Start => RangeBoundarySide::End,
         RangeBoundarySide::End => RangeBoundarySide::Start,
     };
-    let Some(other_container) = range_boundary_container_object(scope, range, other_side) else {
-        return;
-    };
-    let other_offset = range_boundary_offset(scope, range, other_side) as u32;
-    let order = match side {
-        RangeBoundarySide::Start => {
-            point_order(scope, container, offset, other_container, other_offset)
-        }
-        RangeBoundarySide::End => {
-            point_order(scope, other_container, other_offset, container, offset)
-        }
-    };
+    let order = native_boundary_point_from_node(scope, container, offset)
+        .zip(native_boundary_point_from_range_boundary(
+            scope, range, other_side,
+        ))
+        .and_then(|(point, other)| match side {
+            RangeBoundarySide::Start => native_boundary_point_order(scope, point, other),
+            RangeBoundarySide::End => native_boundary_point_order(scope, other, point),
+        });
     if order.is_none_or(|order| order == std::cmp::Ordering::Greater) {
         set_range_boundary(scope, range, other_side, container, offset);
     }
