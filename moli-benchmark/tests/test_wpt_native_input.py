@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from moli_benchmark.raw_cdp import RawCdpConnectionClosed
+from moli_benchmark.wpt_cross.__main__ import _case_references_testdriver
 from moli_benchmark.wpt_cross.case_set import WptCase
 from moli_benchmark.wpt_cross.native_input import NativeInput, Pointer, key_description
 
@@ -173,6 +174,17 @@ class NativeInputTests(unittest.IsolatedAsyncioTestCase):
 
 
 class NativeInputSelectionTests(unittest.TestCase):
+    def test_testdriver_detection_in_html_and_generated_variants(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "input.html").write_text('<script src="/resources/testdriver.js"></script>')
+            (root / "keys.any.js").write_text('// META: script=/resources/testdriver.js\n')
+            (root / "plain.html").write_text('<script src="/resources/testharness.js"></script>')
+            self.assertTrue(_case_references_testdriver(root, WptCase("input.html?variant")))
+            self.assertTrue(_case_references_testdriver(root, WptCase("keys.any.html?variant")))
+            self.assertFalse(_case_references_testdriver(root, WptCase("plain.html")))
+            self.assertFalse(_case_references_testdriver(root, WptCase("../input.html")))
+
     def test_special_keys_preserve_physical_location(self):
         self.assertEqual((key_description("\ue007").code, key_description("\ue007").location), ("NumpadEnter", 3))
         self.assertEqual((key_description("\ue050").code, key_description("\ue050").location), ("ShiftRight", 2))
