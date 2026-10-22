@@ -26,11 +26,18 @@ struct Range {
 }
 
 impl Range {
+    fn new(first: f32, second: f32) -> Self {
+        Self {
+            min: first.min(second),
+            max: first.max(second),
+        }
+    }
+
     fn parse(value: &str, parse: impl Fn(&str) -> Option<f32>, initial: f32) -> Self {
         let mut values = components(value).into_iter();
         let min = values.next().and_then(&parse).unwrap_or(initial);
         let max = values.next().and_then(parse).unwrap_or(min);
-        Self { min, max }
+        Self::new(min, max)
     }
 
     fn contains(self, value: f32) -> bool {
@@ -162,7 +169,7 @@ impl Selection {
         };
         Self {
             width: Range::parse(stretch, width_value, 100.0),
-            slope: Range { min, max },
+            slope: Range::new(min, max),
             weight: Range::parse(weight, weight_value, 400.0),
         }
     }

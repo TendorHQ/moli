@@ -1,6 +1,43 @@
 use super::*;
 
 #[test]
+fn font_set_queries_normalize_reversed_computed_descriptor_ranges() {
+    let mut vm = new_storage_test_vm("https://font-query-reversed.test/");
+    let url = fixture_font_url();
+    vm.eval(&format!(
+        r#"
+        const bytes=Uint8Array.from(atob('{}'),c=>c.charCodeAt(0));
+        globalThis.reversed=[];
+        for(const [property,range,single,request] of [
+          ['weight','900 100','800','700'],
+          ['stretch','125% 75%','120%','expanded'],
+          ['style','oblique 30deg 10deg','oblique 20deg','oblique 15deg'],
+          ['weight','calc(800 + 100) calc(200 - 100)','800','700'],
+          ['stretch','calc(100% + 25%) calc(50% + 25%)','120%','expanded'],
+          ['style','oblique calc(15deg + 15deg) calc(5deg + 5deg)','oblique 20deg','oblique 15deg']
+        ]) {{
+          const family='Reversed'+reversed.length;
+          const good=new FontFace(family,bytes,{{[property]:range}});
+          const bad=new FontFace(family,'url(data:font/ttf;base64,AA==)',{{[property]:single}});
+          bad.loaded.catch(()=>{{}});
+          document.fonts.add(good);document.fonts.add(bad);
+          const result=[good[property],document.fonts.check(request+' 16px '+family,'A')];
+          reversed.push(result);
+          document.fonts.load(request+' 16px '+family,'A').then(
+            faces=>result.push(faces.length,faces[0]===good,bad.status),
+            error=>result.push(error.name));
+        }}
+    "#,
+        url.split_once(',').unwrap().1
+    ))
+    .unwrap();
+    assert_eq!(
+        vm.eval("JSON.stringify(reversed)").unwrap(),
+        r#"[["900 100",true,1,true,"unloaded"],["125% 75%",true,1,true,"unloaded"],["oblique 30deg 10deg",true,1,true,"unloaded"],["calc(900) calc(100)",true,1,true,"unloaded"],["calc(125%) calc(75%)",true,1,true,"unloaded"],["oblique calc(30deg) calc(10deg)",true,1,true,"unloaded"]]"#
+    );
+}
+
+#[test]
 fn font_set_queries_resolve_css_calculations_in_requests_and_descriptors() {
     let mut vm = new_storage_test_vm("https://font-query-calculations.test/");
     let url = fixture_font_url();
