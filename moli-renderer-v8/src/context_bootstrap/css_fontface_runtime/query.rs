@@ -52,7 +52,7 @@ pub(super) fn font_face_set_matching_faces_array<'s>(
     }
     let text = text.chars().collect::<Vec<_>>();
     let mut matching = Vec::new();
-    for family in query.families {
+    for family in query.named_families {
         let family_faces = candidates
             .iter()
             .filter(|face| {
