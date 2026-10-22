@@ -211,6 +211,7 @@ fn detached_bridge_value_for_this<'s>(
     receiver: v8::Local<'s, v8::Object>,
     method: &str,
 ) -> Option<v8::Local<'s, v8::Value>> {
+    let receiver = node_backing_object(scope, receiver)?;
     get_private_value(scope, receiver, super::document::DETACHED_STATE_SLOT)?;
     call_global_bridge_method(scope, method, &[receiver.into()])
 }
@@ -219,6 +220,9 @@ pub(super) fn receiver_has_detached_state<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     receiver: v8::Local<'s, v8::Object>,
 ) -> bool {
+    let Some(receiver) = node_backing_object(scope, receiver) else {
+        return false;
+    };
     get_private_value(scope, receiver, super::document::DETACHED_STATE_SLOT).is_some()
 }
 
@@ -1212,11 +1216,27 @@ pub(crate) fn install_node_template_bindings<'s>(
     }
 }
 
+// Native factories read regular wrappers before branding is complete. Proxy
+// state comes only from a backing object admitted by the shared brand registry.
+pub(super) fn node_backing_object<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    object: v8::Local<'s, v8::Object>,
+) -> Option<v8::Local<'s, v8::Object>> {
+    if object.is_proxy() {
+        let target = moli_webapi_declare::web_api_object_target(scope, object)?;
+        web_api_interfaces::Node::is_instance(scope, target).then_some(target)
+    } else {
+        Some(object)
+    }
+}
+
 pub(crate) fn node_runtime_and_handle_from_object(
     scope: &mut v8::PinScope<'_, '_>,
     object: v8::Local<'_, v8::Object>,
 ) -> anyhow::Result<(*mut JsContextHost, DomHandle)> {
     let object = v8::Local::new(scope, object);
+    let object =
+        node_backing_object(scope, object).context("Node receiver has no native backing")?;
     if let Some(delegate) =
         crate::util::get_private_object(scope, object, super::document::DETACHED_LIVE_DELEGATE_SLOT)
     {
@@ -1248,6 +1268,9 @@ pub(crate) fn node_runtime_and_handle_from_object_or_detached<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     object: v8::Local<'s, v8::Object>,
 ) -> anyhow::Result<(*mut JsContextHost, DomHandle)> {
+    let object = v8::Local::new(scope, object);
+    let object =
+        node_backing_object(scope, object).context("Node receiver has no native backing")?;
     if let Ok(node) = node_runtime_and_handle_from_object(scope, object) {
         return Ok(node);
     }

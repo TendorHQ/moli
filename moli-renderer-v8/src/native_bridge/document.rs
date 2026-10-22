@@ -1652,8 +1652,16 @@ fn detached_method_forward<'s>(
     args: v8::FunctionCallbackArguments<'s>,
     helper_name: &str,
 ) -> Option<v8::Local<'s, v8::Value>> {
+    let backing = super::node::node_backing_object(scope, args.this())?;
+    // Detached tree relations retain the canonical wrapper's identity. A
+    // registered proxy without mirrored state uses its native backing instead.
+    let receiver = if get_private_value(scope, args.this(), DETACHED_STATE_SLOT).is_some() {
+        args.this()
+    } else {
+        backing
+    };
     let mut forwarded = Vec::with_capacity(args.length() as usize + 1);
-    forwarded.push(args.this().into());
+    forwarded.push(receiver.into());
     for index in 0..args.length() {
         forwarded.push(args.get(index));
     }
