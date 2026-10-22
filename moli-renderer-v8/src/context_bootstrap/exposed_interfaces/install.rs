@@ -212,6 +212,9 @@ pub(crate) fn capture_eager_intrinsic_interfaces<'s>(
     initialize_ecmascript_intrinsic_registry(scope, global);
     moli_webapi_declare::capture_web_api_constructor_intrinsics(scope)
         .ok_or_else(|| anyhow!("native Reflect.construct is unavailable during realm bootstrap"))?;
+    // Native constructor fallbacks compare against this realm's intrinsic
+    // Object.prototype, even after author code replaces the public Object.
+    capture_ecmascript_intrinsic(scope, global, "Object")?;
     capture_ecmascript_intrinsic(scope, global, "Error")?;
     capture_ecmascript_intrinsic(scope, global, "Promise")?;
     let realm = IntrinsicInterfaceRegistry::initialize_for_current_context(

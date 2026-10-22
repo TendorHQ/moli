@@ -1,6 +1,53 @@
 use super::*;
 
 #[test]
+fn deferred_constructor_reflection_preserves_identity_and_inheritance() {
+    let mut vm = new_storage_page_task_executor_test_vm("https://constructor-reflection.test/");
+    let script = include_str!("../../../tests/fixtures/constructor-reflection.js");
+    let observed = vm.eval(&format!("JSON.stringify({script})")).unwrap();
+    let mut observed: serde_json::Value = serde_json::from_str(&observed).unwrap();
+    let expected: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/constructor-reflection-chromium-145.json"
+    ))
+    .unwrap();
+    let constructors = observed["constructors"].as_array_mut().unwrap();
+    let expected_constructors = expected["constructors"].as_array().unwrap();
+    assert_eq!(constructors.len(), expected_constructors.len());
+    for (row, expected_row) in constructors.iter_mut().zip(expected_constructors) {
+        // V8 stringifies callable Proxies anonymously. Only this field may
+        // differ from Chromium's named native constructors; the CDP contract
+        // runs the same fixture against Chromium and records that difference.
+        if row["source"] != expected_row["source"] {
+            assert_eq!(row["source"], "function () { [native code] }");
+            row["source"] = expected_row["source"].clone();
+        }
+    }
+    assert_eq!(observed, expected);
+}
+
+#[test]
+fn constructor_realms_follow_bound_targets_and_preserve_revoked_explicit_prototypes() {
+    let mut vm = new_storage_page_task_executor_test_vm("https://constructor-realms.test/");
+    let script = include_str!("../../../tests/fixtures/constructor-realms.js");
+    let observed = vm.eval(&format!("JSON.stringify({script})")).unwrap();
+    let observed: serde_json::Value = serde_json::from_str(&observed).unwrap();
+    let fallbacks = observed["fallbacks"].as_array().unwrap();
+    assert_eq!(fallbacks.len(), 20);
+    for row in fallbacks {
+        assert_eq!(row["prototypeReads"], 1, "{row}");
+        assert_eq!(row["targetInterface"], true, "{row}");
+        assert_eq!(row["targetObject"], false, "{row}");
+        assert_eq!(row["nativeBrand"], true, "{row}");
+    }
+    let revoked = observed["revoked"].as_array().unwrap();
+    assert_eq!(revoked.len(), 6);
+    for row in revoked {
+        assert_eq!(row["customPrototype"], true, "{row}");
+        assert_eq!(row["nativeBrand"], true, "{row}");
+    }
+}
+
+#[test]
 fn native_constructor_entries_defer_newtarget_lookup_and_use_intrinsic_realm_defaults() {
     let mut vm = new_storage_page_task_executor_test_vm("https://constructor-allocation.test/");
     vm.eval("document.body.innerHTML = '<iframe></iframe>'")

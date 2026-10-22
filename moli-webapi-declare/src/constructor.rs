@@ -163,8 +163,12 @@ pub fn initialize_web_api_constructor_receiver<'s>(
         prototype
     } else {
         let Some(context) = callable_relevant_context(scope, new_target.into()) else {
+            throw_type_error(scope, "WebIDL constructor realm is unavailable");
             return false;
         };
+        // WebIDL 3.8 selects the target realm's interface prototype here.
+        // Chromium 145 still uses Object.prototype; the CDP realm contract
+        // records that difference rather than replacing the normative fallback.
         let prototype = {
             let scope = &mut v8::ContextScope::new(scope, context);
             let Some(prototype) = global_constructor_prototype(scope, default_interface_name)

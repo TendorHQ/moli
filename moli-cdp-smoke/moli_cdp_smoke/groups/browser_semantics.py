@@ -9,6 +9,10 @@ from ..config import is_moli_browser
 from ..helpers import attach_cdp_event_collector
 from ..progress import await_with_progress
 from ..state import SmokeState
+from .constructor_semantics import (
+    constructor_newtarget_realms,
+    constructor_reflection_and_inheritance,
+)
 
 
 SemanticScenario = Callable[[SmokeState], Awaitable[dict[str, Any]]]
@@ -48,6 +52,20 @@ def _semantic_scenarios() -> tuple[
     tuple[str, str, str, list[str], SemanticScenario], ...
 ]:
     return (
+        (
+            "cdp_contract_constructor_reflection_and_inheritance",
+            "DOMParser, RTCIceCandidate, and RTCSessionDescription preserve Chromium's instanceof, subclass, Reflect.construct, and prototype.constructor behavior; only Moli's callable-Proxy source string is a recorded known difference.",
+            "Chromium 145.0.7632.6 probe and ECMAScript Function.prototype.toString",
+            ["Runtime.evaluate"],
+            constructor_reflection_and_inheritance,
+        ),
+        (
+            "cdp_contract_constructor_newtarget_realms",
+            "Constructor defaults follow bound/Proxy targets to the target Realm without author property traps; revoking NewTarget after returning an object prototype preserves construction. Moli follows WebIDL's interface fallback while Chromium 145's Object.prototype fallback is recorded explicitly.",
+            "WebIDL 3.8 and Chromium 145.0.7632.6 executable probe",
+            ["Runtime.evaluate"],
+            constructor_newtarget_realms,
+        ),
         (
             "cdp_contract_top_level_session_storage_namespaces",
             "Same-origin top-level targets share localStorage but have independent sessionStorage; a popup receives a creation-time sessionStorage copy and then diverges.",

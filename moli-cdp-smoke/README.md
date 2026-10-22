@@ -57,6 +57,8 @@ or identical scenario counts:
 
 | Boundary | Moli | Pinned Chromium |
 | --- | --- | --- |
+| DOMParser / RTCIceCandidate / RTCSessionDescription reflection | Deferred constructor Proxies currently stringify as `function () { [native code] }` | Named native function source; the shared constructor fixture requires identical `instanceof`, subclassing, `Reflect.construct`, and `prototype.constructor` behavior |
+| Non-object `NewTarget.prototype` | Target Realm's interface prototype, as required by [WebIDL §3.8](https://webidl.spec.whatwg.org/#es-platform-objects) | Pinned Chromium 145 selects the target Realm's `Object.prototype`; the Realm contract records this exception and rejects caller-Realm defaults |
 | Screen layout / wheel scheduling | Frozen layout and fixed action window | Live layout, per-event microtasks and observer updates |
 | Scrollbar startup / emulation | CLI/environment matrix; current document updates immediately | Default visible, `--hide-scrollbars`; emulation applies on navigation |
 | Locale/timezone across contexts | Shared process defaults and exclusive claims | Independent renderer defaults and claims |

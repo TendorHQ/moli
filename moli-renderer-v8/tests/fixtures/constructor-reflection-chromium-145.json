@@ -1,0 +1,53 @@
+{
+  "constructors": [
+    {
+      "name": "DOMParser",
+      "source": "function DOMParser() { [native code] }",
+      "instanceOf": true,
+      "instancePrototype": true,
+      "instanceConstructor": true,
+      "prototypeConstructor": true,
+      "subclassInstanceOf": true,
+      "subclassPrototype": true,
+      "subclassConstructor": true,
+      "subclassParent": true,
+      "reflectedInstanceOf": true,
+      "reflectedPrototype": true,
+      "reflectedConstructor": true
+    },
+    {
+      "name": "RTCIceCandidate",
+      "source": "function RTCIceCandidate() { [native code] }",
+      "instanceOf": true,
+      "instancePrototype": true,
+      "instanceConstructor": true,
+      "prototypeConstructor": true,
+      "subclassInstanceOf": true,
+      "subclassPrototype": true,
+      "subclassConstructor": true,
+      "subclassParent": true,
+      "reflectedInstanceOf": true,
+      "reflectedPrototype": true,
+      "reflectedConstructor": true
+    },
+    {
+      "name": "RTCSessionDescription",
+      "source": "function RTCSessionDescription() { [native code] }",
+      "instanceOf": true,
+      "instancePrototype": true,
+      "instanceConstructor": true,
+      "prototypeConstructor": true,
+      "subclassInstanceOf": true,
+      "subclassPrototype": true,
+      "subclassConstructor": true,
+      "subclassParent": true,
+      "reflectedInstanceOf": true,
+      "reflectedPrototype": true,
+      "reflectedConstructor": true
+    }
+  ],
+  "toStringUnchanged": true,
+  "builtinSource": "function Object() { [native code] }",
+  "authoredSource": "function authored() {}",
+  "callableProxySource": "function () { [native code] }"
+}

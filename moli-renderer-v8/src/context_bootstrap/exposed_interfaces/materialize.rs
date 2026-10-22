@@ -291,6 +291,11 @@ fn finish_materialized_interface<'s>(
         ConstructorKind::DomParser
         | ConstructorKind::RtcIceCandidate
         | ConstructorKind::RtcSessionDescription => {
+            // Keep the deferred path limited to these constructors. It adds
+            // per-invocation allocation and V8 exposes an anonymous native
+            // Function#toString for its callable Proxy; the constructor CDP
+            // contract records that difference while requiring native identity
+            // and inheritance. Measure constructor-throughput before expanding.
             let proxy = moli_webapi_declare::web_api_constructor_with_deferred_prototype(
                 scope,
                 constructor,

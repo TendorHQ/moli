@@ -223,6 +223,13 @@ fn constructor_uses_new_target_realm_and_keeps_reentrant_invocations_independent
                         if (primitive || Object.getPrototypeOf(instance) !== prototype) return false;
                     } catch (error) { if (!primitive || !(error instanceof TypeError)) return false; }
                 }
+                const revoked = Proxy.revocable(function() {}, {});
+                const revokedBound = revoked.proxy.bind(null);
+                revoked.revoke();
+                try {
+                    Reflect.construct(C, ['x'], revokedBound);
+                    return false;
+                } catch (error) { if (!(error instanceof TypeError)) return false; }
                 return true;
             })()"#,
         )
