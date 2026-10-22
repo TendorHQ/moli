@@ -448,7 +448,7 @@ struct DocumentCollectionAccessorsPrototypeDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::Document, receiver)]
+#[webapi(interface = web_api_interfaces::Document, enumerable, receiver)]
 struct DocumentCollectionQueryPrototypeDeclaration {
     #[webapi(
         method,
@@ -1372,7 +1372,7 @@ pub(crate) fn install_document_template_bindings<'s>(
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::Document, receiver)]
+#[webapi(interface = web_api_interfaces::Document, enumerable, receiver)]
 struct DocumentGetElementByIdTemplateDeclaration {
     #[webapi(method = "getElementById", length = 1, callback = node_get_element_by_id_callback)]
     get_element_by_id: (),

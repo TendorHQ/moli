@@ -327,7 +327,7 @@ fn dom_parser_native_query_selector_all_declares_node_list_shell() {
 
     assert_eq!(
         result,
-        "[object NodeList]|NodeList|true|2|a|b|true|a|b|true|a,b|false|false|false|true:false:true:true:function:item:1|true:false:true:true:function|true|false|true|a|a,b"
+        "[object NodeList]|NodeList|true|2|a|b|true|a|b|true|a,b|false|false|false|true:true:true:true:function:item:1|true:false:true:true:function|true|false|true|a|a,b"
     );
 }
 
