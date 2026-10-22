@@ -277,8 +277,12 @@ async def _close_target(client: RawCdpClient, target_id: str) -> None:
 async def _close_page(client: RawCdpClient, page: _AttachedPage) -> None:
     """Dispose one case's storage context and every target created inside it."""
 
+    input_cleanup_error = None
     if page.native_input is not None:
-        await page.native_input.close()
+        try:
+            await page.native_input.close()
+        except Exception as error:
+            input_cleanup_error = error
 
     try:
         before = await _target_infos(client)
@@ -312,6 +316,8 @@ async def _close_page(client: RawCdpClient, page: _AttachedPage) -> None:
     try:
         after = await _target_infos(client)
     except (RawCdpError, asyncio.TimeoutError):
+        if input_cleanup_error is not None and page.browser_context_id is None:
+            raise input_cleanup_error
         return
 
     residual_ids = {
@@ -346,6 +352,8 @@ async def _close_page(client: RawCdpClient, page: _AttachedPage) -> None:
             raise RawCdpError(
                 f"case cleanup left auxiliary targets alive: {sorted(leaked)}"
             )
+    if input_cleanup_error is not None and page.browser_context_id is None:
+        raise input_cleanup_error
 
 
 async def _attach_page(

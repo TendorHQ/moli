@@ -391,15 +391,12 @@ class WptCrossResultReportingTests(WptCrossTestCase):
         self.assertNotIn(b"nativeGetClientRects.apply", BENCH_TESTDRIVER_VENDOR_BRIDGE)
         self.assertNotIn(b"nativeElementsFromPoint.apply", BENCH_TESTDRIVER_VENDOR_BRIDGE)
 
-    def test_testdriver_vendor_bridge_accepts_storage_access_permission_setup(self) -> None:
-        self.assertIn(
-            b"params.descriptor.name === 'storage-access'",
-            BENCH_TESTDRIVER_VENDOR_BRIDGE,
-        )
-        self.assertIn(
-            b"set_permission() is not implemented by the Moli WPT bridge",
-            BENCH_TESTDRIVER_VENDOR_BRIDGE,
-        )
+    def test_testdriver_vendor_bridge_forwards_permission_descriptors(self) -> None:
+        self.assertIn(b"driver.set_permission", BENCH_TESTDRIVER_VENDOR_BRIDGE)
+        self.assertIn(b"kind: 'set_permission'", BENCH_TESTDRIVER_VENDOR_BRIDGE)
+        self.assertIn(b"descriptor: params.descriptor", BENCH_TESTDRIVER_VENDOR_BRIDGE)
+        self.assertNotIn(b"descriptor.name === 'storage-access'", BENCH_TESTDRIVER_VENDOR_BRIDGE)
+
     def test_testdriver_vendor_bridge_provides_computed_label(self) -> None:
         self.assertIn(b"get_computed_label", BENCH_TESTDRIVER_VENDOR_BRIDGE)
         self.assertIn(b"resolveReferenceTarget", BENCH_TESTDRIVER_VENDOR_BRIDGE)
