@@ -653,7 +653,7 @@ pub(in crate::context_bootstrap) fn build_constructor_template<'s>(
                 web_api_interfaces::RTCSessionDescription,
                 rtc_session_description_constructor_callback
             ))
-            .length(1)
+            .length(0)
             .build(scope)
         }
         ConstructorKind::RtcPeerConnectionIceEvent => {

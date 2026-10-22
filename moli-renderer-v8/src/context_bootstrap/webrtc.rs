@@ -6,6 +6,7 @@ use crate::web_api_interfaces;
 use moli_webapi_declare::{WebApiFunctionTemplate, WebApiObject};
 
 mod configuration;
+mod dictionary_string;
 mod events;
 mod ice_candidate;
 mod ice_candidate_parser;
@@ -126,7 +127,7 @@ struct RtcDataChannelObjectDeclaration<'scope> {
 #[webapi(plain)]
 struct RtcSessionDescriptionInitDeclaration<'scope> {
     #[webapi(data_property, enumerable)]
-    r#type: v8::Local<'scope, v8::String>,
+    r#type: v8::Local<'scope, v8::Value>,
     #[webapi(data_property, enumerable)]
     sdp: v8::Local<'scope, v8::String>,
 }
@@ -352,7 +353,7 @@ fn rtc_peer_connection_create_offer_callback<'s>(
         rv.set_undefined();
         return;
     };
-    let offer = RtcSessionDescriptionInitDeclaration::new(v8str(scope, "offer"), sdp)
+    let offer = RtcSessionDescriptionInitDeclaration::new(v8str(scope, "offer").into(), sdp)
         .bind(scope)
         .expect("RTC offer declaration should bind");
     set_resolved_promise(scope, &mut rv, offer.into());
