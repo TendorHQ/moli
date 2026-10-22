@@ -1375,13 +1375,12 @@ fn css_owner_changes_prepare_font_projections_only_for_exposed_collections() {
     assert_eq!(vm.eval("lazyStyle.remove(); [heldFonts.size, heldSheets.length, heldFonts === document.fonts].join('|')").unwrap(), "0|0|true");
 }
 
-#[test]
-fn font_face_rejects_malformed_string_and_magic_prefixed_payloads() {
-    let mut vm = new_storage_test_vm("https://font-face-payload-validation.test/");
-
-    vm.eval(
+#[tokio::test]
+async fn font_face_rejects_malformed_string_and_magic_prefixed_payloads() {
+    let result = eval_font_loading_fixture(
+        "https://font-face-payload-validation.test/",
         r#"
-(() => {
+(async () => {
   const invalidSource = new FontFace('InvalidSource', 'garbage');
   const invalidUrl = new FontFace(
     'InvalidUrl',
@@ -1391,24 +1390,21 @@ fn font_face_rejects_malformed_string_and_magic_prefixed_payloads() {
     'InvalidBytes',
     new TextEncoder().encode('wOF2garbage')
   );
-  globalThis.__fontFaceMalformedProbe = {
-    initial: [invalidSource.status, invalidUrl.status, invalidBytes.status],
-    settled: ['pending', 'pending', 'pending']
-  };
-  [invalidSource, invalidUrl, invalidBytes].forEach((face, index) => {
-    face.load().then(
-      () => { __fontFaceMalformedProbe.settled[index] = 'resolved'; },
-      error => { __fontFaceMalformedProbe.settled[index] = error.name; }
-    );
+  const faces = [invalidSource, invalidUrl, invalidBytes];
+  const initial = faces.map(face => face.status);
+  const promises = faces.map(face => face.load().then(
+    () => 'resolved',
+    error => error.name
+  ));
+  return JSON.stringify({
+    initial,
+    settled: await Promise.all(promises)
   });
 })()
 "#,
     )
-    .expect("malformed FontFace payload probe should initialize");
+    .await;
 
-    let result = vm
-        .eval("JSON.stringify(globalThis.__fontFaceMalformedProbe)")
-        .expect("malformed FontFace payload promises should settle");
     assert_eq!(
         result,
         r#"{"initial":["error","unloaded","error"],"settled":["SyntaxError","NetworkError","SyntaxError"]}"#
@@ -1595,4 +1591,38 @@ async fn font_face_descriptors_parse_css_and_convert_dictionaries_in_main_and_ch
     }
     assert_eq!(result["borrowedValues"], serde_json::json!(["20%", "30%"]));
     assert_eq!(result["borrowedError"], true, "{result}");
+}
+
+#[tokio::test]
+async fn font_face_invalid_data_url_uses_later_sources_without_eager_loading() {
+    let result = eval_font_loading_fixture(
+        "https://font-face-data-url-fallback.test/",
+        r#"
+(async () => {
+  const face = new FontFace(
+    'FallbackFace',
+    'url("data:font/woff2;base64,d09GMmdhcmJhZ2U="), ' + fontFixtureSource
+  );
+  const loaded = face.loaded;
+  const before = face.status;
+  const returned = face.load();
+  const afterLoad = face.status;
+  const value = await returned;
+  return JSON.stringify({
+    before,
+    afterLoad,
+    returnedLoaded: returned === loaded,
+    resolvedSelf: value === face,
+    stableLoaded: face.loaded === loaded,
+    final: face.status
+  });
+})()
+"#,
+    )
+    .await;
+
+    assert_eq!(
+        result,
+        r#"{"before":"unloaded","afterLoad":"loading","returnedLoaded":true,"resolvedSelf":true,"stableLoaded":true,"final":"loaded"}"#
+    );
 }
