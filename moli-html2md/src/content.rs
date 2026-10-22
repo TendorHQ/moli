@@ -74,16 +74,11 @@ fn role_matches(role: &str, candidates: &[&str]) -> bool {
         .any(|candidate| role.eq_ignore_ascii_case(candidate))
 }
 
-pub(crate) fn excluded_from_naming<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> bool {
-    if dom
-        .attribute(node, "aria-hidden")
+fn excluded_from_naming<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> bool {
+    dom.attribute(node, "aria-hidden")
         .is_some_and(|v| v.trim().eq_ignore_ascii_case("true"))
         || dom.attribute(node, "hidden").is_some()
         || primary_role(dom, node).is_some_and(|role| role_matches(role, PRESENTATIONAL_ROLES))
-    {
-        return true;
-    }
-    false
 }
 
 pub(crate) fn image_label<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Cow<'_, str> {
