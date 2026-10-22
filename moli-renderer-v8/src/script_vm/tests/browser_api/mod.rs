@@ -60,6 +60,7 @@ mod request_init;
 mod rtc_dictionary_init;
 mod rtc_error;
 mod rtc_peer_dictionary;
+mod scroll_dictionary;
 mod security_policy;
 mod security_policy_event_init;
 mod service_worker_drain;
