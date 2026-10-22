@@ -2448,6 +2448,7 @@ mod time_ranges;
 mod touch_event_webidl;
 mod uncompiled_event_handler_sources;
 mod url_components;
+mod url_pattern;
 mod video_codecs;
 mod video_codecs_shell;
 mod video_color_space;
