@@ -475,7 +475,7 @@ struct MutationObserverObserveArgs<'s> {
 #[derive(webidl::WebIdlDictionary)]
 #[webidl(prefix = "IntersectionObserverInit")]
 struct IntersectionObserverInitMembers {
-    // The derive converts members in declaration order; WebIDL requires lexical order.
+    // The derive converts members in lexical order of their final JavaScript names.
     #[webidl(default = 0)]
     delay: i32,
     #[webidl(with = intersection_observer_root_member)]

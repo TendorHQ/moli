@@ -78,6 +78,7 @@ mod traversal_receivers;
 mod trusted_types;
 mod value_event_init;
 mod value_events;
+mod view_transition_dictionary;
 mod web_audio;
 mod web_mcp;
 mod webrtc;
