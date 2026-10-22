@@ -439,7 +439,12 @@ mod tests {
                 ),
             ];
             assert_eq!(
-                render_markdown_document_with_styles(&dom, styles, None),
+                render_markdown_document_with_styles(
+                    &dom,
+                    styles,
+                    std::collections::HashMap::new(),
+                    std::collections::HashMap::new(),
+                ),
                 expected,
                 "{display}"
             );
