@@ -1781,66 +1781,6 @@ pub(in crate::worker) fn make_rejected_promise_with_value<'s>(
     promise
 }
 
-pub(in crate::worker) fn validate_worker_fetch_signal<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    value: v8::Local<'s, v8::Value>,
-) -> Result<Option<v8::Local<'s, v8::Object>>, webidl::WebIdlError> {
-    if value.is_null_or_undefined() {
-        return Ok(None);
-    }
-    let Ok(signal) = v8::Local::<v8::Object>::try_from(value) else {
-        return Err(webidl::WebIdlError::custom_message(
-            "Failed to execute 'fetch' on 'DedicatedWorkerGlobalScope': signal must be an AbortSignal.",
-        ));
-    };
-    if worker_abort_signal_id(scope, signal).is_none() {
-        return Err(webidl::WebIdlError::custom_message(
-            "Failed to execute 'fetch' on 'DedicatedWorkerGlobalScope': signal must be an AbortSignal.",
-        ));
-    }
-    Ok(Some(signal))
-}
-
-pub(in crate::worker) fn worker_fetch_signal_option<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    args: &v8::FunctionCallbackArguments<'s>,
-    request_like: Option<v8::Local<'s, v8::Object>>,
-) -> Result<Option<v8::Local<'s, v8::Object>>, webidl::WebIdlError> {
-    let signal_key = v8str(scope, "signal");
-    if args.length() > 1 {
-        let init_arg = args.get(1);
-        if !init_arg.is_null_or_undefined()
-            && let Ok(init) = v8::Local::<v8::Object>::try_from(init_arg)
-            && init.has(scope, signal_key.into()).ok_or_else(|| {
-                webidl::WebIdlError::pending_exception(webidl::Context::member(
-                    "RequestInit",
-                    "signal",
-                ))
-            })?
-        {
-            let signal = webidl::property_result(
-                scope,
-                init,
-                "signal",
-                webidl::Context::member("RequestInit", "signal"),
-            )?
-            .unwrap_or_else(|| v8::undefined(scope).into());
-            return validate_worker_fetch_signal(scope, signal);
-        }
-    }
-    if let Some(request_like) = request_like
-        && let Some(signal) = webidl::property_result(
-            scope,
-            request_like,
-            "signal",
-            webidl::Context::member("Request", "signal"),
-        )?
-    {
-        return validate_worker_fetch_signal(scope, signal);
-    }
-    Ok(None)
-}
-
 pub(in crate::worker) struct ResolvedWorkerFetchInput<'s> {
     resolved_url: Url,
     method: String,
@@ -1864,10 +1804,11 @@ pub(in crate::worker) fn resolve_worker_fetch_input<'s>(
             webidl::WebIdlError::missing_required(webidl::Context::argument("fetch", 1)).into(),
         );
     }
-    let arg0 = args.get(0);
+    let args = webidl::try_parse_args::<crate::network_host::FetchArgs>(scope, args)?;
+    let (url, inherited, source) = args.input.materialize(scope)?;
     let mut request_like = None;
     let mut consumes_request_body = false;
-    let inherited = request_input_snapshot(scope, arg0)?;
+    let signal;
     let (
         url_input,
         method,
@@ -1879,10 +1820,13 @@ pub(in crate::worker) fn resolve_worker_fetch_input<'s>(
         priority,
         metadata,
     ) = if let Some(inherited) = inherited {
-        let req_obj = v8::Local::<v8::Object>::try_from(arg0).expect("request-like object");
+        let req_obj = source.expect("request input source");
         request_like = Some(req_obj);
-        let url = inherited.url.clone();
-        let init = parse_fetch_init(scope, args, 1)?;
+        let init = parse_fetch_init(scope, args.init)?;
+        if inherited.body_unusable && !init.body_present {
+            return Err(crate::network_host::request_body_already_used_error().into());
+        }
+        signal = init.signal.unwrap_or(inherited.signal);
         consumes_request_body = !init.body_present && inherited.body.is_some();
         let method = if init.method_present {
             init.method.clone()
@@ -1908,6 +1852,7 @@ pub(in crate::worker) fn resolve_worker_fetch_input<'s>(
             .or_else(|| moli_fetch::RequestMode::from_str(&inherited.mode).ok())
             .unwrap_or(moli_fetch::RequestMode::Cors);
         validate_worker_no_cors_method(request_mode, &method)?;
+        crate::network_host::validate_request_method_body(&method, body.as_ref())?;
         let headers = if request_mode == moli_fetch::RequestMode::NoCors {
             filter_headers_for_guard(&headers, HeadersGuard::RequestNoCors)
         } else {
@@ -1945,15 +1890,11 @@ pub(in crate::worker) fn resolve_worker_fetch_input<'s>(
             metadata,
         )
     } else {
-        let url = webidl::convert::<webidl::UsvString>(
-            scope,
-            arg0,
-            webidl::Context::argument("fetch", 1),
-        )
-        .map(String::from)?;
-        let init = parse_fetch_init(scope, args, 1)?;
+        let init = parse_fetch_init(scope, args.init)?;
+        signal = init.signal.flatten();
         let request_mode = init.request_mode.unwrap_or(moli_fetch::RequestMode::Cors);
         validate_worker_no_cors_method(request_mode, &init.method)?;
+        crate::network_host::validate_request_method_body(&init.method, init.body.as_ref())?;
         let headers = if request_mode == moli_fetch::RequestMode::NoCors {
             filter_headers_for_guard(&init.headers, HeadersGuard::RequestNoCors)
         } else {
@@ -1984,7 +1925,7 @@ pub(in crate::worker) fn resolve_worker_fetch_input<'s>(
         )
     };
     let resolved_url = resolve_context_url(base_url, &url_input, None)?;
-    let signal = worker_fetch_signal_option(scope, args, request_like)?;
+    let signal = signal.as_ref().map(|signal| v8::Local::new(scope, signal));
     if consumes_request_body && let Some(request_like) = request_like {
         crate::network_host::mark_request_input_body_used_for_fetch(scope, request_like);
     }
