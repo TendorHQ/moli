@@ -272,7 +272,7 @@ async fn font_face_url_is_frozen_before_base_href_changes() {
 }
 
 async fn assert_loaded_promise_lifetime(mode: &str) {
-    let failure = mode == "css-removed-error";
+    let failure = mode.ends_with("error");
     let (origin, mut requests, mut gates, server) = if failure {
         gated_fonts_with_bytes(&["lifetime.woff2"], b"invalid font bytes").await
     } else {
@@ -308,18 +308,25 @@ async fn assert_loaded_promise_lifetime(mode: &str) {
         // FontFace.load(), which installs a separate strong request root.
         vm.refresh_layout_snapshot_for_test(moli_layout::LayoutViewport::new(800, 600, 1.0))
             .unwrap();
+        let query_promise = if mode.contains("query") {
+            "document.fonts.load('16px Lifetime','A')"
+        } else {
+            "face.loaded"
+        };
         assert_eq!(
             vm.eval(
-                r#"globalThis.promiseResults=[];
+                &r#"globalThis.promiseResults=[];
             globalThis.retainedPromise=(() => {
               const face=[...document.fonts][0];
               if(face.status!=='loading') throw new Error('CSS must already be loading');
               globalThis.faceWitness=new WeakRef(face);
-              return face.loaded;
+              return QUERY_PROMISE;
             })();
-            retainedPromise.then(value=>promiseResults.push([value.family,value.status]),
+            retainedPromise.then(value=>{const face=Array.isArray(value)?value[0]:value;
+                promiseResults.push([face.family,face.status])},
               error=>promiseResults.push(['error',error.name]));
             document.fonts.size"#
+                    .replace("QUERY_PROMISE", query_promise)
             )
             .unwrap(),
             "1"
@@ -423,6 +430,16 @@ async fn assert_loaded_promise_lifetime(mode: &str) {
 #[tokio::test]
 async fn css_removed_loaded_promise_survives_gc() {
     assert_loaded_promise_lifetime("css-removed-gc").await;
+}
+
+#[tokio::test]
+async fn css_removed_query_promise_survives_gc() {
+    assert_loaded_promise_lifetime("css-removed-query-gc").await;
+}
+
+#[tokio::test]
+async fn css_removed_rejected_query_promise_releases_wrapper_after_gc() {
+    assert_loaded_promise_lifetime("css-removed-query-error").await;
 }
 
 #[tokio::test]

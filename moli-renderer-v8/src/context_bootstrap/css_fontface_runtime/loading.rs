@@ -11,6 +11,7 @@ static NEXT_REGISTRATION: AtomicU64 = AtomicU64::new(1);
 const QUERY_RESOLVER: &str = "__moliFontQueryResolver";
 const QUERY_FACES: &str = "__moliFontQueryFaces";
 const QUERY_REMAINING: &str = "__moliFontQueryRemaining";
+const QUERY_STATE: &str = "__moliFontQueryState";
 
 pub(super) fn load_matching_faces<'s>(
     scope: &mut v8::PinScope<'s, '_>,
@@ -23,6 +24,10 @@ pub(super) fn load_matching_faces<'s>(
         return promise;
     }
     let state = v8::Object::new(scope);
+    // Reactions retain their state from the input promises, but the returned
+    // promise must also retain it when a CSS face leaves document.fonts.
+    // This heap edge keeps the settlement endpoints alive without a Global.
+    set_private_value(scope, promise.into(), QUERY_STATE, state.into());
     set_private_value(scope, state, QUERY_RESOLVER, resolver.into());
     set_private_value(scope, state, QUERY_FACES, faces.into());
     set_private_value(
@@ -73,6 +78,7 @@ fn query_face_loaded<'s>(
         let resolver =
             resolver_from_slot(scope, state, QUERY_RESOLVER).expect("font query resolver");
         let faces = get_private_value(scope, state, QUERY_FACES).expect("font query faces");
+        release_query_state(scope, state, resolver);
         let _ = resolver.resolve(scope, faces);
     }
 }
@@ -83,14 +89,38 @@ fn query_face_failed<'s>(
     _rv: v8::ReturnValue<'_, v8::Value>,
 ) {
     let state = v8::Local::<v8::Object>::try_from(args.data()).expect("font query state");
+    if get_private_value(scope, state, QUERY_REMAINING)
+        .and_then(|v| v.uint32_value(scope))
+        .unwrap_or(0)
+        == 0
+    {
+        return;
+    }
+    let resolver = resolver_from_slot(scope, state, QUERY_RESOLVER).expect("font query resolver");
+    release_query_state(scope, state, resolver);
+    let _ = resolver.reject(scope, args.get(0));
+}
+
+fn release_query_state<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    state: v8::Local<'s, v8::Object>,
+    resolver: v8::Local<'s, v8::PromiseResolver>,
+) {
     set_private_value(
         scope,
         state,
         QUERY_REMAINING,
         v8::Integer::new(scope, 0).into(),
     );
-    let resolver = resolver_from_slot(scope, state, QUERY_RESOLVER).expect("font query resolver");
-    let _ = resolver.reject(scope, args.get(0));
+    set_private_value(
+        scope,
+        resolver.get_promise(scope).into(),
+        QUERY_STATE,
+        v8::undefined(scope).into(),
+    );
+    for slot in [QUERY_FACES, QUERY_RESOLVER] {
+        set_private_value(scope, state, slot, v8::undefined(scope).into());
+    }
 }
 
 pub(super) fn resolver_from_slot<'s>(
