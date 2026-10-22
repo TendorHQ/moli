@@ -97,29 +97,6 @@ pub(in crate::context_bootstrap::events) fn initialize_text_event<'s>(
     }
 }
 
-use moli_webapi_declare::WebApiObject;
-#[derive(WebApiObject)]
-#[webapi(plain, data_properties, enumerable)]
-struct UiEventInitDeclaration<'scope> {
-    view: v8::Local<'scope, v8::Value>,
-    detail: f64,
-}
-
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_ui_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) -> bool {
-    let Ok(view) = init_window_view_property(scope, init, "UIEvent") else {
-        return false;
-    };
-    let detail = init_number_property(scope, init, "detail", 0.0);
-    UiEventInitDeclaration::new(view, detail)
-        .initialize(scope, event)
-        .expect("UIEvent init declaration should initialize");
-    true
-}
-
 pub(super) enum BasicEventInit<'s> {
     Ui(UiEventInit<'s>),
     Focus(FocusEventInit<'s>),

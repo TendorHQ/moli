@@ -71,6 +71,19 @@ fn event_subclass_constructor_callback<'s>(
     } else {
         None
     };
+    let interaction_event_init = if matches!(
+        kind,
+        EventSubclassKind::InputEvent
+            | EventSubclassKind::TouchEvent
+            | EventSubclassKind::CapturedMouseEvent
+    ) {
+        let Some(init) = input::InteractionEventInit::parse(scope, &args, kind) else {
+            return;
+        };
+        Some(init)
+    } else {
+        None
+    };
     let value_event_init = if matches!(
         kind,
         EventSubclassKind::ClipboardEvent
@@ -171,6 +184,7 @@ fn event_subclass_constructor_callback<'s>(
         })
         .or_else(|| font_face_init.as_ref().map(crate::context_bootstrap::css_fontface_runtime::FontFaceSetLoadEventInit::event_flags))
         .or_else(|| value_event_init.as_ref().map(values::ValueEventInit::event_flags))
+        .or_else(|| interaction_event_init.as_ref().map(input::InteractionEventInit::event_flags))
         .or_else(|| read_event_init(scope, &args))
     else {
         return;
@@ -214,8 +228,13 @@ fn event_subclass_constructor_callback<'s>(
         | EventSubclassKind::PageTransitionEvent => value_event_init
             .expect("value event init is parsed")
             .initialize(scope, event),
-        EventSubclassKind::CapturedMouseEvent => {
-            if !data::initialize_captured_mouse_event(scope, event, init) {
+        EventSubclassKind::InputEvent
+        | EventSubclassKind::TouchEvent
+        | EventSubclassKind::CapturedMouseEvent => {
+            if !interaction_event_init
+                .expect("interaction event init is parsed")
+                .initialize(scope, event)
+            {
                 return;
             }
         }
@@ -225,10 +244,6 @@ fn event_subclass_constructor_callback<'s>(
                 event,
                 keyboard_event_init.expect("KeyboardEvent init should be parsed"),
             );
-        }
-        EventSubclassKind::InputEvent => data::initialize_input_event(scope, event, init),
-        EventSubclassKind::TouchEvent => {
-            crate::context_bootstrap::touch_runtime::initialize_touch_event(scope, event, init);
         }
         EventSubclassKind::MessageEvent => message::initialize_message_event(
             scope,

@@ -130,21 +130,6 @@ struct NavigateEventMethodsDeclaration {
     scroll: (),
 }
 
-#[derive(WebApiObject)]
-#[webapi(plain, data_properties, enumerable)]
-struct CapturedMouseEventInitDeclaration {
-    surface_x: i32,
-    surface_y: i32,
-}
-
-#[derive(WebApiObject)]
-#[webapi(plain, data_properties, enumerable)]
-struct InputEventInitDeclaration<'scope> {
-    data: v8::Local<'scope, v8::Value>,
-    input_type: v8::Local<'scope, v8::String>,
-    is_composing: bool,
-}
-
 #[derive(webidl::WebIdlDictionary)]
 #[webidl(prefix = "PromiseRejectionEventInit", snapshot)]
 struct PromiseRejectionEventInitMembers<'s> {
@@ -229,65 +214,6 @@ pub(super) fn parse_storage_event_init<'s>(
     crate::context_bootstrap::events::parse_event_dictionary(scope, args, "StorageEvent")
 }
 
-fn captured_mouse_coordinate<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    init: Option<v8::Local<'s, v8::Object>>,
-    name: &'static str,
-) -> Option<i32> {
-    let Some(init) = init else {
-        return Some(-1);
-    };
-    let context = webidl::Context::member("CapturedMouseEventInit", name);
-    let value = match webidl::property_result(scope, init, name, context) {
-        Ok(Some(value)) if !value.is_undefined() => value,
-        Ok(_) => return Some(-1),
-        Err(error) => {
-            webidl::throw_error(scope, &error);
-            return None;
-        }
-    };
-    let value = match webidl::convert::<webidl::EnforceRangeLong>(scope, value, context) {
-        Ok(value) => i32::from(value),
-        Err(error) if error.is_pending_exception() => return None,
-        Err(error) => {
-            crate::util::throw_range_error(scope, &error.to_string());
-            return None;
-        }
-    };
-    if value < -1 {
-        crate::util::throw_range_error(
-            scope,
-            "CapturedMouseEvent coordinates must be -1 or non-negative.",
-        );
-        return None;
-    }
-    Some(value)
-}
-
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_captured_mouse_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) -> bool {
-    let Some(surface_x) = captured_mouse_coordinate(scope, init, "surfaceX") else {
-        return false;
-    };
-    let Some(surface_y) = captured_mouse_coordinate(scope, init, "surfaceY") else {
-        return false;
-    };
-    if (surface_x == -1) != (surface_y == -1) {
-        crate::util::throw_range_error(
-            scope,
-            "CapturedMouseEvent coordinates must both be -1 or both be non-negative.",
-        );
-        return false;
-    }
-    CapturedMouseEventInitDeclaration::new(surface_x, surface_y)
-        .initialize(scope, event)
-        .expect("CapturedMouseEvent init declaration should initialize");
-    true
-}
-
 pub(in crate::context_bootstrap::events::subclasses) fn initialize_storage_event<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     event: v8::Local<'s, v8::Object>,
@@ -296,21 +222,6 @@ pub(in crate::context_bootstrap::events::subclasses) fn initialize_storage_event
     parsed
         .initialize_snapshot(scope, event)
         .expect("StorageEvent state");
-}
-
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_input_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) {
-    basic::initialize_ui_event(scope, event, init);
-    let data = init_value_property(scope, init, "data").unwrap_or_else(|| v8::null(scope).into());
-    let input_type = init_string_property(scope, init, "inputType", "");
-    let input_type_value = v8_string(scope, &input_type).expect("input event inputType");
-    let is_composing = init_bool_property(scope, init, "isComposing", false);
-    InputEventInitDeclaration::new(data, input_type_value, is_composing)
-        .initialize(scope, event)
-        .expect("InputEvent init declaration should initialize");
 }
 
 pub(in crate::context_bootstrap::events::subclasses) fn initialize_promise_rejection_event<'s>(

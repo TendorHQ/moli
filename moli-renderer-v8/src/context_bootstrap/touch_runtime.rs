@@ -81,13 +81,6 @@ struct TouchListPrototypeDeclaration {
 }
 
 #[derive(WebApiObject)]
-#[webapi(plain, data_properties, enumerable)]
-struct TouchUiEventInitDeclaration<'scope> {
-    view: v8::Local<'scope, v8::Value>,
-    detail: f64,
-}
-
-#[derive(WebApiObject)]
 #[webapi(interface = web_api_interfaces::TouchEvent)]
 struct TouchEventObjectDeclaration<'scope> {
     #[webapi(slot = TOUCH_EVENT_TOUCHES_SLOT)]
@@ -107,7 +100,7 @@ struct TouchEventObjectDeclaration<'scope> {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::TouchEvent)]
+#[webapi(interface = web_api_interfaces::TouchEvent, receiver)]
 struct TouchEventPrototypeDeclaration {
     #[webapi(accessor_property, getter = touch_event_getter, data = callback_data_index_value(scope, 0), enumerable)]
     touches: (),
@@ -248,56 +241,6 @@ pub(in crate::context_bootstrap) fn touch_list_item_callback<'s>(
     }
 }
 
-fn touch_event_init_bool(
-    scope: &mut v8::PinScope<'_, '_>,
-    init: Option<v8::Local<'_, v8::Object>>,
-    key: &'static str,
-    default: bool,
-) -> bool {
-    init.and_then(|object| object.get(scope, v8str(scope, key).into()))
-        .filter(|value| !value.is_null_or_undefined())
-        .map(|value| value.boolean_value(scope))
-        .unwrap_or(default)
-}
-
-fn touch_event_init_value<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    init: Option<v8::Local<'s, v8::Object>>,
-    key: &'static str,
-) -> Option<v8::Local<'s, v8::Value>> {
-    init.and_then(|object| object.get(scope, v8str(scope, key).into()))
-        .filter(|value| !value.is_undefined())
-}
-
-fn initialize_touch_ui_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) {
-    let view = touch_event_init_value(scope, init, "view")
-        .unwrap_or_else(|| scope.get_current_context().global(scope).into());
-    let detail = init
-        .and_then(|object| object.get(scope, v8str(scope, "detail").into()))
-        .filter(|value| !value.is_null_or_undefined())
-        .and_then(|value| value.number_value(scope))
-        .filter(|value| !value.is_nan())
-        .unwrap_or(0.0);
-    TouchUiEventInitDeclaration::new(view, detail)
-        .initialize(scope, event)
-        .expect("Touch UIEvent init declaration should initialize");
-}
-
-fn touch_init_object<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    value: v8::Local<'s, v8::Value>,
-) -> Option<v8::Local<'s, v8::Object>> {
-    if value.is_null_or_undefined() || !value.is_object() {
-        None
-    } else {
-        value.to_object(scope)
-    }
-}
-
 pub(in crate::context_bootstrap) fn touch_constructor_callback<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     args: v8::FunctionCallbackArguments<'s>,
@@ -328,47 +271,34 @@ pub(in crate::context_bootstrap) fn touch_constructor_callback<'s>(
     rv.set(touch.into());
 }
 
-pub(in crate::context_bootstrap) fn build_touch_list<'s>(
+fn build_touch_list<'s>(
     scope: &mut v8::PinScope<'s, '_>,
-    value: Option<v8::Local<'s, v8::Value>>,
+    touches: &[v8::Local<'s, v8::Object>],
 ) -> v8::Local<'s, v8::Object> {
-    let source = value.and_then(|value| touch_init_object(scope, value));
-    let length = source
-        .and_then(|source| source.get(scope, v8str(scope, "length").into()))
-        .and_then(|value| value.number_value(scope))
-        .filter(|value| value.is_finite() && *value >= 0.0)
-        .map(|value| value as u32)
-        .unwrap_or(0);
-
-    let list = TouchListObjectDeclaration::new(length)
+    let list = TouchListObjectDeclaration::new(touches.len() as u32)
         .bind(scope)
         .expect("TouchList declaration should bind");
-    for index in 0..length {
-        if let Some(item) = source.and_then(|source| source.get_index(scope, index)) {
-            let _ = list.set_index(scope, index, item);
-        }
+    for (index, touch) in touches.iter().enumerate() {
+        let key = v8::Integer::new_from_unsigned(scope, index as u32)
+            .to_string(scope)
+            .expect("TouchList index");
+        list.create_data_property(scope, key.into(), (*touch).into())
+            .expect("TouchList item");
     }
-
     list
 }
 
-pub(in crate::context_bootstrap) fn initialize_touch_event<'s>(
+pub(in crate::context_bootstrap) fn initialize_touch_event_lists<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
+    touches: &[v8::Local<'s, v8::Object>],
+    target_touches: &[v8::Local<'s, v8::Object>],
+    changed_touches: &[v8::Local<'s, v8::Object>],
+    (alt_key, meta_key, ctrl_key, shift_key): (bool, bool, bool, bool),
 ) {
-    initialize_touch_ui_event(scope, event, init);
-
-    let touches_value = touch_event_init_value(scope, init, "touches");
-    let target_touches_value = touch_event_init_value(scope, init, "targetTouches");
-    let changed_touches_value = touch_event_init_value(scope, init, "changedTouches");
-    let touches = build_touch_list(scope, touches_value);
-    let target_touches = build_touch_list(scope, target_touches_value);
-    let changed_touches = build_touch_list(scope, changed_touches_value);
-    let alt_key = touch_event_init_bool(scope, init, "altKey", false);
-    let meta_key = touch_event_init_bool(scope, init, "metaKey", false);
-    let ctrl_key = touch_event_init_bool(scope, init, "ctrlKey", false);
-    let shift_key = touch_event_init_bool(scope, init, "shiftKey", false);
+    let touches = build_touch_list(scope, touches);
+    let target_touches = build_touch_list(scope, target_touches);
+    let changed_touches = build_touch_list(scope, changed_touches);
     TouchEventObjectDeclaration::new(
         touches,
         target_touches,
@@ -379,7 +309,7 @@ pub(in crate::context_bootstrap) fn initialize_touch_event<'s>(
         shift_key,
     )
     .initialize(scope, event)
-    .expect("TouchEvent declaration should initialize object");
+    .expect("TouchEvent lists");
 }
 
 pub(in crate::context_bootstrap) fn install_touch_template_bindings<'s>(

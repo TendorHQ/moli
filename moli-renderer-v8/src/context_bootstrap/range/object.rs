@@ -42,6 +42,57 @@ pub(in crate::context_bootstrap) fn initialize_range_object<'s>(
     initialize_native_range_record(scope, range, document, existing_handle);
 }
 
+// InputEvent stores live copies and exposes fresh StaticRanges. Use intrinsic
+// templates and native boundary storage, without invoking author constructors
+// or boundary getters.
+pub(in crate::context_bootstrap) fn live_range_from_static_range<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    source: v8::Local<'s, v8::Object>,
+) -> Option<v8::Local<'s, v8::Object>> {
+    let start = static_range_boundary_container_object(scope, source, RangeBoundarySide::Start)?;
+    let end = static_range_boundary_container_object(scope, source, RangeBoundarySide::End)?;
+    let start_offset = static_range_boundary_offset(scope, source, RangeBoundarySide::Start) as u32;
+    let end_offset = static_range_boundary_offset(scope, source, RangeBoundarySide::End) as u32;
+    let document = current_document_object(scope)?;
+    let range =
+        super::super::exposed_interfaces::build_intrinsic_interface_instance(scope, "Range")
+            .ok()?;
+    initialize_range_object(scope, range, document);
+    set_range_boundary(scope, range, RangeBoundarySide::Start, start, start_offset);
+    set_range_boundary(scope, range, RangeBoundarySide::End, end, end_offset);
+    crate::web_api_interfaces::initialize(scope, range, "Range").ok()?;
+    Some(range)
+}
+
+pub(in crate::context_bootstrap) fn static_range_snapshot<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    source: v8::Local<'s, v8::Object>,
+) -> Option<v8::Local<'s, v8::Object>> {
+    let start = range_boundary_container_object(scope, source, RangeBoundarySide::Start)?;
+    let end = range_boundary_container_object(scope, source, RangeBoundarySide::End)?;
+    let start_offset = range_boundary_offset(scope, source, RangeBoundarySide::Start) as u32;
+    let end_offset = range_boundary_offset(scope, source, RangeBoundarySide::End) as u32;
+    let range =
+        super::super::exposed_interfaces::build_intrinsic_interface_instance(scope, "StaticRange")
+            .ok()?;
+    super::static_storage::initialize_static_range_object(
+        scope,
+        range,
+        start,
+        start_offset,
+        end,
+        end_offset,
+    );
+    let prototype = super::super::exposed_interfaces::ensure_intrinsic_interface_prototype(
+        scope,
+        "StaticRange",
+    )
+    .ok()?;
+    range.set_prototype(scope, prototype.into())?;
+    crate::web_api_interfaces::initialize(scope, range, "StaticRange").ok()?;
+    Some(range)
+}
+
 pub(in crate::context_bootstrap) fn set_range_boundary<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     range: v8::Local<'s, v8::Object>,

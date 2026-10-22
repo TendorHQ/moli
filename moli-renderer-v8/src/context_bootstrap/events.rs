@@ -13,6 +13,7 @@ mod methods;
 mod modifiers;
 mod subclasses;
 pub(crate) use subclasses::initialize_native_security_policy_violation_event;
+pub(in crate::context_bootstrap) use subclasses::input_event_get_target_ranges_callback;
 mod submit;
 mod ui;
 mod value;
