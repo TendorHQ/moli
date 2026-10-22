@@ -70,6 +70,8 @@ struct ServiceWorkerRegistrationObjectDeclaration<'scope> {
 
     #[webapi(
         method = "showNotification",
+        returns_promise,
+        receiver = web_api_interfaces::ServiceWorkerRegistration::is_instance,
         callback = service_worker_registration_show_notification_callback,
         length = 1
     )]
@@ -77,6 +79,8 @@ struct ServiceWorkerRegistrationObjectDeclaration<'scope> {
 
     #[webapi(
         method = "getNotifications",
+        returns_promise,
+        receiver = web_api_interfaces::ServiceWorkerRegistration::is_instance,
         callback = service_worker_registration_get_notifications_callback,
         length = 0
     )]
@@ -1293,16 +1297,8 @@ fn service_worker_registration_show_notification_callback<'s>(
     let promise = resolver.get_promise(scope);
     rv.set(promise.into());
 
-    let Some(title) = webidl::required_argument::<webidl::DomString>(
-        scope,
-        &args,
-        0,
-        webidl::Context::argument("ServiceWorkerRegistration.showNotification", 1),
-        "Failed to execute 'showNotification' on 'ServiceWorkerRegistration': 1 argument required, but only 0 present.",
-    ) else {
-        return;
-    };
-    let Some(options) = crate::context_bootstrap::notification_options_payload(scope, args.get(1))
+    let Some((title, options)) =
+        crate::context_bootstrap::notification_options_payload(scope, &args)
     else {
         return;
     };
@@ -1333,7 +1329,7 @@ fn service_worker_registration_show_notification_callback<'s>(
     }
     if !host.show_service_worker_notification(
         &scope_url,
-        title.0,
+        title,
         options.tag,
         options.metadata,
         options.actions,

@@ -2,6 +2,7 @@ mod abort_signal_events;
 mod callback_execution;
 mod error_reporting_guard;
 mod event_target_prototype;
+mod notification_init;
 mod request_init;
 mod text_codecs;
 use std::pin::pin;

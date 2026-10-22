@@ -2267,6 +2267,20 @@ async fn navigator_service_worker_show_notification_records_clickable_notificati
     )
     .await;
 
+    vm.eval(&format!(
+        "globalThis.__notificationDictionaryResult='pending'; ({})(globalThis.__serviceWorkerShowRegistration).then(value=>__notificationDictionaryResult=value,error=>__notificationDictionaryResult=String(error.stack||error));",
+        include_str!("../../../../../../tests/fixtures/notification-persistent-dictionary.js"),
+    ))
+    .expect("notification dictionary fixture should start on a real Window registration");
+    drain_service_worker_test_until_eval_equals(
+        &mut vm,
+        &browser_context_runtime,
+        &loader,
+        "String(globalThis.__notificationDictionaryResult)",
+        "true",
+    )
+    .await;
+
     vm.set_permission_overrides(&[crate::protocol_types::PermissionOverrideRegistration {
         permission: serde_json::Value::String("notifications".to_owned()),
         setting: "granted".to_owned(),
