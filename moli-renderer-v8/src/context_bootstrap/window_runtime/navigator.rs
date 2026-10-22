@@ -343,11 +343,83 @@ struct CacheRequestInfo {
     headers: Vec<(String, String)>,
 }
 
-#[derive(Debug, Default)]
+// Convert the union during IDL conversion; read native state and resolve the
+// URL after every query option has been converted.
+enum CacheRequestInput<'s> {
+    Native(v8::Local<'s, v8::Object>),
+    Url(String),
+}
+
+impl<'s> webidl::WebIdlConverter<'s> for CacheRequestInput<'s> {
+    type Options = ();
+
+    fn convert(
+        scope: &mut v8::PinScope<'s, '_>,
+        value: v8::Local<'s, v8::Value>,
+        context: webidl::Context,
+        _: &(),
+    ) -> Result<Self, webidl::WebIdlError> {
+        if let Ok(object) = v8::Local::<v8::Object>::try_from(value)
+            && crate::network_host::is_branded_request_object(scope, object)
+        {
+            return Ok(Self::Native(object));
+        }
+        webidl::convert::<webidl::UsvString>(scope, value, context).map(|value| Self::Url(value.0))
+    }
+}
+
+#[derive(webidl::WebIdlArgs)]
+#[webidl(prefix = "Cache")]
+struct CacheQueryArgs<'s> {
+    #[webidl(required, converter = "raw")]
+    request: CacheRequestInput<'s>,
+    #[webidl(dictionary)]
+    options: CacheQueryOptions,
+}
+
+#[derive(webidl::WebIdlArgs)]
+#[webidl(prefix = "Cache")]
+struct OptionalCacheQueryArgs<'s> {
+    #[webidl(converter = "raw")]
+    request: Option<CacheRequestInput<'s>>,
+    #[webidl(dictionary)]
+    options: CacheQueryOptions,
+}
+
+#[derive(webidl::WebIdlArgs)]
+#[webidl(prefix = "CacheStorage.match")]
+struct CacheStorageQueryArgs<'s> {
+    #[webidl(required, converter = "raw")]
+    request: CacheRequestInput<'s>,
+    #[webidl(dictionary)]
+    options: MultiCacheQueryOptions,
+}
+
+#[derive(webidl::WebIdlArgs)]
+#[webidl(prefix = "Cache.put")]
+struct CachePutArgs<'s> {
+    #[webidl(required, converter = "raw")]
+    request: CacheRequestInput<'s>,
+    #[webidl(required, interface = web_api_interfaces::Response)]
+    response: v8::Local<'s, v8::Object>,
+}
+
+#[derive(Debug, Default, webidl::WebIdlDictionary)]
+#[webidl(prefix = "CacheQueryOptions")]
 struct CacheQueryOptions {
+    #[webidl(default = false)]
     ignore_search: bool,
+    #[webidl(default = false)]
     ignore_method: bool,
+    #[webidl(default = false)]
     ignore_vary: bool,
+}
+
+#[derive(webidl::WebIdlDictionary)]
+#[webidl(prefix = "MultiCacheQueryOptions")]
+struct MultiCacheQueryOptions {
+    #[webidl(inherit)]
+    base: CacheQueryOptions,
     cache_name: Option<String>,
 }
 
@@ -1459,26 +1531,14 @@ fn storage_bucket_cache_storage_match_callback<'s>(
     else {
         return;
     };
-    let request = match cache_request_info_argument(scope, &args, 0) {
-        Ok(Some(request)) => request,
-        Ok(None) => {
-            reject_type_error(
-                scope,
-                resolver,
-                "CacheStorage.match requires a request key.",
-            );
-            return;
-        }
-        Err(error) => {
-            reject_type_error(scope, resolver, &error.to_string());
-            return;
-        }
-    };
-    let Some(options) = cache_query_options(scope, &args, 1) else {
-        reject_type_error(scope, resolver, "CacheStorage.match options are invalid.");
+    let Some(parsed) = cache_arguments::<CacheStorageQueryArgs>(scope, &args, resolver) else {
         return;
     };
-    let query = storage_bucket_cache_query(request, &options);
+    let Some(request) = cache_request_info(scope, parsed.request, resolver) else {
+        return;
+    };
+    let options = parsed.options;
+    let query = storage_bucket_cache_query(request, &options.base);
     let Some(handle) =
         storage_bucket_cache_storage_live_handle(scope, args.this(), resolver, "match")
     else {
@@ -1642,26 +1702,18 @@ fn storage_bucket_cache_put_callback<'s>(
     let Some(resolver) = storage_bucket_cache_resolver(scope, &args, &mut rv, "put") else {
         return;
     };
-    let request = match cache_request_info_argument(scope, &args, 0) {
-        Ok(Some(request)) => request,
-        Ok(None) => {
-            reject_type_error(scope, resolver, "Cache.put requires a request key.");
-            return;
-        }
-        Err(error) => {
-            reject_type_error(scope, resolver, &error.to_string());
-            return;
-        }
+    let Some(parsed) = cache_arguments::<CachePutArgs>(scope, &args, resolver) else {
+        return;
+    };
+    let Some(request) = cache_request_info(scope, parsed.request, resolver) else {
+        return;
     };
     if !request.method.eq_ignore_ascii_case("GET") {
         reject_type_error(scope, resolver, "Cache.put only accepts GET requests.");
         return;
     }
-    if args.length() <= 1 || args.get(1).is_null_or_undefined() {
-        reject_type_error(scope, resolver, "Cache.put requires a response.");
-        return;
-    }
-    let Some(response) = storage_bucket_cached_response_from_value(scope, args.get(1), resolver)
+    let Some(response) =
+        storage_bucket_cached_response_from_value(scope, parsed.response.into(), resolver)
     else {
         return;
     };
@@ -1989,21 +2041,13 @@ fn storage_bucket_cache_match_callback<'s>(
     let Some(resolver) = storage_bucket_cache_resolver(scope, &args, &mut rv, "match") else {
         return;
     };
-    let request = match cache_request_info_argument(scope, &args, 0) {
-        Ok(Some(request)) => request,
-        Ok(None) => {
-            reject_type_error(scope, resolver, "Cache.match requires a request key.");
-            return;
-        }
-        Err(error) => {
-            reject_type_error(scope, resolver, &error.to_string());
-            return;
-        }
-    };
-    let Some(options) = cache_query_options(scope, &args, 1) else {
-        reject_type_error(scope, resolver, "Cache.match options are invalid.");
+    let Some(parsed) = cache_arguments::<CacheQueryArgs>(scope, &args, resolver) else {
         return;
     };
+    let Some(request) = cache_request_info(scope, parsed.request, resolver) else {
+        return;
+    };
+    let options = parsed.options;
     let query = storage_bucket_cache_query(request, &options);
     let Some(handle) = storage_bucket_cache_live_handle(scope, args.this(), resolver, "match")
     else {
@@ -2048,17 +2092,19 @@ fn storage_bucket_cache_match_all_callback<'s>(
     let Some(resolver) = storage_bucket_cache_resolver(scope, &args, &mut rv, "matchAll") else {
         return;
     };
-    let request = match cache_request_info_argument(scope, &args, 0) {
-        Ok(request) => request,
-        Err(error) => {
-            reject_type_error(scope, resolver, &error.to_string());
-            return;
-        }
-    };
-    let Some(options) = cache_query_options(scope, &args, 1) else {
-        reject_type_error(scope, resolver, "Cache.matchAll options are invalid.");
+    let Some(parsed) = cache_arguments::<OptionalCacheQueryArgs>(scope, &args, resolver) else {
         return;
     };
+    let request = match parsed.request {
+        Some(input) => {
+            let Some(request) = cache_request_info(scope, input, resolver) else {
+                return;
+            };
+            Some(request)
+        }
+        None => None,
+    };
+    let options = parsed.options;
     let query = request.map(|request| storage_bucket_cache_query(request, &options));
     let Some(handle) = storage_bucket_cache_live_handle(scope, args.this(), resolver, "matchAll")
     else {
@@ -2119,17 +2165,19 @@ fn storage_bucket_cache_keys_callback<'s>(
     let Some(resolver) = storage_bucket_cache_resolver(scope, &args, &mut rv, "keys") else {
         return;
     };
-    let request = match cache_request_info_argument(scope, &args, 0) {
-        Ok(request) => request,
-        Err(error) => {
-            reject_type_error(scope, resolver, &error.to_string());
-            return;
-        }
-    };
-    let Some(options) = cache_query_options(scope, &args, 1) else {
-        reject_type_error(scope, resolver, "Cache.keys options are invalid.");
+    let Some(parsed) = cache_arguments::<OptionalCacheQueryArgs>(scope, &args, resolver) else {
         return;
     };
+    let request = match parsed.request {
+        Some(input) => {
+            let Some(request) = cache_request_info(scope, input, resolver) else {
+                return;
+            };
+            Some(request)
+        }
+        None => None,
+    };
+    let options = parsed.options;
     let query = request.map(|request| storage_bucket_cache_query(request, &options));
     let Some(handle) = storage_bucket_cache_live_handle(scope, args.this(), resolver, "keys")
     else {
@@ -2173,21 +2221,13 @@ fn storage_bucket_cache_delete_callback<'s>(
     let Some(resolver) = storage_bucket_cache_resolver(scope, &args, &mut rv, "delete") else {
         return;
     };
-    let request = match cache_request_info_argument(scope, &args, 0) {
-        Ok(Some(request)) => request,
-        Ok(None) => {
-            reject_type_error(scope, resolver, "Cache.delete requires a request key.");
-            return;
-        }
-        Err(error) => {
-            reject_type_error(scope, resolver, &error.to_string());
-            return;
-        }
-    };
-    let Some(options) = cache_query_options(scope, &args, 1) else {
-        reject_type_error(scope, resolver, "Cache.delete options are invalid.");
+    let Some(parsed) = cache_arguments::<CacheQueryArgs>(scope, &args, resolver) else {
         return;
     };
+    let Some(request) = cache_request_info(scope, parsed.request, resolver) else {
+        return;
+    };
+    let options = parsed.options;
     let query = storage_bucket_cache_query(request, &options);
     let Some(handle) = storage_bucket_cache_live_handle(scope, args.this(), resolver, "delete")
     else {
@@ -2804,88 +2844,62 @@ fn storage_bucket_cached_response_from_head_body(
     }
 }
 
-fn cache_request_info_argument<'s>(
+fn cache_request_info<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    input: CacheRequestInput<'s>,
+    resolver: v8::Local<'s, v8::PromiseResolver>,
+) -> Option<CacheRequestInfo> {
+    match input {
+        CacheRequestInput::Native(object) => {
+            let Some(url) = crate::network_host::request_slot_string(
+                scope,
+                object,
+                crate::network_host::REQUEST_URL_SLOT,
+            ) else {
+                reject_type_error(scope, resolver, "Cache request URL is unavailable.");
+                return None;
+            };
+            Some(CacheRequestInfo {
+                url,
+                method: crate::network_host::request_method(scope, object),
+                headers: crate::network_host::request_headers_entries(scope, object),
+            })
+        }
+        CacheRequestInput::Url(input) => {
+            match crate::network_host::try_resolve_request_constructor_url(scope, &input) {
+                Ok(url) => Some(CacheRequestInfo {
+                    url,
+                    method: "GET".to_owned(),
+                    headers: Vec::new(),
+                }),
+                Err(error) => {
+                    reject_type_error(scope, resolver, &error.to_string());
+                    None
+                }
+            }
+        }
+    }
+}
+
+fn cache_arguments<'s, T: webidl::WebIdlArguments<'s>>(
     scope: &mut v8::PinScope<'s, '_>,
     args: &v8::FunctionCallbackArguments<'s>,
-    index: i32,
-) -> Result<Option<CacheRequestInfo>, crate::network_host::RequestUrlError> {
-    if args.length() <= index {
-        return Ok(None);
+    resolver: v8::Local<'s, v8::PromiseResolver>,
+) -> Option<T> {
+    let try_catch = std::pin::pin!(v8::TryCatch::new(scope));
+    let mut scope = try_catch.init();
+    match webidl::try_parse_args::<T>(&mut scope, args) {
+        Ok(parsed) => Some(parsed),
+        Err(error) => {
+            webidl::throw_error(&mut scope, &error);
+            let exception = scope
+                .exception()
+                .unwrap_or_else(|| v8::undefined(&scope).into());
+            scope.reset();
+            let _ = resolver.reject(&scope, exception);
+            None
+        }
     }
-    let value = args.get(index);
-    if let Ok(object) = v8::Local::<v8::Object>::try_from(value)
-        && crate::network_host::is_branded_request_object(scope, object)
-        && let Some(url) = crate::network_host::request_slot_string(
-            scope,
-            object,
-            crate::network_host::REQUEST_URL_SLOT,
-        )
-    {
-        let method = crate::network_host::request_method(scope, object);
-        let headers = crate::network_host::request_headers_entries(scope, object);
-        return Ok(Some(CacheRequestInfo {
-            url,
-            method,
-            headers,
-        }));
-    }
-    let Some(input) = value
-        .to_string(scope)
-        .map(|value| value.to_rust_string_lossy(scope))
-    else {
-        return Ok(None);
-    };
-    crate::network_host::try_resolve_request_constructor_url(scope, &input).map(|url| {
-        Some(CacheRequestInfo {
-            url,
-            method: "GET".to_owned(),
-            headers: Vec::new(),
-        })
-    })
-}
-
-fn cache_query_options<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    args: &v8::FunctionCallbackArguments<'s>,
-    index: i32,
-) -> Option<CacheQueryOptions> {
-    if args.length() <= index || args.get(index).is_null_or_undefined() {
-        return Some(CacheQueryOptions::default());
-    }
-    let options = args.get(index).to_object(scope)?;
-    let cache_name = cache_query_cache_name_option(scope, options)?;
-    let ignore_method = cache_query_boolean_option(scope, options, "ignoreMethod")?;
-    let ignore_search = cache_query_boolean_option(scope, options, "ignoreSearch")?;
-    let ignore_vary = cache_query_boolean_option(scope, options, "ignoreVary")?;
-    Some(CacheQueryOptions {
-        ignore_search,
-        ignore_method,
-        ignore_vary,
-        cache_name,
-    })
-}
-
-fn cache_query_boolean_option(
-    scope: &mut v8::PinScope<'_, '_>,
-    options: v8::Local<'_, v8::Object>,
-    name: &str,
-) -> Option<bool> {
-    options
-        .get(scope, v8_string(scope, name)?.into())
-        .map(|value| value.boolean_value(scope))
-}
-
-fn cache_query_cache_name_option(
-    scope: &mut v8::PinScope<'_, '_>,
-    options: v8::Local<'_, v8::Object>,
-) -> Option<Option<String>> {
-    let value = options.get(scope, v8str(scope, "cacheName").into())?;
-    if value.is_undefined() {
-        return Some(None);
-    }
-    value
-        .to_string(scope)
-        .map(|value| Some(value.to_rust_string_lossy(scope)))
 }
 
 fn storage_bucket_cache_query(
