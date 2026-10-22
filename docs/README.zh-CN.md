@@ -242,7 +242,7 @@ Moli 是一个独立的浏览器内核，而不是对 Chromium 的封装。它�
 
 | 方法 | 通过任务数 | 通过率 |
 | --- | ---: | ---: |
-| Moli 开发版（含 WebFetch 修复） | **384/430** | **89.30%** |
+| Moli 开发版（含 WebFetch 修复） | **385/430** | **89.53%** |
 | Chrome for Testing 155.0.8059.39 | 233/430 | 54.19% |
 | Lightpanda 1.0.0 | 227/430 | 52.79% |
 | Obscura 0.2.4 | 222/430 | 51.63% |
@@ -252,7 +252,7 @@ Moli 是一个独立的浏览器内核，而不是对 Chromium 的封装。它�
 
 题目取自 [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch) 的评测套件；[`browser-eval`](https://github.com/lexmount/browser-eval) 负责组装和修订 430 道题的集合，并执行评测和生成报告。
 
-[完整报告、任务要求及失败证据](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_494ef0fafb1a4529ab3c28762b7c3ca6)
+[完整报告、任务要求及失败证据](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_7c1cd4072edf4403a8ec3c64205f878f)
 
 </details>
 

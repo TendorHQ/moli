@@ -242,7 +242,7 @@ Moli は、Chromium を外から操作するだけの仕組みではなく、独
 
 | 方式 | 合格タスク数 | 合格率 |
 | --- | ---: | ---: |
-| Moli 開発ビルド（WebFetch 修正を含む） | **384/430** | **89.30%** |
+| Moli 開発ビルド（WebFetch 修正を含む） | **385/430** | **89.53%** |
 | Chrome for Testing 155.0.8059.39 | 233/430 | 54.19% |
 | Lightpanda 1.0.0 | 227/430 | 52.79% |
 | Obscura 0.2.4 | 222/430 | 51.63% |
@@ -252,7 +252,7 @@ Moli は、Chromium を外から操作するだけの仕組みではなく、独
 
 タスクは [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch) の各スイートから採用しています。[`browser-eval`](https://github.com/lexmount/browser-eval) が 430 タスクを編成、修正、実行し、レポートを生成します。
 
-[完全なレポート、タスク要件と失敗の証拠（中国語）](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_494ef0fafb1a4529ab3c28762b7c3ca6)
+[完全なレポート、タスク要件と失敗の証拠（中国語）](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_7c1cd4072edf4403a8ec3c64205f878f)
 
 </details>
 

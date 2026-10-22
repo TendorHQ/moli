@@ -307,7 +307,7 @@ Chromium/WPT 동작 검사, 대규모 nextest 회귀 테스트 모음을 다룹�
 
 | 방식 | 통과 작업 수 | 통과율 |
 | --- | ---: | ---: |
-| Moli 개발 빌드(WebFetch 수정 포함) | **384/430** | **89.30%** |
+| Moli 개발 빌드(WebFetch 수정 포함) | **385/430** | **89.53%** |
 | Chrome for Testing 155.0.8059.39 | 233/430 | 54.19% |
 | Lightpanda 1.0.0 | 227/430 | 52.79% |
 | Obscura 0.2.4 | 222/430 | 51.63% |
@@ -317,7 +317,7 @@ Chromium/WPT 동작 검사, 대규모 nextest 회귀 테스트 모음을 다룹�
 
 작업은 [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch) 스위트에서 가져옵니다. [`browser-eval`](https://github.com/lexmount/browser-eval)이 430개 작업을 구성하고 수정한 뒤 실행하고 보고서를 만듭니다.
 
-[전체 보고서, 작업 요구사항 및 실패 증거(중국어)](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_494ef0fafb1a4529ab3c28762b7c3ca6).
+[전체 보고서, 작업 요구사항 및 실패 증거(중국어)](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_7c1cd4072edf4403a8ec3c64205f878f).
 
 </details>
 

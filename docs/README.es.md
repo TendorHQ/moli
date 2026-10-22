@@ -244,7 +244,7 @@ Se comparan cinco métodos de Web Fetch con las mismas 430 tareas de siete categ
 
 | Método | Tareas aprobadas | Porcentaje |
 | --- | ---: | ---: |
-| Compilación de desarrollo de Moli (correcciones de WebFetch) | **384/430** | **89.30%** |
+| Compilación de desarrollo de Moli (correcciones de WebFetch) | **385/430** | **89.53%** |
 | Chrome for Testing 155.0.8059.39 | 233/430 | 54.19% |
 | Lightpanda 1.0.0 | 227/430 | 52.79% |
 | Obscura 0.2.4 | 222/430 | 51.63% |
@@ -254,7 +254,7 @@ Las llamadas se realizaron del 9 al 15 de octubre de 2026. La fila de Moli corre
 
 Las tareas proceden de las suites de [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch). [`browser-eval`](https://github.com/lexmount/browser-eval) compone y corrige el conjunto de 430 tareas, lo ejecuta y genera el informe.
 
-[Informe completo, requisitos y evidencias de fallos (en chino)](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_494ef0fafb1a4529ab3c28762b7c3ca6).
+[Informe completo, requisitos y evidencias de fallos (en chino)](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_7c1cd4072edf4403a8ec3c64205f878f).
 
 </details>
 

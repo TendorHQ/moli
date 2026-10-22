@@ -318,7 +318,7 @@ Five web-fetch methods are compared on the same 430 tasks across seven families.
 
 | Method | Tasks passed | Pass rate |
 | --- | ---: | ---: |
-| Moli development build (WebFetch fixes) | **384/430** | **89.30%** |
+| Moli development build (WebFetch fixes) | **385/430** | **89.53%** |
 | Chrome for Testing 155.0.8059.39 | 233/430 | 54.19% |
 | Lightpanda 1.0.0 | 227/430 | 52.79% |
 | Obscura 0.2.4 | 222/430 | 51.63% |
@@ -328,7 +328,7 @@ Calls were made from October 9 to 15, 2026. The Moli row is an unreleased develo
 
 Tasks are drawn from the [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch) suites. [`browser-eval`](https://github.com/lexmount/browser-eval) assembles and corrects the 430-task cohort, runs it, and builds the report.
 
-[Full report, task contracts and failure evidence (Chinese)](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_494ef0fafb1a4529ab3c28762b7c3ca6).
+[Full report, task contracts and failure evidence (Chinese)](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_7c1cd4072edf4403a8ec3c64205f878f).
 
 </details>
 

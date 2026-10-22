@@ -243,7 +243,7 @@ Fünf Web-Fetch-Methoden werden anhand derselben 430 Aufgaben aus sieben Kategor
 
 | Methode | Bestandene Aufgaben | Erfolgsquote |
 | --- | ---: | ---: |
-| Moli-Entwicklungsbuild (WebFetch-Korrekturen) | **384/430** | **89.30%** |
+| Moli-Entwicklungsbuild (WebFetch-Korrekturen) | **385/430** | **89.53%** |
 | Chrome for Testing 155.0.8059.39 | 233/430 | 54.19% |
 | Lightpanda 1.0.0 | 227/430 | 52.79% |
 | Obscura 0.2.4 | 222/430 | 51.63% |
@@ -253,7 +253,7 @@ Die Aufrufe liefen vom 9. bis 15. Oktober 2026. Die Moli-Zeile zeigt einen unver
 
 Die Aufgaben stammen aus den Suiten von [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch). [`browser-eval`](https://github.com/lexmount/browser-eval) stellt die 430 Aufgaben zusammen, korrigiert sie, führt sie aus und erstellt den Bericht.
 
-[Vollständiger Bericht, Aufgaben und Fehlernachweise (Chinesisch)](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_494ef0fafb1a4529ab3c28762b7c3ca6).
+[Vollständiger Bericht, Aufgaben und Fehlernachweise (Chinesisch)](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_7c1cd4072edf4403a8ec3c64205f878f).
 
 </details>
 
