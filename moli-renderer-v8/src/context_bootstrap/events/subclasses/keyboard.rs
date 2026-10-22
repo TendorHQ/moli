@@ -22,6 +22,10 @@ struct KeyboardEventInitMembers {
     location: u32,
     #[webidl(default = false)]
     repeat: bool,
+    // Retain the existing KeyboardEvent legacy input without adding a member
+    // to UIEventInit or reading it for unrelated UI event subclasses.
+    #[webidl(default = 0)]
+    which: u32,
 }
 
 impl Default for KeyboardEventInitMembers {
@@ -34,6 +38,7 @@ impl Default for KeyboardEventInitMembers {
             key_code: 0,
             location: 0,
             repeat: false,
+            which: 0,
         }
     }
 }

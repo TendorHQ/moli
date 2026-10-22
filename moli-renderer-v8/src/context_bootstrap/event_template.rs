@@ -167,6 +167,9 @@ struct FormDataEventTemplateAccessorsDeclaration {
 #[derive(WebApiFunctionTemplate)]
 #[webapi(interface = web_api_interfaces::UIEvent, enumerable, receiver)]
 struct UiEventTemplateMethodsDeclaration {
+    #[webapi(accessor_property, getter = event_platform_attribute_getter, data = crate::util::v8str(scope, "sourceCapabilities"))]
+    source_capabilities: (),
+
     #[webapi(accessor_property = "view", getter = event_platform_attribute_getter, data = crate::util::v8str(scope, "view"))]
     view: (),
     #[webapi(accessor_property = "detail", getter = event_value_attribute_getter, data = crate::util::v8str(scope, "detail"))]

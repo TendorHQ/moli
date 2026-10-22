@@ -31,7 +31,6 @@ fn event_subclass_constructor_callback<'s>(
     }
 
     let wrapper = args.this();
-    let event = new_event_state(scope);
     let Some(event_type) = event_type_argument(scope, &args, kind.constructor_name()) else {
         return;
     };
@@ -42,6 +41,21 @@ fn event_subclass_constructor_callback<'s>(
         } else {
             init_arg.to_object(scope)
         }
+    };
+    let basic_event_init = if matches!(
+        kind,
+        EventSubclassKind::UiEvent
+            | EventSubclassKind::FocusEvent
+            | EventSubclassKind::TextEvent
+            | EventSubclassKind::CompositionEvent
+            | EventSubclassKind::CustomEvent
+    ) {
+        let Some(init) = basic::BasicEventInit::parse(scope, &args, kind) else {
+            return;
+        };
+        Some(init)
+    } else {
+        None
     };
     let storage_event_init = if kind == EventSubclassKind::StorageEvent {
         let Some(init) = data::parse_storage_event_init(scope, &args) else {
@@ -84,7 +98,7 @@ fn event_subclass_constructor_callback<'s>(
     } else {
         None
     };
-    let (bubbles, cancelable, composed) = security_policy_init
+    let Some((bubbles, cancelable, composed)) = security_policy_init
         .as_ref()
         .map(security_policy::SecurityPolicyViolationEventInit::event_flags)
         .or_else(|| error_init.as_ref().map(error::ErrorEventInit::event_flags))
@@ -103,7 +117,17 @@ fn event_subclass_constructor_callback<'s>(
                 .as_ref()
                 .map(message::MessageEventInit::event_flags)
         })
-        .unwrap_or_else(|| read_event_init(scope, &args));
+        .or_else(|| {
+            basic_event_init
+                .as_ref()
+                .map(basic::BasicEventInit::event_flags)
+        })
+        .or_else(|| read_event_init(scope, &args))
+    else {
+        return;
+    };
+
+    let event = new_event_state(scope);
 
     initialize_event_object_with_type(scope, event, event_type, bubbles, cancelable);
     define_event_property(
@@ -114,27 +138,15 @@ fn event_subclass_constructor_callback<'s>(
     );
 
     match kind {
-        EventSubclassKind::UiEvent => {
-            if !basic::initialize_ui_event(scope, event, init) {
-                return;
-            }
+        EventSubclassKind::UiEvent
+        | EventSubclassKind::FocusEvent
+        | EventSubclassKind::TextEvent
+        | EventSubclassKind::CompositionEvent
+        | EventSubclassKind::CustomEvent => {
+            basic_event_init
+                .expect("basic event init is parsed")
+                .initialize(scope, event);
         }
-        EventSubclassKind::FocusEvent => {
-            if !basic::initialize_focus_event(scope, event, init) {
-                return;
-            }
-        }
-        EventSubclassKind::TextEvent => {
-            if !basic::initialize_text_event(scope, event, init) {
-                return;
-            }
-        }
-        EventSubclassKind::CompositionEvent => {
-            if !basic::initialize_composition_event(scope, event, init) {
-                return;
-            }
-        }
-        EventSubclassKind::CustomEvent => basic::initialize_custom_event(scope, event, init),
         EventSubclassKind::MouseEvent => {
             if !pointer::initialize_mouse_event(scope, event, init) {
                 return;

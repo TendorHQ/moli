@@ -5,6 +5,7 @@ mod abort_signal_events;
 mod abort_signal_statics;
 mod adopted_style_sheets;
 mod bar_prop;
+mod basic_event_init;
 mod broadcast_channel;
 mod chrome;
 mod clipboard_storage;

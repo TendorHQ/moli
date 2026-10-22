@@ -112,17 +112,7 @@ pub(super) fn init_window_view_property<'s>(
 pub(super) fn read_event_init<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     args: &v8::FunctionCallbackArguments<'s>,
-) -> (bool, bool, bool) {
-    parse_event_init(scope, webidl::optional_object_arg(args, 1)).unwrap_or((false, false, false))
-}
-
-pub(in crate::context_bootstrap) fn parse_event_init<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) -> Result<(bool, bool, bool), webidl::WebIdlError> {
-    let Some(init) = init else {
-        return Ok((false, false, false));
-    };
-    webidl::parse_dictionary_object::<EventInit>(scope, init)
-        .map(|parsed| (parsed.bubbles, parsed.cancelable, parsed.composed))
+) -> Option<(bool, bool, bool)> {
+    parse_event_dictionary::<EventInit>(scope, args, "Event")
+        .map(|init| (init.bubbles, init.cancelable, init.composed))
 }

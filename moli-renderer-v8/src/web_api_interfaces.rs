@@ -313,6 +313,7 @@ interfaces! {
     MathMLElement: Element;
     MediaCapabilities;
     MediaDeviceInfo;
+    InputDeviceCapabilities;
     InputDeviceInfo: MediaDeviceInfo;
     MediaStreamTrack: EventTarget;
     CanvasCaptureMediaStreamTrack: MediaStreamTrack;
