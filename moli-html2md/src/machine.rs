@@ -353,9 +353,8 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
     fn media(&mut self, node: D::NodeId, tag: &str, depth: usize) -> bool {
         let urls = crate::media::sources(self.dom, node, tag, depth, self.options.max_depth);
         let poster = (tag == "video")
-            .then(|| self.dom.attribute(node, "poster"))
-            .flatten()
-            .filter(|src| !src.trim().is_empty() && crate::media::safe_url(src, true));
+            .then(|| crate::media::direct_attribute(self.dom, node, "poster", true))
+            .flatten();
         if urls.is_empty() && poster.is_none() {
             return false;
         }
