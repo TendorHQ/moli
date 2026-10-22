@@ -355,7 +355,7 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
         let poster = (tag == "video")
             .then(|| self.dom.attribute(node, "poster"))
             .flatten()
-            .filter(|src| !src.is_empty() && crate::media::safe_url(src, true));
+            .filter(|src| !src.trim().is_empty() && crate::media::safe_url(src, true));
         if urls.is_empty() && poster.is_none() {
             return false;
         }
