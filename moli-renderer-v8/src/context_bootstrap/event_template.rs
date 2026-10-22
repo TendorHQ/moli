@@ -314,6 +314,9 @@ struct KeyboardEventTemplateMethodsDeclaration {
 #[derive(WebApiFunctionTemplate)]
 #[webapi(interface = web_api_interfaces::MouseEvent, enumerable, receiver)]
 struct MouseEventTemplateMethodsDeclaration {
+    #[webapi(method = "getModifierState", length = 1, callback = event_get_modifier_state_callback)]
+    get_modifier_state: (),
+
     #[webapi(
         accessor_property = "relatedTarget",
         getter = mouse_event_related_target_getter_function
@@ -331,8 +334,15 @@ struct MouseEventTemplateMethodsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::WheelEvent, enumerable)]
+#[webapi(interface = web_api_interfaces::WheelEvent, enumerable, receiver)]
 struct WheelEventTemplateConstantsDeclaration {
+    #[webapi(accessor_property, getter = event_value_attribute_getter, data = crate::util::v8str(scope, "wheelDeltaX"))]
+    wheel_delta_x: (),
+    #[webapi(accessor_property, getter = event_value_attribute_getter, data = crate::util::v8str(scope, "wheelDeltaY"))]
+    wheel_delta_y: (),
+    #[webapi(accessor_property, getter = event_value_attribute_getter, data = crate::util::v8str(scope, "wheelDelta"))]
+    wheel_delta: (),
+
     #[webapi(constant = "DOM_DELTA_PIXEL", value = 0u32)]
     dom_delta_pixel: (),
 
@@ -346,6 +356,9 @@ struct WheelEventTemplateConstantsDeclaration {
 #[derive(WebApiFunctionTemplate)]
 #[webapi(interface = web_api_interfaces::PointerEvent, enumerable, receiver)]
 struct PointerEventTemplateMethodsDeclaration {
+    #[webapi(accessor_property, getter = event_value_attribute_getter, data = crate::util::v8str(scope, "persistentDeviceId"))]
+    persistent_device_id: (),
+
     #[webapi(
         method = "getPredictedEvents",
         length = 0,

@@ -21,10 +21,8 @@ fn pointer_event_interface_sequences_preserve_backing_checks_and_getter_order() 
             get view() {order.push('view'); return null;}
           });
           assert(event.getCoalescedEvents()[0] === foreign && event.getPredictedEvents()[0] === foreign, 'cross realm backing identity');
-          assert(order.indexOf('bubbles') < order.indexOf('pointerType') &&
-            order.indexOf('pointerType') < order.indexOf('coalesced') &&
-            order.indexOf('coalesced') < order.indexOf('predicted') &&
-            order.indexOf('predicted') < order.indexOf('view'), 'sequence conversion position: ' + order);
+          assert(order.join() === 'bubbles,view,coalesced,pointerType,predicted',
+            'inherited UI members precede lexical pointer members: ' + order);
           let reads = 0, closes = 0;
           let error;
           try {
@@ -37,7 +35,22 @@ fn pointer_event_interface_sequences_preserve_backing_checks_and_getter_order() 
               get view() {reads++; throw 'late view';}
             });
           } catch (caught) {error = caught;}
-          assert(error instanceof child.TypeError && reads === 1 && closes === 0, 'backing rejection must stop before later fields');
+          assert(error === 'late view' && reads === 1 && closes === 0,
+            'ancestor conversion failure must precede the pointer sequence');
+          reads = 0;
+          const conversionOrder = [];
+          try {
+            new child.PointerEvent('pointermove', {
+              get view() {conversionOrder.push('view'); return null;},
+              coalescedEvents: {[Symbol.iterator]() {return {
+                next() {reads++; conversionOrder.push('next'); return {done:false,value:new Event('invalid')};},
+                return() {closes++; return {done:true};}
+              };}},
+              get predictedEvents() {reads++; throw 'late predicted';}
+            });
+          } catch (caught) {error=caught;}
+          assert(error instanceof child.TypeError && reads === 1 && closes === 0 &&
+            conversionOrder.join() === 'view,next', 'backing rejection must stop before later pointer fields');
           return 'ok';
         })()
     "#).unwrap();

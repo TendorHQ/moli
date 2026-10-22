@@ -57,6 +57,20 @@ fn event_subclass_constructor_callback<'s>(
     } else {
         None
     };
+    let pointer_event_init = if matches!(
+        kind,
+        EventSubclassKind::MouseEvent
+            | EventSubclassKind::WheelEvent
+            | EventSubclassKind::PointerEvent
+            | EventSubclassKind::DragEvent
+    ) {
+        let Some(init) = pointer::PointerEventInitPayload::parse(scope, &args, kind) else {
+            return;
+        };
+        Some(init)
+    } else {
+        None
+    };
     let storage_event_init = if kind == EventSubclassKind::StorageEvent {
         let Some(init) = data::parse_storage_event_init(scope, &args) else {
             return;
@@ -122,6 +136,11 @@ fn event_subclass_constructor_callback<'s>(
                 .as_ref()
                 .map(basic::BasicEventInit::event_flags)
         })
+        .or_else(|| {
+            pointer_event_init
+                .as_ref()
+                .map(pointer::PointerEventInitPayload::event_flags)
+        })
         .or_else(|| read_event_init(scope, &args))
     else {
         return;
@@ -147,15 +166,13 @@ fn event_subclass_constructor_callback<'s>(
                 .expect("basic event init is parsed")
                 .initialize(scope, event);
         }
-        EventSubclassKind::MouseEvent => {
-            if !pointer::initialize_mouse_event(scope, event, init) {
-                return;
-            }
-        }
-        EventSubclassKind::DragEvent => {
-            if !data::initialize_drag_event(scope, event, init) {
-                return;
-            }
+        EventSubclassKind::MouseEvent
+        | EventSubclassKind::WheelEvent
+        | EventSubclassKind::PointerEvent
+        | EventSubclassKind::DragEvent => {
+            pointer_event_init
+                .expect("pointing event init is parsed")
+                .initialize(scope, event);
         }
         EventSubclassKind::ClipboardEvent => {
             data::initialize_clipboard_event(scope, event, init);
@@ -173,16 +190,6 @@ fn event_subclass_constructor_callback<'s>(
             );
         }
         EventSubclassKind::InputEvent => data::initialize_input_event(scope, event, init),
-        EventSubclassKind::WheelEvent => {
-            if !pointer::initialize_wheel_event(scope, event, init) {
-                return;
-            }
-        }
-        EventSubclassKind::PointerEvent => {
-            if !pointer::initialize_pointer_event(scope, event, init) {
-                return;
-            }
-        }
         EventSubclassKind::TouchEvent => {
             crate::context_bootstrap::touch_runtime::initialize_touch_event(scope, event, init);
         }

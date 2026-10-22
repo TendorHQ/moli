@@ -47,6 +47,7 @@ mod performance_memory;
 mod platform_identity;
 mod pointer_capture;
 mod pointer_lock;
+mod pointing_event_init;
 mod popup_hyperlinks;
 mod promise_rejection;
 mod rtc_error;
