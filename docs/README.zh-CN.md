@@ -235,14 +235,38 @@ Moli 是一个独立的浏览器内核，而不是对 Chromium 的封装。它�
 
 | 评测方式 | 评测集 | 指标 |
 | --- | --- | --- |
+| Web Fetch 任务 | [LexBench WebFetch](https://github.com/lexmount/lexbench-webfetch) · 七类场景，共 430 道任务 | 题目要求是否满足 |
 | 网页内容提取 | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 份 HTML 快照及正文参考 | 正文、代码、公式、表格保真度 |
 | 浏览器自动化 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · 1,308 项浏览器操作与 Web 测试 | 操作与功能测试通过率 |
 | CPU 与内存开销 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · 557 项 CDP/Web 任务中四个本地浏览器共同完成的部分 | CPU 时间、内存峰值 |
 | 标准与回归测试 | 选定的 [WPT](https://github.com/web-platform-tests/wpt) 测试与 [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) 回归测试 | 测试通过项数、功能回退 |
 
-### Web Fetch：545 页内容提取
+### 网页内容提取
 
-以下为内容修复开发构建的历史测量。Moli 在全部 545 个测试页面中提取到正文，综合相似度（五项均值）为 39.27%，在五种方法中最高，比 Lightpanda 高 4.27 个百分点。代码保留也排名第一，相似度为 91.06%，比第二名高 6.35 个百分点。五种方法处理相同的 HTML 快照，提取结果与人工整理的正文参考进行比较。
+<details open>
+<summary><strong>LexBench WebFetch · 430 道任务</strong></summary>
+
+五种 Web Fetch 方法使用相同的 430 道任务，覆盖七类场景。只有返回的正文、结构、资源地址或文件字节满足题目要求，才算通过。
+
+| 方法 | 通过任务数 | 通过率 |
+| --- | ---: | ---: |
+| Moli 1.1.17（修复版结果） | **385/430** | **89.53%** |
+| Chromium 155.0.8059.39 | 234/430 | 54.42% |
+| Lightpanda 1.0.0 | 229/430 | 53.26% |
+| Obscura 0.2.4 | 223/430 | 51.86% |
+| Kitesurf (托管服务) | 192/430 | 44.65% |
+
+评测日期为 2026 年 10 月 15 日。固定版本的报告记录了 Moli 的准确构建信息和全部逐题结果。
+
+题目定义由 [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch) 维护，执行与报告工具由 [`browser-eval`](https://github.com/lexmount/browser-eval) 维护。
+
+[完整报告、任务要求及失败证据](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo).
+
+</details>
+
+### WebMainBench：545 页快照的内容提取
+
+下表是 Moli 内容修复开发构建的历史测量，不是已发布版本的成绩。五种方法处理相同的 545 份 HTML 快照，与人工整理的正文参考比较。该构建在全部页面中提取到正文，综合相似度（五项均值）为 39.27%，代码相似度为 91.06%，两项均为五种方法中最高。
 
 | 方法 | 生成正文 | 综合 | 全文 | 代码 | 公式 | 表格内容 | 表格结构 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -252,34 +276,7 @@ Moli 是一个独立的浏览器内核，而不是对 Chromium 的封装。它�
 | Chrome for Testing 154.0.8037.57 | 545/545 | 27.02% | 39.40% | 35.86% | 21.12% | **25.01%** | 13.73% |
 | Kitesurf（托管服务） | 524/545 | 33.43% | 36.99% | 80.70% | 19.32% | 18.25% | 11.87% |
 
-[用 browser-eval 复现](https://github.com/lexmount/browser-eval)。Moli 实测提交：[`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe)。
-
-### 浏览器自动化
-
-[Lexbench-Headless-Browser](https://github.com/lexmount/Lexbench-Headless-Browser) 的完整任务集包含 1,928 道任务，覆盖裸 CDP、Playwright、Puppeteer、Selenium 等 13 个固定版本的自动化工具及 Web 平台语义。下图比较其中 1,308 项测试。出现远程服务接口问题，或无法判断失败来自浏览器还是驱动的工具组，已从五种方法的结果中统一排除，具体范围见下方报告。
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../assets/lexbench-five-engine-caliber-b-dark.jpg">
-  <img alt="五个无头浏览器在 1,308 道可比任务上的成功率：Chrome 99.8%、Moli 81.9%、Kitesurf 62.1%、Lightpanda 53.3%、Obscura 44.9%" src="../assets/lexbench-five-engine-caliber-b-light.jpg" width="100%">
-</picture>
-
-**Moli 0.1.1 通过了 1,071 道任务，成功率为 81.88%**，高于 Kitesurf 的 62.08%、Lightpanda 的 53.29% 和 Obscura 的 44.88%；参照引擎 Chrome 为 99.85%。Kitesurf 以 k=1 运行，未覆盖任务按未通过计，远程服务的复现条件也与本地二进制不同。完整结果见 benchmark 的[五引擎报告](https://github.com/lexmount/Lexbench-Headless-Browser/blob/kitesurf-eval/docs/reports/five-engine-report-20260813.md)。
-
-### CPU 与内存开销
-
-下面的资源结果来自另一轮 Lexbench 测试，使用当时的浏览器版本。
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../assets/lexbench-efficiency-map-dark.jpg">
-  <img alt="四个本地引擎的任务成功率与单题内存峰值中位数：Chrome 99.9%、697 MiB，Moli 80.7%、92 MiB，Lightpanda 43.8%、34 MiB，Obscura 39.5%、39 MiB" src="../assets/lexbench-efficiency-map-light.jpg" width="100%">
-</picture>
-
-Kitesurf 是远程服务，无法测量 CPU、内存和进程数，因此资源对比只覆盖四个本地引擎。在另一轮 557 道任务的测试中，只统计四个引擎都完成的工作。Moli 单题 CPU 中位数为 **100.6 ms**，内存峰值中位数为 **92 MiB**；Chrome 分别为 **687 ms** 和 **697 MiB**。Moli 的 CPU 时间约为 Chrome 的 15%，内存峰值约为 13%。测试方法和完整数据见 benchmark 的[资源报告](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md)。
-
-<details>
-<summary>补充：单组 Agent 工作负载样例</summary>
-
-这是单组工作负载的测量，不代表所有自动化任务的资源分布。
+[用 browser-eval 复现](https://github.com/lexmount/browser-eval)。Moli 实测提交：[`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe)。 [固定测量配置](https://github.com/lexmount/browser-eval/blob/345ea09370a633e871670fde2de4ec25b53a4d05/evaluation/webmainbench-full/moli-content-fixed-report.json).
 
 ### 智能体工作负载样例
 
@@ -290,13 +287,27 @@ Kitesurf 是远程服务，无法测量 CPU、内存和进程数，因此资源�
 | PSS 峰值 | 102.46 MiB | 348.82 MiB |
 | 进程数 / 线程数峰值 | 1 / 24 | 11 / 123 |
 
-</details>
-
 ### WPT 测试
 
 在目前用于验证 Moli 智能体浏览器功能范围的 WPT 测试集合中，一次完整运行有 **161.2 万项测试通过**。
 
-项目另用 nextest 测试套件检查功能回退。
+### Moli 在 Lexbench-Headless-Browser 评测中的表现
+
+[Lexbench-Headless-Browser](https://github.com/lexmount/Lexbench-Headless-Browser) 的完整任务集包含 1,928 道任务，覆盖裸 CDP、Playwright、Puppeteer、Selenium 等 13 个固定版本的自动化工具及 Web 平台语义。为了加入仅提供远程端点的 Kitesurf，下图采用其中 1,308 道可比任务，所有浏览器使用相同的任务筛选规则。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/lexbench-five-engine-caliber-b-dark.jpg">
+  <img alt="五个无头浏览器在 1,308 道可比任务上的成功率：Chrome 99.8%、Moli 81.9%、Kitesurf 62.1%、Lightpanda 53.3%、Obscura 44.9%" src="../assets/lexbench-five-engine-caliber-b-light.jpg" width="100%">
+</picture>
+
+**Moli 0.1.1 通过了 1,071 道任务，成功率为 81.88%**，高于 Kitesurf 的 62.08%、Lightpanda 的 53.29% 和 Obscura 的 44.88%；参照引擎 Chrome 为 99.85%。Kitesurf 以 k=1 运行，未覆盖任务按未通过计，远程服务的复现条件也与本地二进制不同。完整结果见 benchmark 的[五引擎报告](https://github.com/lexmount/Lexbench-Headless-Browser/blob/kitesurf-eval/docs/reports/five-engine-report-20260813.md)。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/lexbench-efficiency-map-dark.jpg">
+  <img alt="四个本地引擎的任务成功率与单题内存峰值中位数：Chrome 99.9%、697 MiB，Moli 80.7%、92 MiB，Lightpanda 43.8%、34 MiB，Obscura 39.5%、39 MiB" src="../assets/lexbench-efficiency-map-light.jpg" width="100%">
+</picture>
+
+Kitesurf 是远程服务，无法测量 CPU、内存和进程数，因此资源对比只覆盖四个本地引擎。在另一轮 557 道任务的测试中，只统计四个引擎都完成的工作。Moli 单题 CPU 中位数为 **100.6 ms**，内存峰值中位数为 **92 MiB**；Chrome 分别为 **687 ms** 和 **697 MiB**。Moli 的 CPU 时间约为 Chrome 的 15%，内存峰值约为 13%。测试方法和完整数据见 benchmark 的[资源报告](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md)。
 
 ## 项目范围
 
