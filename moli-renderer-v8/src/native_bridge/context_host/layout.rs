@@ -645,11 +645,14 @@ impl JsContextHost {
         document: DomHandle,
         resources: impl IntoIterator<Item = &'a StylesheetLoadBlockingResource>,
     ) {
-        self.document_layout_state.borrow_mut().retain_active_slots(
+        let changed = self.document_layout_state.borrow_mut().retain_active_slots(
             document,
             self.document_handle(),
             resources,
         );
+        if changed {
+            self.invalidate_document_font_layout(document);
+        }
     }
 
     pub(crate) fn admit_document_web_font(

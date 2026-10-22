@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use crate::{css_resource_urls::StylesheetLoadBlockingResource, document_runtime::DomHandle};
 
@@ -94,7 +97,7 @@ impl StylesheetResourceManifest {
     ) -> Self {
         #[cfg(test)]
         STYLESHEET_RESOURCE_MANIFEST_BUILD_COUNT.with(|count| count.set(count.get() + 1));
-        let mut web_fonts = BTreeMap::new();
+        let mut web_fonts = Vec::new();
         let mut imports = BTreeMap::new();
         collect_resources(
             document_stylesheets,
@@ -115,8 +118,22 @@ impl StylesheetResourceManifest {
                 &mut imports,
             );
         }
+        // Slots share resource identity, but priority follows declarations.
+        // Keep the last occurrence when identical rules reuse the same slot.
+        let mut seen = BTreeSet::new();
+        web_fonts.reverse();
+        web_fonts.retain(|resource| {
+            seen.insert(
+                resource
+                    .web_font()
+                    .expect("font resource")
+                    .slot()
+                    .to_owned(),
+            )
+        });
+        web_fonts.reverse();
         Self {
-            web_fonts: web_fonts.into_values().collect::<Vec<_>>().into(),
+            web_fonts: web_fonts.into(),
             imports: imports.into_values().collect::<Vec<_>>().into(),
         }
     }
@@ -137,7 +154,7 @@ fn collect_resources(
     stylesheets: &ActiveStylesheetCollection,
     device: &style::device::Device,
     custom_media: &style::stylesheets::CustomMediaMap,
-    web_fonts: &mut BTreeMap<String, StylesheetLoadBlockingResource>,
+    web_fonts: &mut Vec<StylesheetLoadBlockingResource>,
     imports: &mut BTreeMap<String, url::Url>,
 ) {
     for stylesheet in stylesheets.entries() {
@@ -151,12 +168,9 @@ fn collect_resources(
                 continue;
             }
             let resource = resource.resource();
-            let Some(font) = resource.web_font() else {
-                continue;
-            };
-            web_fonts
-                .entry(font.slot().to_owned())
-                .or_insert_with(|| resource.clone());
+            if resource.web_font().is_some() {
+                web_fonts.push(resource.clone());
+            }
         }
         for import in stylesheet.import_urls() {
             let mut identity = import.clone();

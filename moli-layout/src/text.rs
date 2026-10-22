@@ -709,6 +709,7 @@ pub struct DocumentLayoutServices {
     // Resource slots retain identity across removals and shared FontFaces.
     // Selection priority belongs to this Document's current FontFaceSet.
     web_font_order: BTreeMap<String, (bool, usize)>,
+    has_font_face_set_order: bool,
     pub(crate) text_layout_passes: u64,
 }
 
@@ -727,6 +728,7 @@ impl DocumentLayoutServices {
             system_font_policy: SystemFontPolicy::Enabled,
             web_fonts: BTreeMap::new(),
             web_font_order: BTreeMap::new(),
+            has_font_face_set_order: false,
             text_layout_passes: 0,
         }
     }
@@ -739,6 +741,7 @@ impl DocumentLayoutServices {
             system_font_policy,
             web_fonts: BTreeMap::new(),
             web_font_order: BTreeMap::new(),
+            has_font_face_set_order: false,
             text_layout_passes: 0,
         }
     }
@@ -765,6 +768,7 @@ impl DocumentLayoutServices {
     /// this owner. Unloaded faces keep their place for a later completion.
     /// Returns true only when registered candidates actually change priority.
     pub fn set_web_font_order(&mut self, stylesheet: &[String], manual: &[String]) -> bool {
+        self.has_font_face_set_order = true;
         let order = stylesheet
             .iter()
             .enumerate()
@@ -776,6 +780,25 @@ impl DocumentLayoutServices {
                     .map(|(index, slot)| (slot.clone(), (true, index))),
             )
             .collect::<BTreeMap<_, _>>();
+        self.update_web_font_order(order)
+    }
+
+    /// Publishes native stylesheet order until a JS FontFaceSet is exposed.
+    /// Its complete order also includes local-only CSS faces, which have no
+    /// fetch-manifest entry. Later native fetch updates must preserve it.
+    pub fn set_stylesheet_web_font_order(&mut self, stylesheet: &[String]) -> bool {
+        if self.has_font_face_set_order {
+            return false;
+        }
+        let order = stylesheet
+            .iter()
+            .enumerate()
+            .map(|(index, slot)| (slot.clone(), (false, index)))
+            .collect();
+        self.update_web_font_order(order)
+    }
+
+    fn update_web_font_order(&mut self, order: BTreeMap<String, (bool, usize)>) -> bool {
         if self.web_font_order == order {
             return false;
         }
@@ -895,6 +918,7 @@ impl DocumentLayoutServices {
             system_font_policy: self.system_font_policy,
             web_fonts,
             web_font_order: self.web_font_order.clone(),
+            has_font_face_set_order: self.has_font_face_set_order,
             text_layout_passes: 0,
         };
         let result = consume(&mut temporary);
@@ -1375,6 +1399,48 @@ mod tests {
             .data
             .as_ref()
             .to_vec()
+    }
+
+    #[test]
+    fn stylesheet_fetch_order_preserves_projected_local_font_selection() {
+        let mut services =
+            DocumentLayoutServices::with_system_font_policy(SystemFontPolicy::Disabled);
+        let narrow = include_bytes!("../tests/fixtures/moli-ahem-narrow.ttf");
+        let wide = include_bytes!("../tests/fixtures/moli-ahem-wide.ttf");
+        // Local-only CSS wrappers have a script resource slot rather than a
+        // stylesheet fetch entry. The complete FontFaceSet gives their order.
+        services
+            .register_web_font(WebFontRegistration::new(
+                "local-css",
+                WebFontFace::new("CSS Local Order"),
+                narrow.to_vec(),
+            ))
+            .unwrap();
+        services
+            .register_web_font(
+                WebFontRegistration::new(
+                    "url-css",
+                    WebFontFace::new("CSS Local Order"),
+                    wide.to_vec(),
+                )
+                .with_stylesheet_scope(),
+            )
+            .unwrap();
+        services.set_web_font_order(&["local-css".into(), "url-css".into()], &[]);
+        let selected = |services: &mut DocumentLayoutServices| {
+            shape_one_character(
+                services.parley_mut(),
+                web_font_style("CSS Local Order", 400.0),
+                'A',
+            )
+        };
+        assert_eq!(selected(&mut services), wide);
+        services.set_stylesheet_web_font_order(&["url-css".into(), "new-css".into()]);
+        assert_eq!(selected(&mut services), wide);
+        services.set_web_font_order(&["url-css".into(), "local-css".into()], &[]);
+        assert_eq!(selected(&mut services), narrow);
+        services.set_stylesheet_web_font_order(&["url-css".into()]);
+        assert_eq!(selected(&mut services), narrow);
     }
 
     #[test]

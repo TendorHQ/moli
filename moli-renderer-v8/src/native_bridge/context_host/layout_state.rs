@@ -308,11 +308,17 @@ impl DocumentLayoutState {
         document: DomHandle,
         main_document: DomHandle,
         resources: impl IntoIterator<Item = &'a StylesheetLoadBlockingResource>,
-    ) {
+    ) -> bool {
         if document == main_document {
             return self
                 .web_fonts
                 .retain_active_slots(resources, &mut self.services);
+        }
+        let mut resources = resources.into_iter().peekable();
+        if resources.peek().is_some() {
+            return self.with_web_fonts_for_document(document, main_document, |fonts, services| {
+                fonts.retain_active_slots(resources, services)
+            });
         }
         if let Some(fonts) = self
             .embedded_web_fonts
@@ -320,8 +326,9 @@ impl DocumentLayoutState {
             .and_then(|fonts| fonts.get_mut(&document))
             && let Some(services) = self.embedded_document_services.get_mut(&document)
         {
-            fonts.retain_active_slots(resources, services);
+            return fonts.retain_active_slots(resources, services);
         }
+        false
     }
 
     pub(super) fn admit(

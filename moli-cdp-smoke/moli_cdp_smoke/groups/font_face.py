@@ -5,6 +5,7 @@ from typing import Any
 
 from ..assertions import assert_equal, record_contract
 from ..config import REPO_ROOT
+from .font_face_css_order import run_css_font_order_contract, run_projected_local_font_order_contract
 from .font_face_matching import run_font_matching_contract
 
 
@@ -13,6 +14,8 @@ async def run_font_face_payload_group(
     fixture: str,
     results: list[dict[str, Any]],
 ) -> None:
+    await run_css_font_order_contract(browser, results)
+    await run_projected_local_font_order_contract(browser, results)
     context = await browser.new_context()
     try:
         page = await context.new_page()

@@ -87,20 +87,23 @@ impl DocumentWebFontState {
         &mut self,
         resources: impl IntoIterator<Item = &'a StylesheetLoadBlockingResource>,
         services: &mut DocumentLayoutServices,
-    ) {
-        let active = resources
+    ) -> bool {
+        let order = resources
             .into_iter()
             .filter_map(StylesheetLoadBlockingResource::web_font)
             .map(|font| font.slot().to_owned())
-            .collect::<BTreeSet<_>>();
+            .collect::<Vec<_>>();
+        let active = order.iter().collect::<BTreeSet<_>>();
+        let mut changed = false;
         self.slots.retain(|slot, entry| {
             if active.contains(slot) {
                 return true;
             }
-            entry.load.borrow().unregister(services);
+            changed |= entry.load.borrow().unregister(services);
             false
         });
         self.loads.retain(|_, load| load.strong_count() != 0);
+        changed | services.set_stylesheet_web_font_order(&order)
     }
 
     fn bind_request(
