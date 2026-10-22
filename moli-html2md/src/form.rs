@@ -23,6 +23,9 @@ pub(crate) fn input_text<'a, D: Dom + ?Sized>(dom: &'a D, node: D::NodeId) -> Op
             .filter(|value| !value.is_empty())
             .map(Cow::Borrowed);
     }
+    let button = ["submit", "button", "reset"]
+        .iter()
+        .any(|v| kind.eq_ignore_ascii_case(v));
     let value = (!kind.eq_ignore_ascii_case("password"))
         .then(|| {
             dom.control_value(node)
@@ -31,11 +34,15 @@ pub(crate) fn input_text<'a, D: Dom + ?Sized>(dom: &'a D, node: D::NodeId) -> Op
         .flatten()
         .filter(|value| !value.is_empty())
         .or_else(|| {
-            dom.attribute(node, "aria-label")
+            button
+                .then(|| dom.attribute(node, "aria-label"))
+                .flatten()
                 .filter(|value| !value.is_empty())
         })
         .or_else(|| {
-            dom.attribute(node, "title")
+            button
+                .then(|| dom.attribute(node, "title"))
+                .flatten()
                 .filter(|value| !value.is_empty())
         });
     value.map(Cow::Borrowed)

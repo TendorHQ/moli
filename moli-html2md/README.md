@@ -124,7 +124,7 @@ their labels; password values and hidden or file input values are omitted.
 
 Plain DOM attributes describe the supplied snapshot, including default form
 values and checked state. Browser adapters can expose live attributes and
-`control_value` instead. Placeholder hints are not field values. Empty named
+`control_value` instead. Placeholder hints are not field values. Empty text-entry controls emit no value; button-like
 controls may use accessible labels; generic containers do not acquire text
 from tooltip titles or prohibited names. Child output takes precedence over
 any fallback label. Links retain application protocols while executable

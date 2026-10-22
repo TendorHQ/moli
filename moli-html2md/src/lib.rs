@@ -20,5 +20,4 @@ extern crate self as moli_html2md;
 #[cfg(test)]
 mod copy_tests;
 
-#[doc(hidden)]
 pub use media::{SrcsetCandidate, parse_srcset};

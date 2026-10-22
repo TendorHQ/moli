@@ -56,15 +56,19 @@ fn direct_attribute<'a, D: Dom + ?Sized>(
     })
 }
 
-#[doc(hidden)]
+/// A validated HTML responsive-image candidate. Dimensions are descriptor
+/// values, not an image-selection policy; consumers choose using their viewport.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SrcsetCandidate<'a> {
     pub url: &'a str,
     pub descriptor: &'a str,
-    pub score: f64,
+    pub width: Option<u64>,
+    pub height: Option<u64>,
+    pub density: Option<f64>,
 }
 
-#[doc(hidden)]
+/// Parse HTML srcset syntax, discarding malformed candidates.
+/// Non-ASCII spaces are resource/descriptor characters, not separators.
 pub fn parse_srcset(srcset: &str) -> Vec<SrcsetCandidate<'_>> {
     let bytes = srcset.as_bytes();
     let mut offset = 0;
@@ -92,7 +96,9 @@ pub fn parse_srcset(srcset: &str) -> Vec<SrcsetCandidate<'_>> {
                 candidates.push(SrcsetCandidate {
                     url,
                     descriptor: "",
-                    score: 1.0,
+                    width: None,
+                    height: None,
+                    density: None,
                 });
             }
             continue;
@@ -109,26 +115,27 @@ pub fn parse_srcset(srcset: &str) -> Vec<SrcsetCandidate<'_>> {
             }
             offset += 1;
         }
-        let descriptor = srcset[descriptor_start..offset].trim();
-        let score = if descriptor.is_empty() {
-            Some(1.0)
-        } else {
-            descriptor_score(descriptor)
-        };
-        if let Some(score) = score
+        let descriptor = srcset[descriptor_start..offset].trim_ascii();
+        let parsed = descriptor_values(descriptor);
+        if let Some((width, height, density)) = parsed
             && !url.is_empty()
         {
             candidates.push(SrcsetCandidate {
                 url,
                 descriptor,
-                score,
+                width,
+                height,
+                density,
             });
         }
     }
     candidates
 }
 
-fn descriptor_score(descriptor: &str) -> Option<f64> {
+fn descriptor_values(descriptor: &str) -> Option<(Option<u64>, Option<u64>, Option<f64>)> {
+    if descriptor.is_empty() {
+        return Some((None, None, None));
+    }
     let mut width = None;
     let mut height = None;
     let mut density = None;
@@ -153,8 +160,7 @@ fn descriptor_score(descriptor: &str) -> Option<f64> {
         }
     }
     match (width, height, density) {
-        (Some(width), _, None) => Some(width as f64),
-        (None, None, Some(density)) => Some(density),
+        (Some(_), _, None) | (None, None, Some(_)) => Some((width, height, density)),
         _ => None,
     }
 }
@@ -218,7 +224,16 @@ fn largest_srcset_candidate(srcset: &str, image: bool) -> Option<Cow<'_, str>> {
     parse_srcset(srcset)
         .into_iter()
         .filter(|candidate| safe_url(candidate.url, image))
-        .max_by(|left, right| left.score.total_cmp(&right.score))
+        .max_by(|left, right| {
+            let score = |candidate: &SrcsetCandidate<'_>| {
+                candidate
+                    .width
+                    .map(|v| v as f64)
+                    .or(candidate.density)
+                    .unwrap_or(1.0)
+            };
+            score(left).total_cmp(&score(right))
+        })
         .map(|candidate| Cow::Borrowed(candidate.url))
 }
 
