@@ -193,18 +193,28 @@ pub(in crate::native_bridge) fn normalize_adopted_style_sheets_assignment<'s>(
     owner: AdoptedStyleSheetsArrayOwner,
     target_document: Option<DomHandle>,
 ) -> Option<v8::Local<'s, v8::Array>> {
-    let array = if value.is_null_or_undefined() {
-        v8::Array::new(scope, 0)
-    } else {
-        let Ok(array) = v8::Local::<v8::Array>::try_from(value) else {
-            webidl::throw_type_error(
-                scope,
-                "DocumentOrShadowRoot.adoptedStyleSheets must be an array.",
-            );
-            return None;
-        };
-        array
+    let options = webidl::InterfaceOptions {
+        name: crate::web_api_interfaces::CSSStyleSheet::NAME,
+        brand_check: crate::web_api_interfaces::CSSStyleSheet::is_instance,
     };
+    let sheets = match webidl::convert_with_options::<webidl::Sequence<webidl::InterfaceObject>>(
+        scope,
+        value,
+        webidl::Context::member("DocumentOrShadowRoot", "adoptedStyleSheets"),
+        &options,
+    ) {
+        Ok(sheets) => sheets,
+        Err(error) => {
+            webidl::throw_error(scope, &error);
+            return None;
+        }
+    };
+    let values = sheets
+        .0
+        .into_iter()
+        .map(|sheet| sheet.0.into())
+        .collect::<Vec<_>>();
+    let array = v8::Array::new_with_elements(scope, &values);
     if !validate_adopted_style_sheet_array(scope, array, target_document) {
         return None;
     }
