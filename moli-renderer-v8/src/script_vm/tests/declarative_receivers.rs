@@ -29,8 +29,11 @@ fn webrtc_declarations_validate_foreign_receivers_before_converting_arguments() 
         const channel = pc.createDataChannel('foreign');
         getters(realm, 'RTCPeerConnection', pc, ['signalingState', 'iceGatheringState', 'iceConnectionState',
           'connectionState', 'localDescription', 'currentLocalDescription', 'pendingLocalDescription']);
-        for (const name of ['getConfiguration', 'setConfiguration', 'createDataChannel', 'createOffer', 'setLocalDescription', 'close']) {
+        for (const name of ['getConfiguration', 'setConfiguration', 'createDataChannel', 'close']) {
           check(realm, pc, realm.RTCPeerConnection.prototype[name]);
+        }
+        for (const name of ['createOffer', 'setLocalDescription']) {
+          check(realm, pc, realm.RTCPeerConnection.prototype[name], true);
         }
         assert(realm.RTCPeerConnection.prototype.createDataChannel.call(pc, 'borrowed').label === 'borrowed', 'foreign peer method');
         getters(realm, 'RTCDataChannel', channel, ['label', 'ordered', 'maxPacketLifeTime', 'maxRetransmits',

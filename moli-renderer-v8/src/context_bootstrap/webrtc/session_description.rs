@@ -13,9 +13,9 @@ const DESCRIPTION_TYPE_SLOT: &str = "__moliRtcSessionDescriptionType";
 const DESCRIPTION_SDP_SLOT: &str = "__moliRtcSessionDescriptionSdp";
 const DESCRIPTION_SLOTS: &[&str] = &[DESCRIPTION_TYPE_SLOT, DESCRIPTION_SDP_SLOT];
 
-#[derive(Clone, Copy, webidl::WebIdlEnum)]
+#[derive(Clone, Copy, PartialEq, Eq, webidl::WebIdlEnum)]
 #[webidl(name = "RTCSdpType", rename_all = "kebab-case")]
-enum SdpType {
+pub(super) enum SdpType {
     Offer,
     Pranswer,
     Answer,
@@ -23,14 +23,14 @@ enum SdpType {
 }
 
 // The deprecated data-model constructor allows an omitted type. PeerConnection
-// description algorithms retain their own required description constraints.
+// description algorithms retain their own state and SDP constraints.
 #[derive(webidl::WebIdlDictionary)]
 #[webidl(prefix = "RTCSessionDescriptionInit")]
-struct SessionDescriptionInit<'s> {
+pub(super) struct SessionDescriptionInit<'s> {
     #[webidl(converter = "raw", default = DictionaryDomString::default())]
-    sdp: DictionaryDomString<'s>,
+    pub(super) sdp: DictionaryDomString<'s>,
     #[webidl(converter = "enum")]
-    r#type: Option<SdpType>,
+    pub(super) r#type: Option<SdpType>,
 }
 
 #[derive(webidl::WebIdlArgs)]
@@ -101,6 +101,29 @@ pub(in crate::context_bootstrap) fn rtc_session_description_constructor_callback
         "RTCSessionDescription",
     );
     rv.set(args.this().into());
+}
+
+pub(super) fn native_description<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    kind: SdpType,
+    sdp: v8::Local<'s, v8::String>,
+) -> Option<v8::Local<'s, v8::Object>> {
+    let object = super::super::exposed_interfaces::build_intrinsic_interface_instance(
+        scope,
+        "RTCSessionDescription",
+    )
+    .ok()?;
+    let prototype = super::super::exposed_interfaces::ensure_intrinsic_interface_prototype(
+        scope,
+        "RTCSessionDescription",
+    )
+    .ok()?;
+    object.set_prototype(scope, prototype.into())?;
+    let kind = v8str(scope, webidl::WebIdlEnumSnapshot::snapshot_token(&kind));
+    SessionDescriptionObjectDeclaration::new(kind.into(), sdp)
+        .initialize(scope, object)
+        .ok()?;
+    Some(object)
 }
 
 fn description_attribute_getter<'s>(
