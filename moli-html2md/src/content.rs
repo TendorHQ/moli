@@ -1,20 +1,12 @@
 use crate::{Dom, NodeKind};
+use std::borrow::Cow;
 
 pub(crate) fn fallback_text<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Option<String> {
     if dom
         .attribute(node, "aria-hidden")
         .is_some_and(|v| v.trim().eq_ignore_ascii_case("true"))
         || dom.attribute(node, "hidden").is_some()
-        || dom.attribute(node, "role").is_some_and(|role| {
-            matches!(
-                role.split_ascii_whitespace()
-                    .next()
-                    .unwrap_or_default()
-                    .to_ascii_lowercase()
-                    .as_str(),
-                "none" | "presentation"
-            )
-        })
+        || primary_role(dom, node).is_some_and(|role| role_matches(role, PRESENTATIONAL_ROLES))
     {
         return None;
     }
@@ -22,9 +14,7 @@ pub(crate) fn fallback_text<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Option
         dom.node_kind(node),
         NodeKind::Element(
             "a" | "button"
-                | "img"
                 | "svg"
-                | "input"
                 | "textarea"
                 | "select"
                 | "option"
@@ -37,25 +27,8 @@ pub(crate) fn fallback_text<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Option
                 | "h6"
         )
     );
-    let named_role = dom.attribute(node, "role").is_some_and(|role| {
-        matches!(
-            role.split_ascii_whitespace()
-                .next()
-                .unwrap_or_default()
-                .to_ascii_lowercase()
-                .as_str(),
-            "button"
-                | "link"
-                | "img"
-                | "heading"
-                | "checkbox"
-                | "radio"
-                | "textbox"
-                | "combobox"
-                | "switch"
-                | "tab"
-        )
-    });
+    let named_role =
+        primary_role(dom, node).is_some_and(|role| role_matches(role, NAMED_WIDGET_ROLES));
     if !named_tag && !named_role {
         return None;
     }
@@ -88,4 +61,38 @@ pub(crate) fn fallback_text<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Option
         }
     }
     None
+}
+
+const PRESENTATIONAL_ROLES: &[&str] = &["none", "presentation"];
+const NAMED_WIDGET_ROLES: &[&str] = &[
+    "button", "link", "img", "heading", "checkbox", "radio", "textbox", "combobox", "switch", "tab",
+];
+
+// This structural converter uses the first authored token as a conservative
+// naming hint; it does not implement an accessibility-tree role resolver.
+fn primary_role<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Option<&str> {
+    dom.attribute(node, "role")?.split_ascii_whitespace().next()
+}
+fn role_matches(role: &str, candidates: &[&str]) -> bool {
+    candidates
+        .iter()
+        .any(|candidate| role.eq_ignore_ascii_case(candidate))
+}
+
+pub(crate) fn image_label<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Cow<'_, str> {
+    if let Some(alt) = dom.attribute(node, "alt").filter(|alt| !alt.is_empty()) {
+        return Cow::Borrowed(alt);
+    }
+    if primary_role(dom, node).is_some_and(|role| role_matches(role, PRESENTATIONAL_ROLES)) {
+        return Cow::Borrowed("");
+    }
+    ["aria-label", "title"]
+        .into_iter()
+        .find_map(|name| {
+            dom.attribute(node, name)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        })
+        .map(Cow::Borrowed)
+        .unwrap_or(Cow::Borrowed(""))
 }

@@ -507,7 +507,7 @@ fn body_metadata_does_not_become_article_text() {
         "<svg><title>Chart description</title><text>Revenue</text></svg><title>Template metadata</title>",
         false,
     );
-    assert!(graphic.contains("Chart description"), "{graphic}");
+    assert!(!graphic.contains("Chart description"), "{graphic}");
     assert!(graphic.contains("Revenue"), "{graphic}");
     assert!(!graphic.contains("Template metadata"), "{graphic}");
 }
@@ -576,7 +576,7 @@ fn authored_spaces_between_controls_and_dates_remain_inline() {
 }
 
 #[test]
-fn empty_accessible_element_retains_its_declared_text() {
+fn generic_container_labels_are_not_article_text_but_link_labels_are() {
     let result = markdown(
         "<p>By Reporter</p><div aria-label='Published: 1:16 p.m. Updated: 10:28 a.m.'></div><a href='/search' aria-label='Search'></a>",
         false,

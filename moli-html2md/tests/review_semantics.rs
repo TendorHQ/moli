@@ -211,3 +211,96 @@ fn links_retain_legitimate_non_web_destinations() {
         assert!(!result.contains(href), "{result}");
     }
 }
+
+#[test]
+fn inline_media_keeps_links_emphasis_and_table_flow() {
+    for (source, expected) in [
+        (
+            "<a href='/w'>Watch <video src='/v.mp4'></video></a>",
+            "[Watch Video (/v.mp4)](/w)",
+        ),
+        (
+            "<p>See <iframe src='/frame'></iframe> below</p>",
+            "See [Embedded content](/frame) below",
+        ),
+        (
+            "<em>Clip <video src='/a.mp4'></video> now</em>",
+            "*Clip [Video](/a.mp4) now*",
+        ),
+    ] {
+        assert_eq!(markdown(source), expected);
+    }
+    let result = markdown("<table><tr><td>Clip <video src='/a.mp4'></video> now</td></tr></table>");
+    assert!(result.contains("Clip [Video](/a.mp4) now"), "{result}");
+    assert!(!result.contains("<br>"), "{result}");
+}
+
+#[test]
+fn named_images_and_poster_only_video_keep_their_alternatives() {
+    for source in [
+        "<video poster='/cover.jpg'></video>",
+        "<video poster='/cover.jpg' src='blob:https://site/id'></video>",
+    ] {
+        assert!(markdown(source).contains("![Video poster](/cover.jpg)"));
+    }
+    assert_eq!(
+        markdown("<a href='/home'><img src='' aria-label='Home'></a>"),
+        "[Home](/home)"
+    );
+    assert_eq!(
+        markdown("<img src='/logo.png' aria-label='Logo'>"),
+        "![Logo](/logo.png)"
+    );
+    assert_eq!(
+        markdown("<img src='/logo.png' alt='Authored' aria-label='Other'>"),
+        "![Authored](/logo.png)"
+    );
+    assert_eq!(
+        markdown("<a href='/t'><svg><title>Twitter</title><path/></svg>Follow us</a>"),
+        "[Twitter Follow us](/t)"
+    );
+    assert_eq!(
+        markdown("<svg><title>Chart description</title><text>Revenue</text></svg>"),
+        "Revenue"
+    );
+}
+
+#[test]
+fn live_controls_replace_defaults_including_explicit_clears() {
+    struct Live(Tree);
+    impl moli_html2md::Dom for Live {
+        type NodeId = usize;
+        fn node_kind(&self, n: usize) -> moli_html2md::NodeKind<'_> {
+            self.0.node_kind(n)
+        }
+        fn first_child(&self, n: usize) -> Option<usize> {
+            self.0.first_child(n)
+        }
+        fn next_sibling(&self, n: usize) -> Option<usize> {
+            self.0.next_sibling(n)
+        }
+        fn attribute(&self, n: usize, k: &str) -> Option<&str> {
+            self.0.attribute(n, k)
+        }
+        fn control_value(&self, n: usize) -> Option<&str> {
+            self.0.attribute(n, "data-live")
+        }
+    }
+    for tag in ["input", "textarea"] {
+        for value in ["Current", ""] {
+            let html = if tag == "input" {
+                format!("<input value='Stale' data-live='{value}' aria-label='Field'>")
+            } else {
+                format!("<textarea data-live='{value}'>Stale</textarea>")
+            };
+            let dom = Live(Tree::parse(&html));
+            let result = convert(&dom, dom.0.root);
+            assert!(!result.contains("Stale"), "{result}");
+            if !value.is_empty() {
+                assert_eq!(result, "Current");
+            } else {
+                assert_eq!(result, if tag == "input" { "Field" } else { "" });
+            }
+        }
+    }
+}

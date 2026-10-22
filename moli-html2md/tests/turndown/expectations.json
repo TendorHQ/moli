@@ -50,5 +50,13 @@
   "extra_split_list_marker": {
     "markdown": "12\\. text",
     "reason": "Escape list markers across text-node boundaries. Turndown escapes nodes individually and accidentally creates an ordered list."
+  },
+  "upstream_036": {
+    "markdown": "![the\ntitle](logo.png \"the\ntitle\")",
+    "reason": "An image without alt uses its authored title as a text alternative. Turndown leaves that label empty."
+  },
+  "upstream_037": {
+    "markdown": "![\"hello\"](logo.png \"\\\"hello\\\"\")",
+    "reason": "An image without alt uses its authored title as a text alternative while retaining the resource title."
   }
 }
