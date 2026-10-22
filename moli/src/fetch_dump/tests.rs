@@ -702,6 +702,138 @@ async fn markdown_with_frames_preserves_document_positions_nested_and_cross_orig
 }
 
 #[tokio::test]
+async fn markdown_with_frames_respects_owner_visibility_and_document_namespaces() -> Result<()> {
+    let html = concat!(
+        r##"<h2 id="top">Parent heading</h2><a href="#top">Parent top</a>"##,
+        r#"<div style="visibility:hidden"><iframe srcdoc="&lt;p&gt;Hidden frame body&lt;/p&gt;"></iframe></div>"#,
+        r#"<iframe title="Map fallback" src="https://maps.example/embed" srcdoc="&lt;script&gt;window.map=true&lt;/script&gt;&lt;canvas&gt;&lt;/canvas&gt;"></iframe>"#,
+        r#"<iframe title="Empty fallback" src="https://example.test/outer" srcdoc="&lt;iframe src='about:blank' title='Blank child'&gt;&lt;/iframe&gt;"></iframe>"#,
+        r##"<iframe srcdoc="&lt;a href='#top'&gt;Child top&lt;/a&gt;&lt;h2 id='top'&gt;Child heading&lt;/h2&gt;"></iframe>"##,
+    );
+    let (_browser, mut page, server) = load_page(html).await?;
+    let page_url = page.final_url().to_string();
+    let rendered = render_page_dump_with_options_async(
+        &mut page,
+        DumpFormat::Markdown,
+        StripOptions::default(),
+        false,
+        true,
+        false,
+        None,
+    )
+    .await?;
+
+    assert!(!rendered.contains("Hidden frame body"), "{rendered}");
+    assert!(
+        rendered.contains("[Map fallback](https://maps.example/embed)"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("[Empty fallback](https://example.test/outer)"),
+        "{rendered}"
+    );
+    assert!(!rendered.contains("Blank child"), "{rendered}");
+    assert!(
+        rendered.contains(&format!("[Child top]({page_url}#top)")),
+        "{rendered}"
+    );
+    assert_eq!(
+        rendered.matches(r#"<a id="top"></a>"#).count(),
+        1,
+        "{rendered}"
+    );
+
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn frame_light_dom_obeys_strip_options_in_html_and_markdown() -> Result<()> {
+    let (_browser, mut page, server) = load_page(concat!(
+        r#"<iframe srcdoc=""#,
+        r#"&lt;script&gt;/* child-js-marker */&lt;/script&gt;"#,
+        r#"&lt;style&gt;/* child-css-marker */&lt;/style&gt;"#,
+        r#"&lt;p style='color:red' onclick='void 0'&gt;Child article&lt;/p&gt;"#,
+        r#"&lt;nav&gt;Child navigation&lt;/nav&gt;&lt;button&gt;Child button&lt;/button&gt;"#,
+        r#""></iframe>"#,
+    ))
+    .await?;
+    let stripped = StripOptions {
+        js: true,
+        css: true,
+        ui: true,
+    };
+
+    let html = render_page_dump_with_options_async(
+        &mut page,
+        DumpFormat::Html,
+        StripOptions::default(),
+        false,
+        true,
+        false,
+        None,
+    )
+    .await?;
+    let stripped_html = render_page_dump_with_options_async(
+        &mut page,
+        DumpFormat::Html,
+        stripped,
+        false,
+        true,
+        false,
+        None,
+    )
+    .await?;
+    for marker in ["child-js-marker", "onclick=", "child-css-marker", "style="] {
+        assert!(html.contains(marker), "{html}");
+        assert!(!stripped_html.contains(marker), "{stripped_html}");
+    }
+    for marker in ["Child navigation", "Child button"] {
+        assert!(html.contains(marker), "{html}");
+        assert!(!stripped_html.contains(marker), "{stripped_html}");
+    }
+    assert!(stripped_html.contains("Child article"), "{stripped_html}");
+
+    let markdown = render_page_dump_with_options_async(
+        &mut page,
+        DumpFormat::Markdown,
+        StripOptions::default(),
+        false,
+        true,
+        false,
+        None,
+    )
+    .await?;
+    let stripped_markdown = render_page_dump_with_options_async(
+        &mut page,
+        DumpFormat::Markdown,
+        stripped,
+        false,
+        true,
+        false,
+        None,
+    )
+    .await?;
+    assert!(markdown.contains("Child navigation"), "{markdown}");
+    assert!(markdown.contains("Child button"), "{markdown}");
+    assert!(
+        !stripped_markdown.contains("Child navigation"),
+        "{stripped_markdown}"
+    );
+    assert!(
+        !stripped_markdown.contains("Child button"),
+        "{stripped_markdown}"
+    );
+    assert!(
+        stripped_markdown.contains("Child article"),
+        "{stripped_markdown}"
+    );
+
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
 async fn markdown_with_frames_uses_latest_frame_document_and_links_for_failures() -> Result<()> {
     let (_browser, mut page, server) = load_page(r#"<p>Parent</p><iframe id="child" srcdoc="&lt;p&gt;Old body&lt;/p&gt;"></iframe><iframe title="Unavailable" src="http://127.0.0.1:1/missing"></iframe>"#).await?;
     page.evaluate_runtime_expression_with_await_async("new Promise(resolve => { const frame = document.getElementById('child'); frame.onload=resolve; frame.srcdoc='<p>Latest body</p>'; })", true).await?;

@@ -8,7 +8,7 @@ use crate::dom::native::{NativeDom, NativeNodeId};
 
 /// Computed properties needed for document export. Paint effects such as
 /// opacity and composited colors do not determine whether source text exists.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(super) struct ExportStyle {
     pub display: String,
     pub original_display: String,
@@ -34,6 +34,7 @@ pub(super) struct MarkdownDom<'a> {
     subscripts: HashSet<NativeNodeId>,
     attribute_overrides: HashMap<NativeNodeId, HashMap<String, String>>,
     unchecked_controls: HashSet<NativeNodeId>,
+    hidden_frame_owners: HashSet<NativeNodeId>,
     fragment_links: bool,
 }
 
@@ -82,11 +83,13 @@ impl<'a> MarkdownDom<'a> {
                 .flatten()
             })
             .collect();
+        let root_document = dom.document_node_id();
         let fragment_links = styles.iter().any(|(node, _)| {
-            Dom::attribute(dom, *node, "href").is_some_and(|href| {
-                href.strip_prefix('#')
-                    .is_some_and(|fragment| !fragment.is_empty())
-            })
+            owner_document(*node) == Some(root_document)
+                && Dom::attribute(dom, *node, "href").is_some_and(|href| {
+                    href.strip_prefix('#')
+                        .is_some_and(|fragment| !fragment.is_empty())
+                })
         });
         let mut disclosure_roots = HashSet::new();
         let mut targets = HashMap::new();
@@ -140,6 +143,7 @@ impl<'a> MarkdownDom<'a> {
         let mut subscripts = HashSet::new();
         let mut attribute_overrides = HashMap::new();
         let mut unchecked_controls = HashSet::new();
+        let mut hidden_frame_owners = HashSet::new();
         let mut visibility_modes = HashMap::new();
         let mut source_regions = HashSet::new();
         // Flex/grid item flow is determined by the parent, while absolute and
@@ -306,9 +310,14 @@ impl<'a> MarkdownDom<'a> {
                     _ => "",
                 };
                 for name in moli_html2md::resource_url_attributes(tag) {
-                    let Some(value) = Dom::attribute(dom, node, name)
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty() && !value.starts_with('#'))
+                    let Some(value) =
+                        Dom::attribute(dom, node, name)
+                            .map(str::trim)
+                            .filter(|value| {
+                                !value.is_empty()
+                                    && (!value.starts_with('#')
+                                        || document != Some(dom.document_node_id()))
+                            })
                     else {
                         continue;
                     };
@@ -327,6 +336,9 @@ impl<'a> MarkdownDom<'a> {
             }
             if visibility_mode == VisibilityMode::Hidden && !disclosure_root && !disclosure_path {
                 invisible.insert(node);
+                if frame_roots.contains_key(&node) {
+                    hidden_frame_owners.insert(node);
+                }
             }
         }
         // Invisible cells still occupy columns. A wholly invisible table/list
@@ -358,6 +370,7 @@ impl<'a> MarkdownDom<'a> {
             subscripts,
             attribute_overrides,
             unchecked_controls,
+            hidden_frame_owners,
             fragment_links,
         }
     }
@@ -490,6 +503,9 @@ impl Dom for MarkdownDom<'_> {
     }
 
     fn first_child(&self, node: Self::NodeId) -> Option<Self::NodeId> {
+        if self.hidden_frame_owners.contains(&node) {
+            return None;
+        }
         if let Some(root) = self.frame_roots.get(&node).copied() {
             return self.next_retained(Some(root));
         }
@@ -501,6 +517,15 @@ impl Dom for MarkdownDom<'_> {
     }
 
     fn attribute(&self, node: Self::NodeId, name: &str) -> Option<&str> {
+        if matches!(name, "id" | "name")
+            && self
+                .dom
+                .node(node)
+                .and_then(|node| node.owner_document())
+                .is_some_and(|document| document != self.dom.document_node_id())
+        {
+            return None;
+        }
         if name == "checked" && self.unchecked_controls.contains(&node) {
             return None;
         }

@@ -88,15 +88,15 @@ impl PageVm {
         };
         if options.format == RendererPageDumpFormat::Markdown
             && !options.with_base
-            && !options.with_frames
             && options.strip == RendererPageDumpStripOptions::default()
         {
-            return render_markdown_document_with_styles(
-                self.vm().document_runtime.dom_host().dom(),
-                styles,
-                document_bases,
-                std::collections::HashMap::new(),
-            );
+            let dom = self.vm().document_runtime.dom_host().dom();
+            let frame_roots = if options.with_frames {
+                markdown_frame_roots(dom, &frames, &styles, &document_bases)
+            } else {
+                std::collections::HashMap::new()
+            };
+            return render_markdown_document_with_styles(dom, styles, document_bases, frame_roots);
         }
         let mut dom = self.vm().document_runtime.dom_host().dom().clone();
 
@@ -132,7 +132,7 @@ impl PageVm {
             return export.dom().serialize_document();
         }
 
-        let frame_roots = markdown_frame_roots(&dom, &frames);
+        let frame_roots = markdown_frame_roots(&dom, &frames, &styles, &document_bases);
 
         match options.format {
             RendererPageDumpFormat::Html => dom.serialize_document(),
@@ -323,6 +323,8 @@ fn render_markdown_document_with_styles(
 fn markdown_frame_roots(
     dom: &NativeDom,
     frames: &[(String, NativeNodeId, NativeNodeId)],
+    styles: &[(NativeNodeId, visibility::ExportStyle)],
+    document_bases: &std::collections::HashMap<NativeNodeId, url::Url>,
 ) -> std::collections::HashMap<NativeNodeId, NativeNodeId> {
     let mut roots = std::collections::HashMap::new();
     for (_, owner, document) in frames.iter().rev() {
@@ -332,55 +334,23 @@ fn markdown_frame_roots(
         else {
             continue;
         };
-        if frame_document_has_content(dom, root, &roots) {
+        let visible = visibility::MarkdownDom::new(
+            dom,
+            styles.iter().cloned(),
+            document_bases.clone(),
+            roots.clone(),
+        );
+        let rendered = moli_html2md::Converter::new(moli_html2md::Options {
+            max_depth: MAX_DOM_OUTPUT_TREE_DEPTH,
+            default_code_language: Some("text".to_owned()),
+            ..Default::default()
+        })
+        .convert(&visible, root);
+        if !rendered.trim().is_empty() {
             roots.insert(*owner, root);
         }
     }
     roots
-}
-
-fn frame_document_has_content(
-    dom: &NativeDom,
-    root: NativeNodeId,
-    nested_frames: &std::collections::HashMap<NativeNodeId, NativeNodeId>,
-) -> bool {
-    let mut pending = vec![root];
-    while let Some(node) = pending.pop() {
-        match moli_html2md::Dom::node_kind(dom, node) {
-            moli_html2md::NodeKind::Text(text) if !text.trim().is_empty() => return true,
-            moli_html2md::NodeKind::Element("iframe" | "frame")
-                if nested_frames.contains_key(&node)
-                    || moli_html2md::Dom::attribute(dom, node, "src").is_some_and(|src| {
-                        let src = src.trim();
-                        !src.is_empty() && !src.starts_with("about:")
-                    }) =>
-            {
-                return true;
-            }
-            moli_html2md::NodeKind::Element(_) => {
-                for name in [
-                    "alt",
-                    "aria-label",
-                    "title",
-                    "value",
-                    "href",
-                    "src",
-                    "srcset",
-                    "poster",
-                ] {
-                    if moli_html2md::Dom::attribute(dom, node, name)
-                        .is_some_and(|value| !value.trim().is_empty())
-                    {
-                        return true;
-                    }
-                }
-            }
-            _ => {}
-        }
-        let children = dom.child_ids(node).collect::<Vec<_>>();
-        pending.extend(children.into_iter().rev());
-    }
-    false
 }
 
 #[cfg(test)]
