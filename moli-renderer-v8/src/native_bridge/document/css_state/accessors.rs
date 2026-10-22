@@ -164,6 +164,7 @@ fn set_document_adopted_style_sheets_for_receiver<'s>(
     let holder = receiver;
     let Some(next_array) = normalize_adopted_style_sheets_assignment(
         scope,
+        receiver,
         value,
         AdoptedStyleSheetsArrayOwner::Document {
             validation_document: handle,
@@ -189,6 +190,7 @@ fn set_document_adopted_style_sheets_for_receiver<'s>(
 
 pub(in crate::native_bridge) fn normalize_adopted_style_sheets_assignment<'s>(
     scope: &mut v8::PinScope<'s, '_>,
+    receiver: v8::Local<'s, v8::Object>,
     value: v8::Local<'s, v8::Value>,
     owner: AdoptedStyleSheetsArrayOwner,
     target_document: Option<DomHandle>,
@@ -214,11 +216,18 @@ pub(in crate::native_bridge) fn normalize_adopted_style_sheets_assignment<'s>(
         .into_iter()
         .map(|sheet| sheet.0.into())
         .collect::<Vec<_>>();
-    let array = v8::Array::new_with_elements(scope, &values);
+    let context = receiver.get_creation_context(scope)?;
+    let array = {
+        let scope = &mut v8::ContextScope::new(scope, context);
+        v8::Array::new_with_elements(scope, &values)
+    };
     if !validate_adopted_style_sheet_array(scope, array, target_document) {
         return None;
     }
-    install_adopted_style_sheets_array_mutation_methods(scope, array, owner);
+    {
+        let scope = &mut v8::ContextScope::new(scope, context);
+        install_adopted_style_sheets_array_mutation_methods(scope, array, owner);
+    }
     Some(array)
 }
 
