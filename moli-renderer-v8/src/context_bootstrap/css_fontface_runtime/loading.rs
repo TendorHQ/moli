@@ -166,6 +166,7 @@ pub(super) fn initialize_resolver<'s>(
     face: v8::Local<'s, v8::Object>,
     resolver: v8::Local<'s, v8::PromiseResolver>,
     resource: FontFaceLoad,
+    request_context: Option<crate::native_bridge::WindowExecutionContextIdentity>,
 ) {
     set_private_value(scope, face, RESOLVER, resolver.into());
     // A retained pending .loaded promise must retain its settlement endpoint,
@@ -178,7 +179,7 @@ pub(super) fn initialize_resolver<'s>(
         PROMISE_OWNER,
         face.into(),
     );
-    super::state::initialize(scope, face, resource);
+    super::state::initialize(scope, face, resource, request_context);
     publish_state(scope, face);
 }
 
@@ -275,12 +276,25 @@ fn advance_sources<'s>(
     face: v8::Local<'s, v8::Object>,
     load: &FontFaceLoad,
 ) {
+    let request_context = super::state::request_context(scope, face);
+    if let Some(host_ptr) = crate::util::context_host_ptr_from_global_bridge(scope)
+        && !request_context.is_some_and(|identity| {
+            unsafe { &*host_ptr }.window_execution_context_identity_is_current(identity)
+        })
+    {
+        load.borrow_mut().fail(
+            "NetworkError",
+            "FontFace creation Window is no longer available.",
+        );
+        publish_font_face_load_changes(scope);
+        return;
+    }
     loop {
         let url = with_font_services(scope, |services| load.borrow_mut().next_url(services));
         let Some(url) = url else {
             break;
         };
-        match crate::network_host::start_font_face_fetch(scope, face, &url) {
+        match crate::network_host::start_font_face_fetch(scope, face, request_context, &url) {
             Ok(crate::network_host::FontFaceFetchStart::Pending) => return,
             Ok(crate::network_host::FontFaceFetchStart::Local(bytes)) => {
                 let _ = load.borrow_mut().accept_response(Some(&bytes));

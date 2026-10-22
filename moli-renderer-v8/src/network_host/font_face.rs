@@ -1,7 +1,7 @@
 use super::subresource::{PreparedSubresourceFetch, SubresourceFetchOptions};
 use super::*;
 use crate::{
-    native_bridge::JsContextHost,
+    native_bridge::{JsContextHost, WindowExecutionContextIdentity},
     types::{SubresourceRequestInitiatorType, SubresourceResourceType},
 };
 
@@ -10,19 +10,31 @@ pub(crate) enum FontFaceFetchStart {
     Pending,
 }
 
+/// Freeze the constructor's relevant Window, independently of an enclosing
+/// child request callback. The identity contains no strong V8 handles.
+pub(crate) fn capture_font_face_request_context(
+    scope: &mut v8::PinScope<'_, '_>,
+) -> Option<WindowExecutionContextIdentity> {
+    let host_ptr = crate::util::context_host_ptr_from_global_bridge(scope)?;
+    let context = scope.get_current_context();
+    unsafe { &*host_ptr }.window_execution_context_identity_for_v8_context(scope, context)
+}
+
 /// Resolve URL sources at construction, before a later base mutation or source
 /// fallback. Invalid URLs remain unavailable sources, not CSS syntax errors;
 /// source exhaustion is reported only when loading is requested.
 pub(crate) fn resolve_font_face_sources(
     scope: &mut v8::PinScope<'_, '_>,
+    request_context: Option<WindowExecutionContextIdentity>,
     sources: Vec<moli_css_parse::CssFontSource>,
 ) -> Vec<moli_css_parse::CssFontSource> {
     use moli_css_parse::CssFontSource;
 
     let base = crate::util::context_host_ptr_from_global_bridge(scope).and_then(|host_ptr| {
         let host = unsafe { &*host_ptr };
-        let owner = effective_subresource_request_owner(scope, host);
-        subresource_api_base_url(scope, host, owner)
+        let identity = request_context
+            .filter(|identity| host.window_execution_context_identity_is_current(*identity))?;
+        subresource_api_base_url(scope, host, identity.dispatch_scope())
     });
     sources
         .into_iter()
@@ -42,6 +54,7 @@ pub(crate) fn resolve_font_face_sources(
 pub(crate) fn start_font_face_fetch(
     scope: &mut v8::PinScope<'_, '_>,
     face: v8::Local<'_, v8::Object>,
+    request_context: Option<WindowExecutionContextIdentity>,
     source: &str,
 ) -> Result<FontFaceFetchStart, String> {
     let host_ptr = crate::util::context_host_ptr_from_global_bridge(scope)
@@ -49,7 +62,10 @@ pub(crate) fn start_font_face_fetch(
     // SAFETY: the current live realm owns the bridge. No author callback runs
     // while the host is used except its existing CSP notification boundary.
     let host: &mut JsContextHost = unsafe { &mut *host_ptr };
-    let owner = effective_subresource_request_owner(scope, host);
+    let identity = request_context
+        .filter(|identity| host.window_execution_context_identity_is_current(*identity))
+        .ok_or_else(|| "FontFace creation Window is no longer available".to_owned())?;
+    let owner = identity.dispatch_scope();
     let resource_loader = host
         .document_resource_loader_for_dispatch_scope(owner)
         .ok_or_else(|| "Font request has no live document resource loader".to_owned())?;

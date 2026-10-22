@@ -21,12 +21,14 @@ struct Observer {
     wrapper: v8::Weak<v8::Object>,
     load: FontFaceLoad,
     published: FontFaceStatus,
+    request_context: Option<crate::native_bridge::WindowExecutionContextIdentity>,
 }
 
 pub(super) fn initialize<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     face: v8::Local<'s, v8::Object>,
     load: FontFaceLoad,
+    request_context: Option<crate::native_bridge::WindowExecutionContextIdentity>,
 ) {
     let store = if let Some(store) = scope.get_slot::<Store>() {
         store.clone()
@@ -59,6 +61,7 @@ pub(super) fn initialize<'s>(
             wrapper,
             load,
             published: FontFaceStatus::Unloaded,
+            request_context,
         },
     );
     set_private_value(
@@ -89,6 +92,19 @@ pub(super) fn get<'s>(
             .load
             .clone(),
     )
+}
+
+pub(super) fn request_context<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    face: v8::Local<'s, v8::Object>,
+) -> Option<crate::native_bridge::WindowExecutionContextIdentity> {
+    let id = id(scope, face)?;
+    scope
+        .get_slot::<Store>()?
+        .borrow()
+        .entries
+        .get(&id)?
+        .request_context
 }
 
 pub(super) fn bind<'s>(
@@ -164,7 +180,7 @@ mod tests {
             let context = v8::Context::new(scope, Default::default());
             let scope = &mut v8::ContextScope::new(scope, context);
             let css_face = v8::Object::new(scope);
-            initialize(scope, css_face, css_load.clone());
+            initialize(scope, css_face, css_load.clone(), None);
             let js_face = v8::Object::new(scope);
             initialize(
                 scope,
@@ -175,6 +191,7 @@ mod tests {
                     Vec::new(),
                     false,
                 ),
+                None,
             );
             Rc::downgrade(&get(scope, js_face).unwrap())
         };

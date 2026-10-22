@@ -23,7 +23,10 @@ mod text_track;
 mod url_helpers;
 mod xhr;
 
-pub(crate) use font_face::{FontFaceFetchStart, resolve_font_face_sources, start_font_face_fetch};
+pub(crate) use font_face::{
+    FontFaceFetchStart, capture_font_face_request_context, resolve_font_face_sources,
+    start_font_face_fetch,
+};
 use moli_fetch::{Request, Response, observe_cookie_access_report_for_request};
 
 use crate::network::ResourceRequestClient;

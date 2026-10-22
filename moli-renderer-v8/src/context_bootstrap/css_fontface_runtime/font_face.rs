@@ -289,6 +289,7 @@ pub(in crate::context_bootstrap) fn font_face_constructor_callback<'s>(
         throw_type_error(scope, "Constructor must be called with new");
         return;
     }
+    let request_context = crate::network_host::capture_font_face_request_context(scope);
     let Some(parsed) = webidl::parse_args::<FontFaceConstructorArgs>(scope, &args) else {
         return;
     };
@@ -313,8 +314,9 @@ pub(in crate::context_bootstrap) fn font_face_constructor_callback<'s>(
     let this = args.this();
     let (source, sources, binary) = match parsed.source {
         FontFaceConstructorSource::Css(source) => {
-            let sources = moli_css_parse::parse_font_face_sources(&source)
-                .map(|sources| crate::network_host::resolve_font_face_sources(scope, sources));
+            let sources = moli_css_parse::parse_font_face_sources(&source).map(|sources| {
+                crate::network_host::resolve_font_face_sources(scope, request_context, sources)
+            });
             (source, sources, None)
         }
         FontFaceConstructorSource::Binary(value) => {
@@ -372,7 +374,7 @@ pub(in crate::context_bootstrap) fn font_face_constructor_callback<'s>(
     } else if let Some(bytes) = binary {
         resource.borrow_mut().initialize_binary(&bytes);
     }
-    super::loading::initialize_resolver(scope, this, resolver, resource);
+    super::loading::initialize_resolver(scope, this, resolver, resource, request_context);
     rv.set(this.into());
 }
 
