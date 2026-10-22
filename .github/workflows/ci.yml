@@ -455,8 +455,9 @@ jobs:
   cdp-smoke-chromium:
     name: CDP smoke (Chromium)
     needs: [resolve-refs]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, moli-ci]
     timeout-minutes: 30
+    container: mcr.microsoft.com/playwright/python:v1.58.0-noble
     steps:
       - uses: actions/checkout@v4
         with:
@@ -473,17 +474,12 @@ jobs:
           node-version: 24.15.0
           cache: npm
           cache-dependency-path: moli-cdp-smoke/package-lock.json
-      - name: Install dependencies and locked Chromium
+      - name: Install smoke dependencies
         run: |
           uv sync --project moli-cdp-smoke --locked
           npm ci --prefix moli-cdp-smoke
-          uv run --project moli-cdp-smoke --no-sync playwright install --with-deps chromium
       - name: Run full CDP smoke on Chromium
         run: |
-          # Piped core handlers ignore ulimit, and can block Page.crash teardown.
-          # This hosted VM belongs to this job; use file cores so the limit applies.
-          sudo sysctl -w kernel.core_pattern=core
-          ulimit -c 0
           uv run --project moli-cdp-smoke --no-sync moli-cdp-smoke \
             --browser chromium --jobs 4 --output-dir target/smoke/cdp-chromium-ci
       - name: Upload Chromium diagnostics
