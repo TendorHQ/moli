@@ -10,7 +10,6 @@ enum Task<'a, Id> {
     Boundary,
     ChoiceBoundary,
     Fallback(String, usize),
-    RestoreSvg(bool),
     PopStyle,
     EndLink(usize),
     EndQuote,
@@ -41,7 +40,6 @@ struct Machine<'a, D: Dom + ?Sized> {
     tables: Vec<Table<D::NodeId>>,
     raw: String,
     serial: usize,
-    in_svg: bool,
 }
 
 pub(crate) fn convert<D: Dom + ?Sized>(dom: &D, root: D::NodeId, options: &Options) -> String {
@@ -54,7 +52,6 @@ pub(crate) fn convert<D: Dom + ?Sized>(dom: &D, root: D::NodeId, options: &Optio
         tables: Vec::new(),
         raw: String::new(),
         serial: 0,
-        in_svg: false,
     };
     machine.run();
     machine.take_writer().into_string()
@@ -82,7 +79,6 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
                         self.writer().text(" ");
                     }
                 }
-                Task::RestoreSvg(previous) => self.in_svg = previous,
                 Task::PopStyle => self.writer().pop_style(),
                 Task::EndLink(serial) => self.writer().end_link(serial),
                 Task::EndQuote => {
@@ -221,12 +217,7 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
         }
         match tag {
             "head" | "script" | "style" | "noscript" | "template" => return,
-            "title" if !self.in_svg => return,
-            "svg" | "foreignObject" | "foreignobject" => {
-                self.tasks.push(Task::RestoreSvg(self.in_svg));
-                self.in_svg = tag == "svg";
-            }
-
+            "title" => return,
             "br" => {
                 self.writer().hard_break();
                 return;
@@ -270,14 +261,14 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
                 }
             }
             "img" => {
-                let alt = self.dom.attribute(node, "alt").unwrap_or_default();
+                let alt = crate::content::image_label(self.dom, node);
                 let title = self.dom.attribute(node, "title");
                 if let Some(src) = crate::media::source(self.dom, node) {
-                    self.writer().image(alt, &src, title);
+                    self.writer().image(&alt, &src, title);
                 } else {
                     // A failed or absent resource must not erase its textual
                     // alternative, especially when it is a link's only label.
-                    self.writer().text(alt);
+                    self.writer().text(&alt);
                 }
                 return;
             }
@@ -361,19 +352,23 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
 
     fn media(&mut self, node: D::NodeId, tag: &str, depth: usize) -> bool {
         let urls = crate::media::sources(self.dom, node, tag, depth, self.options.max_depth);
-        if urls.is_empty() {
+        let poster = (tag == "video")
+            .then(|| self.dom.attribute(node, "poster"))
+            .flatten()
+            .filter(|src| !src.is_empty() && crate::media::safe_url(src, true));
+        if urls.is_empty() && poster.is_none() {
             return false;
         }
-        self.writer().boundary(2);
-        if tag == "video"
-            && let Some(poster) = self
-                .dom
-                .attribute(node, "poster")
-                .filter(|src| !src.is_empty() && crate::media::safe_url(src, true))
-        {
+        let block = is_block(tag);
+        if block {
+            self.writer().boundary(2);
+        } else {
+            self.writer().text(" ");
+        }
+        if let Some(poster) = poster {
             let poster_label = crate::media::poster_label(self.dom, node);
             self.writer().image(&poster_label, poster, None);
-            self.writer().boundary(1);
+            self.writer().text(" ");
         }
         let label = crate::media::label(self.dom, node, tag);
         for href in urls {
@@ -394,9 +389,13 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
                 self.writer().text(href);
                 self.writer().text(")");
             }
-            self.writer().boundary(1);
+            self.writer().text(" ");
         }
-        self.writer().boundary(2);
+        if block {
+            self.writer().boundary(2);
+        } else {
+            self.writer().text(" ");
+        }
         true
     }
 

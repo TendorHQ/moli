@@ -26,8 +26,9 @@ pub trait Dom {
     fn first_child(&self, node: Self::NodeId) -> Option<Self::NodeId>;
     fn next_sibling(&self, node: Self::NodeId) -> Option<Self::NodeId>;
     fn attribute(&self, node: Self::NodeId, name: &str) -> Option<&str>;
-    /// A live control value supplied by a browser adapter. None leaves source
-    /// textarea content authoritative; Some("") is an explicitly cleared value.
+    /// Current input/textarea value supplied by an adapter. None uses the
+    /// source default; Some("") suppresses that default after a clear. An input
+    /// may still retain its accessible name when its current value is empty.
     fn control_value(&self, _node: Self::NodeId) -> Option<&str> {
         None
     }

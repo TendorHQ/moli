@@ -129,3 +129,6 @@ controls may use accessible labels; generic containers do not acquire text
 from tooltip titles or prohibited names. Child output takes precedence over
 any fallback label. Links retain application protocols while executable
 JavaScript and inline HTML document URLs are excluded.
+
+SVG title children are tooltip metadata, not body text. They supply a name only
+when an SVG has no emitted content; title elements outside SVG are omitted.
