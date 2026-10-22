@@ -9,6 +9,7 @@ enum Task<'a, Id> {
     Visit(Id, usize),
     Children(Option<Id>, usize),
     Boundary,
+    LayoutBoundary,
     ChoiceBoundary,
     InlineSpace,
     Fallback(String, usize),
@@ -77,6 +78,7 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
                 }
                 Task::Children(None, _) | Task::RawChildren(None, _, _) => {}
                 Task::Boundary => self.writer().boundary(2),
+                Task::LayoutBoundary => self.writer().layout_boundary(),
                 Task::InlineSpace => self.writer().text(" "),
                 Task::ChoiceBoundary => self.writer().boundary(1),
                 Task::Fallback(label, before) => {
@@ -213,10 +215,11 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
         if depth >= self.options.max_depth {
             return;
         }
-        let owns_boundaries = matches!(self.dom.node_kind(node), NodeKind::Element(tag) if crate::content::owns_boundaries(tag));
+        let owns_boundaries =
+            matches!(self.dom.node_kind(node), NodeKind::Element(tag) if owns_boundaries(tag));
         if !owns_boundaries && self.dom.has_block_layout(node) {
-            self.writer().boundary(2);
-            self.tasks.push(Task::Boundary);
+            self.writer().layout_boundary();
+            self.tasks.push(Task::LayoutBoundary);
         } else if !owns_boundaries && self.dom.has_text_boundary(node) {
             self.writer().text(" ");
             self.tasks.push(Task::InlineSpace);
@@ -428,7 +431,9 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
             "table" => {
                 let presentation = self.dom.attribute(node, "role").is_some_and(|role| {
                     matches!(
-                        role.trim().to_ascii_lowercase().as_str(),
+                        role.trim_matches(crate::writer::is_space)
+                            .to_ascii_lowercase()
+                            .as_str(),
                         "presentation" | "none"
                     )
                 });
@@ -817,6 +822,11 @@ fn is_block(tag: &str) -> bool {
             tag,
             "audio" | "canvas" | "frameset" | "isindex" | "noframes" | "output"
         )
+}
+
+/// These elements already own their document/list/choice boundaries.
+pub(crate) fn owns_boundaries(tag: &str) -> bool {
+    is_structural_block(tag) || matches!(tag, "select" | "optgroup" | "option" | "col" | "colgroup")
 }
 
 pub(crate) fn is_structural_block(tag: &str) -> bool {

@@ -70,9 +70,8 @@ matching ignores ASCII case and surrounding HTML whitespace. Nested layout
 wrappers expand into readable blocks. Tables with header cells, captions, explicit
 data roles, header relationships or real cell spans retain their authored structure.
 These tables use content-only HTML for non-unit spans, multiple `thead` rows,
-rows wider than
-an explicit header, or cells containing nested tables, lists, headings, quotes
-or preformatted blocks. This retains header, cell and nested-table associations
+rows wider than an explicit header, or cells containing nested tables, lists,
+headings, quotes or preformatted blocks. This retains header, cell and nested-table associations
 that Markdown pipe tables cannot express. Inner simple tables can still produce
 GFM when a presentational or layout-only containing table is expanded. Scripts,
 styles and event handlers are omitted from HTML fallback output.
@@ -107,8 +106,8 @@ strip/base/frame transformations remain the responsibility of the caller.
 
 `cargo test -p moli-html2md` covers an independent arena DOM, immutability,
 whitespace, escaping, code, tables, depth limits, and 20,000 nested nodes on a
-64 KiB thread stack. The [Turndown differential suite](tests/turndown/README.md)
-pins 147 upstream fixtures and 50 additional cases. It compares rendered meaning,
+64 KiB thread stack. The
+[Turndown differential suite](tests/turndown/README.md) pins 147 upstream fixtures and 50 additional cases. It compares rendered meaning,
 checks DOM immutability, and explicitly asserts 13 documented differences that
 preserve Moli's handling of literal text, code, emphasis, and list boundaries.
 Targeted regressions also cover empty elements, links, attributes in headings and
