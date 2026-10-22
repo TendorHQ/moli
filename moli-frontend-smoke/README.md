@@ -103,6 +103,11 @@ was pending. CI may pass `--reference-infrastructure-retries 1` to re-observe a 
 connection or protocol failure. The retry does not apply to fixture errors, normalization errors,
 Moli failures, or DOM differences, and the original failure remains recorded in `summary.json`.
 
+CI uses `--timeout-ms 90000` for checkpoint/readiness observations. Network/storage boundary
+fixtures allow up to 60 seconds for event and IndexedDB operations, so the outer observation
+deadline leaves time for the fixture to report its own error. These are upper bounds; completed
+operations proceed immediately.
+
 Run Chromium as a reference-only fixture gate:
 
 ```bash

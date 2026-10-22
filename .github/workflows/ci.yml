@@ -623,13 +623,13 @@ jobs:
       - name: Run full differential
         id: frontend
         continue-on-error: true
-        # The full catalog runs on shared hosts; leave headroom for transient
-        # Chromium stalls without changing any readiness or comparison rules.
+        # Leave headroom above the network/storage fixtures' 60-second event
+        # deadline when running the full catalog on shared hosts.
         run: >-
           uv run --project moli-frontend-smoke --no-sync moli-frontend-smoke
           --chromium-bin "${{ steps.chromium.outputs.binary }}"
           --moli-bin "$PWD/target/ci-bin/moli-release-head/moli"
-          --timeout-ms 30000
+          --timeout-ms 90000
           --reference-infrastructure-retries 1
           --output target/frontend-smoke
       - name: Validate frontend artifacts
