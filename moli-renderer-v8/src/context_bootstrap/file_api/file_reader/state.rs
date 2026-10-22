@@ -162,6 +162,9 @@ pub(in crate::context_bootstrap::file_api::file_reader) fn initialize_file_reade
     FileReaderObjectDeclaration::default()
         .initialize(scope, reader)
         .expect("FileReader declaration should initialize");
+    crate::context_bootstrap::media_queries::bind_simple_event_target_dispatch_identity(
+        scope, reader, reader,
+    );
 }
 
 pub(in crate::context_bootstrap::file_api::file_reader) fn file_reader_ready_state<'s>(

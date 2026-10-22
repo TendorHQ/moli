@@ -11,9 +11,10 @@ pub(super) use self::evaluation::{
 pub(in crate::context_bootstrap) use self::events::dispatch_media_query_list_event;
 pub(crate) use self::events::{
     SimpleObjectEventListenerInspectorSnapshot, SimpleObjectEventListenerSnapshot,
-    dispatch_simple_event_target_event, dispatch_simple_event_target_event_collecting_errors,
-    initialize_simple_event_target, install_simple_event_target_handlers,
-    install_simple_event_target_methods, invoke_simple_event_listener, is_simple_event_target,
+    bind_simple_event_target_dispatch_identity, dispatch_simple_event_target_event,
+    dispatch_simple_event_target_event_collecting_errors, initialize_simple_event_target,
+    install_simple_event_target_handlers, install_simple_event_target_methods,
+    invoke_simple_event_listener, is_simple_event_target,
     simple_event_target_add_event_listener_callback, simple_event_target_dispatch_event_callback,
     simple_event_target_handler_getter_callback, simple_event_target_handler_setter_callback,
     simple_event_target_inspector_listener_snapshots,

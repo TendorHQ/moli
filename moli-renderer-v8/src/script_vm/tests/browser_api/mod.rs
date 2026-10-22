@@ -84,4 +84,5 @@ mod video_codec_support;
 
 mod event_prototype_attributes;
 
+mod event_target_prototype;
 mod named_node_map_receivers;

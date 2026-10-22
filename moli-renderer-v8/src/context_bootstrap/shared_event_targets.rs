@@ -27,6 +27,9 @@ pub(super) fn shared_target_owner<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     target: v8::Local<'s, v8::Object>,
 ) -> v8::Local<'s, v8::Object> {
+    // Native aliases share the backing registry while dispatch keeps the
+    // original wrapper for callback this and Event.target.
+    let target = moli_webapi_declare::web_api_object_target(scope, target).unwrap_or(target);
     get_private_object(scope, target, OWNER).unwrap_or(target)
 }
 
