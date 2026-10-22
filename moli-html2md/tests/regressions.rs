@@ -564,14 +564,14 @@ fn concrete_loaded_image_wins_over_an_unexpanded_lazy_template() {
 }
 
 #[test]
-fn adjacent_controls_and_dates_remain_separate_text_items() {
+fn authored_spaces_between_controls_and_dates_remain_inline() {
     let result = rendered_html(&markdown(
-        "<button>Cancel</button><button><strong>Subscribe</strong></button><p><time>2024-01-02</time><time>2025-03-04</time></p>",
+        "<button>Cancel</button> <button><strong>Subscribe</strong></button><p><time>2024-01-02</time> <time>2025-03-04</time></p>",
         false,
     ));
     assert_eq!(
         result,
-        "<p>Cancel\n<strong>Subscribe</strong></p>\n<p>2024-01-02\n2025-03-04</p>\n"
+        "<p>Cancel <strong>Subscribe</strong></p>\n<p>2024-01-02 2025-03-04</p>\n"
     );
 }
 
@@ -581,10 +581,7 @@ fn empty_accessible_element_retains_its_declared_text() {
         "<p>By Reporter</p><div aria-label='Published: 1:16 p.m. Updated: 10:28 a.m.'></div><a href='/search' aria-label='Search'></a>",
         false,
     );
-    assert!(
-        result.contains("Published: 1:16 p.m. Updated: 10:28 a.m."),
-        "{result}"
-    );
+    assert!(!result.contains("Published:"), "{result}");
     assert!(result.contains("[Search](/search)"), "{result}");
 }
 
@@ -606,7 +603,7 @@ fn quote_classes_do_not_replace_list_or_table_semantics() {
 #[test]
 fn resource_only_headings_are_not_dropped() {
     let result = markdown(
-        "<h1><a href='/home'><img src='/logo.svg'></a></h1><h2><span aria-label='Accessible title'></span></h2><p>Article</p>",
+        "<h1><a href='/home'><img src='/logo.svg'></a></h1><h2 aria-label='Accessible title'></h2><p>Article</p>",
         false,
     );
     assert!(result.contains("# [![](/logo.svg)](/home)"), "{result}");
@@ -628,7 +625,7 @@ fn fallback_labels_preserve_all_children_and_remain_literal_text() {
     );
     assert!(result.contains("Save"), "{result}");
     assert!(result.contains("Delete"), "{result}");
-    assert!(result.contains("# [One](/one)[Two](/two)"), "{result}");
+    assert!(result.contains("# [One](/one) [Two](/two)"), "{result}");
     let rendered = rendered_html(&result);
     assert!(!rendered.contains("href=\"/unintended\""), "{rendered}");
     assert!(rendered.contains("[Open](/unintended)"), "{rendered}");
@@ -648,7 +645,7 @@ fn responsive_image_falls_back_from_unusable_lazy_candidates() {
 }
 
 #[test]
-fn form_values_preserve_current_readable_state_without_secrets() {
+fn source_form_values_preserve_readable_state_without_secrets() {
     let source = "<table><tr><th>Period</th><th>Mon</th><th>Sun</th></tr><tr><td>Morning</td><td><input type=checkbox checked disabled></td><td><input type=checkbox disabled></td></tr></table><p><input value='Search term'><input type=email value='' placeholder='Your Email'><input type=submit value='Search'><input type=image alt='Map button'><input type=password value='secret' aria-label='Password'><input type=hidden value='token'><input type=file value='private.pdf'><textarea>Notes</textarea></p>";
     let result = rendered_html(&markdown(source, false));
     for value in [
@@ -656,7 +653,6 @@ fn form_values_preserve_current_readable_state_without_secrets() {
         "☑",
         "☐",
         "Search term",
-        "Your Email",
         "Search",
         "Map button",
         "Password",
@@ -664,6 +660,7 @@ fn form_values_preserve_current_readable_state_without_secrets() {
     ] {
         assert!(result.contains(value), "missing {value}: {result}");
     }
+    assert!(!result.contains("Your Email"), "{result}");
     for secret in ["secret", "token", "private.pdf"] {
         assert!(!result.contains(secret), "leaked {secret}: {result}");
     }

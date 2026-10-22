@@ -2,6 +2,9 @@ use std::borrow::Cow;
 
 use crate::{Dom, NodeKind};
 
+/// Private lazy-loading conventions, used only when standard sources are absent.
+const LAZY_SOURCE_ATTRIBUTES: [&str; 3] = ["data-src", "data-lazy-src", "data-original"];
+
 /// Frozen DOMs can still carry lazy-loading placeholders. These conventional
 /// attributes declare the resource the page intends to load, not the spacer.
 pub(crate) fn source<'a, D: Dom + ?Sized>(dom: &'a D, node: D::NodeId) -> Option<Cow<'a, str>> {
@@ -24,18 +27,19 @@ pub(crate) fn source<'a, D: Dom + ?Sized>(dom: &'a D, node: D::NodeId) -> Option
     {
         return Some(value);
     }
-    ["data-src", "data-lazy-src", "data-original"]
+    LAZY_SOURCE_ATTRIBUTES
         .into_iter()
         .find_map(|name| direct_attribute(dom, node, name, true))
-        .or(src)
         .map(Cow::Borrowed)
 }
 
 fn direct_source<D: Dom + ?Sized>(dom: &D, node: D::NodeId, image: bool) -> Option<&str> {
     let src = direct_attribute(dom, node, "src", image);
-    src.or_else(|| direct_attribute(dom, node, "data-src", image))
-        .or_else(|| direct_attribute(dom, node, "data-lazy-src", image))
-        .or_else(|| direct_attribute(dom, node, "data-original", image))
+    src.or_else(|| {
+        LAZY_SOURCE_ATTRIBUTES
+            .into_iter()
+            .find_map(|name| direct_attribute(dom, node, name, image))
+    })
 }
 
 fn direct_attribute<'a, D: Dom + ?Sized>(
@@ -215,7 +219,7 @@ fn largest_srcset_candidate(srcset: &str, image: bool) -> Option<Cow<'_, str>> {
         .into_iter()
         .filter(|candidate| safe_url(candidate.url, image))
         .max_by(|left, right| left.score.total_cmp(&right.score))
-        .map(|candidate| Cow::Owned(candidate.url.to_owned()))
+        .map(|candidate| Cow::Borrowed(candidate.url))
 }
 
 pub(crate) fn safe_url(value: &str, image: bool) -> bool {
@@ -245,7 +249,7 @@ pub(crate) fn sources<'a, D: Dom + ?Sized>(
 ) -> Vec<&'a str> {
     let mut urls = Vec::new();
     let mut seen = std::collections::HashSet::new();
-    if let Some(src) = direct_source(dom, node, tag == "img") {
+    if let Some(src) = direct_source(dom, node, false) {
         seen.insert(src);
         urls.push(src);
     }
@@ -272,4 +276,22 @@ pub(crate) fn label<'a, D: Dom + ?Sized>(dom: &'a D, node: D::NodeId, tag: &str)
             "audio" => "Audio",
             _ => "Embedded content",
         })
+}
+
+/// Links preserve application protocols; executable inline-document schemes do not.
+pub(crate) fn safe_link_url(value: &str) -> bool {
+    let normalized: String = value
+        .trim()
+        .chars()
+        .filter(|c| !c.is_ascii_control())
+        .collect();
+    let normalized = normalized.to_ascii_lowercase();
+    !normalized.starts_with("javascript:")
+        && !normalized.starts_with("vbscript:")
+        && !normalized.starts_with("data:text/html")
+        && !normalized.starts_with("data:application/xhtml+xml")
+}
+
+pub(crate) fn poster_label<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> String {
+    format!("{} poster", label(dom, node, "video"))
 }
