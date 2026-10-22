@@ -1544,6 +1544,9 @@ impl RendererOwnerLocalStore {
                             lifecycle_gate,
                             trigger,
                         );
+                        if !matches!(&scheduled_turn, RendererPageScheduledTurn::SpentWake) {
+                            turn_scheduler.record_admitted_turn();
+                        }
                         Ok((entry, trigger, scheduled_turn))
                     }
                     ScheduledPageTurnCheckout::NotScheduled => {

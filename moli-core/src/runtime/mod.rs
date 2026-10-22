@@ -178,8 +178,9 @@ pub enum RenderedDomWaitUntil {
     Load,
     NetworkIdle,
     DomStable,
-    /// Reach Load, then consume a finite tail of tasks that are already
-    /// runnable. The original fetch deadline remains strict.
+    /// Reach Load, then consume at most 16 Page turns that are already
+    /// runnable. The original fetch deadline remains strict; if work is still
+    /// runnable after the turn limit, return the current Page with a warning.
     Done,
 }
 

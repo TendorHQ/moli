@@ -199,12 +199,6 @@ impl RendererOwnerHandle {
         signal_scheduler: bool,
         capture_policy: super::RendererPageStateCapturePolicy,
     ) -> RenderRuntimeDispatchOutcome {
-        let entry = match take_entry_for_command_on_bound_owner_local_store(token) {
-            Ok(entry) => entry,
-            Err(error) => return Err(error).into(),
-        };
-        self.restore_live_page_entry(token, entry);
-
         let current_page_turn_count = admitted_page_turn_count_on_bound_owner_local_store(token)
             .unwrap_or(observed_page_turn_count);
         let completed_turns = current_page_turn_count.wrapping_sub(observed_page_turn_count);
@@ -240,7 +234,9 @@ impl RendererOwnerHandle {
             Ok(entry) => entry,
             Err(error) => return Err(error).into(),
         };
-        let completion = if deadline_reached {
+        let completion = if !matches!(readiness, Some(PageOwnerTurnReadiness::Runnable)) {
+            RendererPostLoadReadyCompletion::Idle
+        } else if deadline_reached {
             RendererPostLoadReadyCompletion::DeadlineReached
         } else if remaining_page_turns == 0
             && matches!(readiness, Some(PageOwnerTurnReadiness::Runnable))

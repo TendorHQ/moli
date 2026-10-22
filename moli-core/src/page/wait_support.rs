@@ -16,7 +16,13 @@ impl Page {
         &mut self,
         timeout: Duration,
     ) -> Result<RendererPostLoadReadyCompletion> {
-        let timeout_ms = timeout.as_millis().min(u128::from(u64::MAX)) as u64;
+        // The renderer owns a second copy of the host deadline. Round a
+        // positive remainder up so that copy cannot expire before the host's
+        // absolute deadline merely because the wire format uses milliseconds.
+        let timeout_ms = timeout
+            .as_micros()
+            .div_ceil(1_000)
+            .min(u128::from(u64::MAX)) as u64;
         let reply = self
             .dispatch_page_command_async(RendererPageCommand::CompletePostLoadReadyTasks {
                 timeout_ms,

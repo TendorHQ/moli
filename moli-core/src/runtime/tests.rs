@@ -557,29 +557,83 @@ async fn post_load_ready_task_completion_honors_zero_deadline() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn post_load_ready_task_completion_counts_real_page_turns() -> Result<()> {
+async fn post_load_ready_task_completion_reports_idle_before_an_expired_deadline() -> Result<()> {
     let server = FixtureServer::spawn().await?;
     let browser = Browser::new(AppConfig::default())?;
     let mut page = browser
         .fetch_with_wait_until(
-            &server.url("/runtime/post-load-ready-task"),
+            &server.url("/static"),
             RenderedDomWaitUntil::Load,
             Duration::from_millis(750),
         )
         .await?;
 
+    assert_eq!(
+        page.complete_post_load_ready_tasks(Duration::ZERO).await?,
+        moli_renderer_v8::RendererPostLoadReadyCompletion::Idle
+    );
+    server.shutdown().await;
+    Ok(())
+}
+
+async fn arm_post_load_ready_chain(page: &mut Page, hops: usize) -> Result<()> {
+    let expression = format!(
+        r#"(() => {{
+            delete document.body.dataset.chainComplete;
+            document.body.dataset.completedHops = '0';
+            let remaining = {hops};
+            const advance = () => {{
+                remaining -= 1;
+                document.body.dataset.completedHops = String({hops} - remaining);
+                if (remaining === 0) {{
+                    document.body.dataset.chainComplete = 'yes';
+                }} else {{
+                    setTimeout(advance, 0);
+                }}
+            }};
+            setTimeout(advance, 0);
+            return 'armed';
+        }})()"#
+    );
+    page.evaluate_runtime_expression_async(&expression).await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn post_load_ready_task_completion_counts_real_page_turns() -> Result<()> {
+    let server = FixtureServer::spawn().await?;
+    let browser = Browser::new(AppConfig::default())?;
+    let mut page = browser
+        .fetch_with_wait_until(
+            &server.url("/static"),
+            RenderedDomWaitUntil::Load,
+            Duration::from_millis(750),
+        )
+        .await?;
+
+    arm_post_load_ready_chain(&mut page, 16).await?;
     let completion = page
         .complete_post_load_ready_tasks(Duration::from_millis(750))
         .await?;
     assert_eq!(
         completion,
-        moli_renderer_v8::RendererPostLoadReadyCompletion::TurnBudgetExhausted
+        moli_renderer_v8::RendererPostLoadReadyCompletion::Idle
     );
     let html = page.serialize_html_async().await?;
     assert!(
-        html.contains("<table id=\"live-demo\"><tbody><tr><td>ready</td></tr></tbody></table>"),
-        "the finite drain must still reach the content task before yielding: {html}"
+        html.contains("data-chain-complete=\"yes\"") && html.contains("data-completed-hops=\"16\""),
+        "the exact policy boundary must complete: {html}"
     );
+
+    arm_post_load_ready_chain(&mut page, 17).await?;
+    assert_eq!(
+        page.complete_post_load_ready_tasks(Duration::from_millis(750))
+            .await?,
+        moli_renderer_v8::RendererPostLoadReadyCompletion::TurnBudgetExhausted
+    );
+    let html = page.serialize_html_async().await?;
+    assert!(html.contains("data-completed-hops=\"16\""), "html={html}");
+    assert!(!html.contains("data-chain-complete=\"yes\""), "html={html}");
     server.shutdown().await;
     Ok(())
 }

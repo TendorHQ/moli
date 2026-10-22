@@ -423,16 +423,13 @@ impl<Entry> PageTurnScheduler<Entry> {
             return ScheduledPageTurnCheckout::NotScheduled;
         }
         match self.residence.checkout() {
-            RendererPageEntryCheckout::Entry(entry) => {
-                self.admitted_turn_count = self.admitted_turn_count.wrapping_add(1);
-                ScheduledPageTurnCheckout::Turn {
-                    entry,
-                    trigger: self
-                        .scheduled_trigger
-                        .take()
-                        .expect("scheduled page turn must retain its trigger until checkout"),
-                }
-            }
+            RendererPageEntryCheckout::Entry(entry) => ScheduledPageTurnCheckout::Turn {
+                entry,
+                trigger: self
+                    .scheduled_trigger
+                    .take()
+                    .expect("scheduled page turn must retain its trigger until checkout"),
+            },
             RendererPageEntryCheckout::Busy => ScheduledPageTurnCheckout::Busy,
             RendererPageEntryCheckout::Retired => ScheduledPageTurnCheckout::Retired,
         }
@@ -440,6 +437,12 @@ impl<Entry> PageTurnScheduler<Entry> {
 
     pub(super) const fn admitted_turn_count(&self) -> u64 {
         self.admitted_turn_count
+    }
+
+    /// Records one admitted wake that selected a concrete Page turn. A spent
+    /// wake has no execution authority and must not consume a `Done` turn.
+    pub(super) fn record_admitted_turn(&mut self) {
+        self.admitted_turn_count = self.admitted_turn_count.wrapping_add(1);
     }
 }
 
@@ -1161,6 +1164,8 @@ mod tests {
         };
         assert_eq!(entry, 7);
         assert_eq!(actual_trigger, trigger);
+        assert_eq!(scheduler.admitted_turn_count(), 0);
+        scheduler.record_admitted_turn();
         assert_eq!(scheduler.admitted_turn_count(), 1);
     }
 
