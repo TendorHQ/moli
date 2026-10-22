@@ -312,19 +312,19 @@ nextest regression suite.
 ### Web content extraction
 
 <details open>
-<summary><strong>LexBench WebFetch · 430 tasks</strong></summary>
+<summary><strong>LexBench Web Fetch · 430 tasks</strong></summary>
 
 Five web-fetch methods are compared on the same 430 tasks across seven families. A task passes only when its requested content, structure, resource addresses or file bytes meet the task requirements.
 
 | Method | Tasks passed | Pass rate |
 | --- | ---: | ---: |
 | Moli development build (WebFetch fixes) | **384/430** | **89.30%** |
-| Chromium 155.0.8059.39 | 233/430 | 54.19% |
+| Chrome for Testing 155.0.8059.39 | 233/430 | 54.19% |
 | Lightpanda 1.0.0 | 227/430 | 52.79% |
 | Obscura 0.2.4 | 222/430 | 51.63% |
 | Kitesurf (hosted) | 194/430 | 45.12% |
 
-Calls were made from October 9 to 15, 2026. The Moli row is an unreleased development cohort: 374 retained tasks used commit `a737f2ae`, and 56 declared correction tasks used `0d9a7ceb`. It is not the Moli 1.1.17 release binary.
+Calls were made from October 9 to 15, 2026. The Moli row is an unreleased development build after v1.1.17 (commits `a737f2ae` and `0d9a7ceb`; 56 of the 430 tasks were rerun on the later commit). It is not the Moli 1.1.17 release binary.
 
 Tasks are drawn from the [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch) suites. [`browser-eval`](https://github.com/lexmount/browser-eval) assembles and corrects the 430-task cohort, runs it, and builds the report.
 

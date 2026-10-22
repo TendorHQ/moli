@@ -236,19 +236,19 @@ Moli 是一个独立的浏览器内核，而不是对 Chromium 的封装。它�
 ### 网页内容提取
 
 <details open>
-<summary><strong>LexBench WebFetch · 430 道任务</strong></summary>
+<summary><strong>LexBench Web Fetch · 430 道任务</strong></summary>
 
 五种 Web Fetch 方法使用相同的 430 道任务，覆盖七类场景。只有返回的正文、结构、资源地址或文件字节满足题目要求，才算通过。
 
 | 方法 | 通过任务数 | 通过率 |
 | --- | ---: | ---: |
 | Moli 开发版（含 WebFetch 修复） | **384/430** | **89.30%** |
-| Chromium 155.0.8059.39 | 233/430 | 54.19% |
+| Chrome for Testing 155.0.8059.39 | 233/430 | 54.19% |
 | Lightpanda 1.0.0 | 227/430 | 52.79% |
 | Obscura 0.2.4 | 222/430 | 51.63% |
 | Kitesurf（托管服务） | 194/430 | 45.12% |
 
-各方法的调用时间为 2026 年 10 月 9 日至 15 日。Moli 这一行是尚未发布的开发版结果：374 道保留结果来自提交 `a737f2ae`，56 道修正结果来自提交 `0d9a7ceb`，并非 Moli 1.1.17 正式版二进制。
+各方法的调用时间为 2026 年 10 月 9 日至 15 日。Moli 这一行来自 1.1.17 之后、尚未发布的开发版（提交 `a737f2ae` 和 `0d9a7ceb`；430 道任务中有 56 道在后一个提交上重跑），不是 Moli 1.1.17 正式版二进制。
 
 题目取自 [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch) 的评测套件；[`browser-eval`](https://github.com/lexmount/browser-eval) 负责组装和修订 430 道题的集合，并执行评测和生成报告。
 

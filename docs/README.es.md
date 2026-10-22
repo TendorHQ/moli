@@ -238,19 +238,19 @@ Las siguientes mediciones muestran las capacidades actuales de Moli. Cubren siti
 ### Extracción de contenido web
 
 <details open>
-<summary><strong>LexBench WebFetch · 430 tareas</strong></summary>
+<summary><strong>LexBench Web Fetch · 430 tareas</strong></summary>
 
 Se comparan cinco métodos de Web Fetch con las mismas 430 tareas de siete categorías. Solo se aprueba cuando el contenido, la estructura, las direcciones de recursos o los bytes del archivo cumplen los requisitos de la tarea.
 
 | Método | Tareas aprobadas | Porcentaje |
 | --- | ---: | ---: |
 | Compilación de desarrollo de Moli (correcciones de WebFetch) | **384/430** | **89.30%** |
-| Chromium 155.0.8059.39 | 233/430 | 54.19% |
+| Chrome for Testing 155.0.8059.39 | 233/430 | 54.19% |
 | Lightpanda 1.0.0 | 227/430 | 52.79% |
 | Obscura 0.2.4 | 222/430 | 51.63% |
 | Kitesurf (alojado) | 194/430 | 45.12% |
 
-Las llamadas se realizaron del 9 al 15 de octubre de 2026. La fila de Moli corresponde a una compilación de desarrollo no publicada: 374 tareas conservadas usaron el commit `a737f2ae` y 56 tareas de corrección declaradas usaron `0d9a7ceb`. No es el binario publicado como Moli 1.1.17.
+Las llamadas se realizaron del 9 al 15 de octubre de 2026. La fila de Moli corresponde a una compilación de desarrollo posterior a la versión 1.1.17 y aún no publicada (commits `a737f2ae` y `0d9a7ceb`; 56 de las 430 tareas se repitieron con el segundo commit). No es el binario publicado como Moli 1.1.17.
 
 Las tareas proceden de las suites de [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch). [`browser-eval`](https://github.com/lexmount/browser-eval) compone y corrige el conjunto de 430 tareas, lo ejecuta y genera el informe.
 
