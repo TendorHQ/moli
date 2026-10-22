@@ -175,7 +175,9 @@ impl RendererOwnerHandle {
                 self.complete_post_load_ready_tasks_turn(
                     token,
                     deadline,
-                    super::super::page_turn_scheduler::POST_LOAD_READY_TURN_BUDGET,
+                    super::super::page_turn_scheduler::MAX_POST_LOAD_READY_PAGE_TURNS,
+                    admitted_page_turn_count_on_bound_owner_local_store(token).unwrap_or(0),
+                    true,
                     capture_policy,
                 )
                 .await
@@ -192,7 +194,9 @@ impl RendererOwnerHandle {
         &self,
         token: RendererPageToken,
         deadline: Instant,
-        remaining_turns: usize,
+        remaining_page_turns: usize,
+        observed_page_turn_count: u64,
+        signal_scheduler: bool,
         capture_policy: super::RendererPageStateCapturePolicy,
     ) -> RenderRuntimeDispatchOutcome {
         let entry = match take_entry_for_command_on_bound_owner_local_store(token) {
@@ -201,22 +205,30 @@ impl RendererOwnerHandle {
         };
         self.restore_live_page_entry(token, entry);
 
-        let should_continue = remaining_turns > 0
-            && Instant::now() < deadline
-            && matches!(
-                page_turn_readiness_after_restore_on_bound_owner_local_store(token),
-                Some(PageOwnerTurnReadiness::Runnable)
-            );
+        let current_page_turn_count = admitted_page_turn_count_on_bound_owner_local_store(token)
+            .unwrap_or(observed_page_turn_count);
+        let completed_turns = current_page_turn_count.wrapping_sub(observed_page_turn_count);
+        let completed_turns = usize::try_from(completed_turns).unwrap_or(usize::MAX);
+        let remaining_page_turns = remaining_page_turns.saturating_sub(completed_turns);
+        let readiness = page_turn_readiness_after_restore_on_bound_owner_local_store(token);
+        let deadline_reached = Instant::now() >= deadline;
+        let should_continue = !deadline_reached
+            && remaining_page_turns > 0
+            && matches!(readiness, Some(PageOwnerTurnReadiness::Runnable));
         if should_continue {
-            self.signal_internal_page_turn_source(
-                token,
-                RendererOwnerWakeSource::SchedulerContinuation,
-            );
+            if signal_scheduler {
+                self.signal_internal_page_turn_source(
+                    token,
+                    RendererOwnerWakeSource::SchedulerContinuation,
+                );
+            }
             return RenderRuntimeDispatchOutcome::ContinueAfterPageWakeOrDeadline {
                 turn: Box::new(RenderRuntimeTurn::CompletePostLoadReadyTasks {
                     token,
                     deadline,
-                    remaining_turns: remaining_turns - 1,
+                    remaining_page_turns,
+                    observed_page_turn_count: current_page_turn_count,
+                    signal_scheduler: false,
                     capture_policy,
                 }),
                 wake_token: token,
@@ -228,10 +240,19 @@ impl RendererOwnerHandle {
             Ok(entry) => entry,
             Err(error) => return Err(error).into(),
         };
+        let completion = if deadline_reached {
+            RendererPostLoadReadyCompletion::DeadlineReached
+        } else if remaining_page_turns == 0
+            && matches!(readiness, Some(PageOwnerTurnReadiness::Runnable))
+        {
+            RendererPostLoadReadyCompletion::TurnBudgetExhausted
+        } else {
+            RendererPostLoadReadyCompletion::Idle
+        };
         self.complete_live_page_command_turn(
             token,
             entry,
-            RendererPageReply::Unit,
+            RendererPageReply::PostLoadReadyCompletion(completion),
             true,
             None,
             None,

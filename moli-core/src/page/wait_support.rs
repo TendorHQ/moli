@@ -9,15 +9,25 @@ use crate::{
     network::ResourceRequestClient,
     renderer::{RendererDocumentQuerySelectorNode, RendererPageCommand, RendererPageReply},
 };
+use moli_renderer_v8::RendererPostLoadReadyCompletion;
 
 impl Page {
-    pub(crate) async fn complete_post_load_ready_tasks(&mut self, timeout: Duration) -> Result<()> {
+    pub(crate) async fn complete_post_load_ready_tasks(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<RendererPostLoadReadyCompletion> {
         let timeout_ms = timeout.as_millis().min(u128::from(u64::MAX)) as u64;
-        self.dispatch_unit_page_command_async(
-            RendererPageCommand::CompletePostLoadReadyTasks { timeout_ms },
+        let reply = self
+            .dispatch_page_command_async(RendererPageCommand::CompletePostLoadReadyTasks {
+                timeout_ms,
+            })
+            .await?;
+        expect_page_reply!(
+            reply,
             "complete post-load ready tasks",
+            "a post-load completion status",
+            RendererPageReply::PostLoadReadyCompletion(completion) => Ok(completion),
         )
-        .await
     }
 
     pub async fn ms_to_next_timeout(&mut self) -> Result<Option<u64>> {

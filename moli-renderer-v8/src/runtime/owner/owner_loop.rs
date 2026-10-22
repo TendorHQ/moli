@@ -1245,13 +1245,17 @@ impl RendererOwnerHandle {
             RenderRuntimeTurn::CompletePostLoadReadyTasks {
                 token,
                 deadline,
-                remaining_turns,
+                remaining_page_turns,
+                observed_page_turn_count,
+                signal_scheduler,
                 capture_policy,
             } => {
                 self.complete_post_load_ready_tasks_turn(
                     token,
                     deadline,
-                    remaining_turns,
+                    remaining_page_turns,
+                    observed_page_turn_count,
+                    signal_scheduler,
                     capture_policy,
                 )
                 .await

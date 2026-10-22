@@ -305,10 +305,6 @@ impl JsContextHost {
             .count()
     }
 
-    pub(crate) fn dedicated_worker_loading_count_for_diagnostics(&self) -> usize {
-        self.pending_dedicated_worker_bootstrap_count()
-    }
-
     pub(crate) fn dedicated_worker_running_worker_isolate_count_for_diagnostics(&self) -> usize {
         self.workers
             .values()

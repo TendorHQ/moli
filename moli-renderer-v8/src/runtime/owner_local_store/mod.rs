@@ -1677,6 +1677,14 @@ impl RendererOwnerLocalStore {
         Some(PageOwnerTurnReadiness::Idle)
     }
 
+    fn admitted_page_turn_count(&self, token: RendererPageToken) -> Option<u64> {
+        self.page_hosts
+            .get(&token.local_host_id)?
+            .pages
+            .get(&token.page_id)
+            .map(|slot| slot.turn_scheduler.admitted_turn_count())
+    }
+
     fn next_page_task_deadline(&self) -> Option<std::time::Instant> {
         #[cfg(debug_assertions)]
         self.debug_assert_page_task_deadline_index_consistent();

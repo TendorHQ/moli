@@ -77,14 +77,7 @@ impl Browser {
                 raw_document_policy,
             )
             .await?;
-
-        match fetched {
-            FetchedDocument::Page(mut page) => {
-                self.wait_for_page_readiness_with_deadline(&mut page, wait_until, deadline)
-                    .await?;
-                Ok(FetchedDocument::Page(page))
-            }
-            FetchedDocument::Raw(raw) => Ok(FetchedDocument::Raw(raw)),
-        }
+        self.finish_fetched_document_readiness(fetched, wait_until, deadline)
+            .await
     }
 }

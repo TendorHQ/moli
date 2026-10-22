@@ -59,6 +59,17 @@ addEventListener('DOMContentLoaded', () => {
 setTimeout(() => document.body.setAttribute('data-unrelated-future', 'ran'), 60000);
 </script></body></html>"#;
 
+const WAIT_UNTIL_HANGING_CHILD_AFTER_LOAD_HTML: &str = r#"<!doctype html>
+<html><body><main id="parent-ready">parent-ready</main><script>
+addEventListener('load', () => {
+  setTimeout(() => {
+    const frame = document.createElement('iframe');
+    frame.src = '/wait-until-very-slow-data';
+    document.body.appendChild(frame);
+  }, 0);
+});
+</script></body></html>"#;
+
 const WAIT_UNTIL_DEDICATED_WORKER_BOOTSTRAP_SLOW_HTML: &str = r#"<!doctype html>
 <html><body><main id="initial">initial</main><script>
 const worker = new Worker('/wait-until-dedicated-worker-bootstrap-slow.js');
@@ -365,6 +376,10 @@ pub(super) fn add_wait_routes(router: Router) -> Router {
         .route(
             "/wait-until-child-script-bootstrap",
             get(wait_until_child_script_bootstrap_page),
+        )
+        .route(
+            "/wait-until-hanging-child-after-load",
+            get(wait_until_hanging_child_after_load_page),
         )
         .route(
             "/wait-until-child-script-bootstrap-child",
@@ -806,6 +821,10 @@ async fn wait_until_worker_termination_timer_page() -> Html<&'static str> {
 
 async fn wait_until_child_script_bootstrap_page() -> Html<&'static str> {
     Html(WAIT_UNTIL_CHILD_SCRIPT_BOOTSTRAP_HTML)
+}
+
+async fn wait_until_hanging_child_after_load_page() -> Html<&'static str> {
+    Html(WAIT_UNTIL_HANGING_CHILD_AFTER_LOAD_HTML)
 }
 
 async fn wait_until_child_script_bootstrap_child() -> Html<&'static str> {

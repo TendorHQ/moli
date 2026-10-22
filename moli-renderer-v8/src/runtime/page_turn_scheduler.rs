@@ -28,6 +28,7 @@ use super::page_entry_residence::{
 pub(super) struct PageTurnScheduler<Entry> {
     residence: RendererPageEntryResidenceSlot<Entry>,
     scheduled_trigger: Option<PageTurnTrigger>,
+    admitted_turn_count: u64,
     arbitration: PageTaskArbitrationState,
     turn_class_arbitration: PageTurnClassArbitrationState,
 }
@@ -58,10 +59,10 @@ impl PageTurnTrigger {
 const MAX_CONSECUTIVE_PAGE_TASKS_PER_SOURCE: usize = 8;
 const MAX_CONSECUTIVE_PAGE_TURNS_PER_CLASS: usize = 8;
 
-// Two complete fairness windows let a finite load-handler tail make progress
-// without turning `Done` into an unbounded idle wait.
-pub(super) const POST_LOAD_READY_TURN_BUDGET: usize =
-    MAX_CONSECUTIVE_PAGE_TASKS_PER_SOURCE + MAX_CONSECUTIVE_PAGE_TURNS_PER_CLASS;
+/// `Done` drains only a finite tail of work that is already runnable after
+/// Load. This is an explicit product limit, not a value derived from the
+/// scheduler's source-fairness windows.
+pub(super) const MAX_POST_LOAD_READY_PAGE_TURNS: usize = 16;
 
 #[derive(Debug, Default)]
 struct PageTaskArbitrationState {
@@ -206,6 +207,7 @@ impl<Entry> PageTurnScheduler<Entry> {
         Self {
             residence: RendererPageEntryResidenceSlot::new(entry),
             scheduled_trigger: None,
+            admitted_turn_count: 0,
             arbitration: PageTaskArbitrationState::default(),
             turn_class_arbitration: PageTurnClassArbitrationState::default(),
         }
@@ -421,16 +423,23 @@ impl<Entry> PageTurnScheduler<Entry> {
             return ScheduledPageTurnCheckout::NotScheduled;
         }
         match self.residence.checkout() {
-            RendererPageEntryCheckout::Entry(entry) => ScheduledPageTurnCheckout::Turn {
-                entry,
-                trigger: self
-                    .scheduled_trigger
-                    .take()
-                    .expect("scheduled page turn must retain its trigger until checkout"),
-            },
+            RendererPageEntryCheckout::Entry(entry) => {
+                self.admitted_turn_count = self.admitted_turn_count.wrapping_add(1);
+                ScheduledPageTurnCheckout::Turn {
+                    entry,
+                    trigger: self
+                        .scheduled_trigger
+                        .take()
+                        .expect("scheduled page turn must retain its trigger until checkout"),
+                }
+            }
             RendererPageEntryCheckout::Busy => ScheduledPageTurnCheckout::Busy,
             RendererPageEntryCheckout::Retired => ScheduledPageTurnCheckout::Retired,
         }
+    }
+
+    pub(super) const fn admitted_turn_count(&self) -> u64 {
+        self.admitted_turn_count
     }
 }
 
@@ -1129,6 +1138,7 @@ mod tests {
     #[test]
     fn busy_scheduled_checkout_preserves_the_admitted_trigger() {
         let mut scheduler = PageTurnScheduler::new(7_u8);
+        assert_eq!(scheduler.admitted_turn_count(), 0);
         assert_eq!(scheduler.checkout(), RendererPageEntryCheckout::Entry(7));
         let trigger = producer_trigger(RendererOwnerWakeSource::V8ForegroundTask);
         assert_eq!(
@@ -1140,6 +1150,7 @@ mod tests {
             scheduler.checkout_scheduled_turn(),
             ScheduledPageTurnCheckout::Busy
         ));
+        assert_eq!(scheduler.admitted_turn_count(), 0);
         assert_eq!(scheduler.restore(7), RendererPageEntryRestore::Restored);
         let ScheduledPageTurnCheckout::Turn {
             entry,
@@ -1150,6 +1161,7 @@ mod tests {
         };
         assert_eq!(entry, 7);
         assert_eq!(actual_trigger, trigger);
+        assert_eq!(scheduler.admitted_turn_count(), 1);
     }
 
     #[test]

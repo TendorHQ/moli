@@ -1766,6 +1766,43 @@ async fn fetch_with_domstable_waits_for_child_script_bootstrap_and_message() -> 
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn fetch_with_domstable_bounds_a_child_that_does_not_finish_in_time() -> Result<()> {
+    let server = FixtureServer::spawn().await?;
+    let browser = Browser::new(AppConfig::default())?;
+    let started = Instant::now();
+
+    let page = tokio::time::timeout(
+        Duration::from_secs(1),
+        browser.fetch_with_wait_until(
+            &server.url("/wait-until-hanging-child-after-load"),
+            RenderedDomWaitUntil::DomStable,
+            Duration::from_millis(350),
+        ),
+    )
+    .await
+    .context("DomStable must remain bounded by the caller deadline")??;
+
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed >= Duration::from_millis(250),
+        "DomStable returned before observing the pending child: {elapsed:?}"
+    );
+    assert!(
+        elapsed < Duration::from_secs(1),
+        "DomStable exceeded the caller-owned bound: {elapsed:?}"
+    );
+    assert!(
+        page.serialize_html_async()
+            .await?
+            .contains("id=\"parent-ready\">parent-ready</main>"),
+        "the best-effort timeout must retain the usable parent Page"
+    );
+
+    server.shutdown().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn fetch_with_domstable_follows_http_redirect_from_script_navigation() -> Result<()> {
     let server = FixtureServer::spawn().await?;
     let browser = Browser::new(AppConfig::default())?;

@@ -15,6 +15,7 @@ use super::owner_local_store::{
     RendererPageCreationResolution, RendererPageScheduledTurn, RendererPageToken,
     RendererPageTurnAdmission, RendererPageTurnCheckoutError, RendererPendingPageCreation,
     RendererPreparedDocumentResidence, RetiringPageEntry,
+    admitted_page_turn_count_on_bound_owner_local_store,
     advance_document_lifecycle_one_page_turn_via_local_task,
     advance_dom_stable_wait_turn_on_entry_via_local_task,
     advance_network_idle_wait_turn_on_entry_via_local_task,
@@ -788,7 +789,9 @@ enum RenderRuntimeTurn {
     CompletePostLoadReadyTasks {
         token: RendererPageToken,
         deadline: Instant,
-        remaining_turns: usize,
+        remaining_page_turns: usize,
+        observed_page_turn_count: u64,
+        signal_scheduler: bool,
         capture_policy: super::RendererPageStateCapturePolicy,
     },
     ClaimLivePageTopLevelNavigationHandoff {

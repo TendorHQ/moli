@@ -541,11 +541,44 @@ async fn post_load_ready_task_completion_honors_zero_deadline() -> Result<()> {
         .await?;
 
     let started = std::time::Instant::now();
-    page.complete_post_load_ready_tasks(Duration::ZERO).await?;
+    let completion = page.complete_post_load_ready_tasks(Duration::ZERO).await?;
+
+    assert_eq!(
+        completion,
+        moli_renderer_v8::RendererPostLoadReadyCompletion::DeadlineReached
+    );
 
     assert!(
         started.elapsed() < Duration::from_millis(250),
         "an expired completion budget must not start a bounded drain"
+    );
+    server.shutdown().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn post_load_ready_task_completion_counts_real_page_turns() -> Result<()> {
+    let server = FixtureServer::spawn().await?;
+    let browser = Browser::new(AppConfig::default())?;
+    let mut page = browser
+        .fetch_with_wait_until(
+            &server.url("/runtime/post-load-ready-task"),
+            RenderedDomWaitUntil::Load,
+            Duration::from_millis(750),
+        )
+        .await?;
+
+    let completion = page
+        .complete_post_load_ready_tasks(Duration::from_millis(750))
+        .await?;
+    assert_eq!(
+        completion,
+        moli_renderer_v8::RendererPostLoadReadyCompletion::TurnBudgetExhausted
+    );
+    let html = page.serialize_html_async().await?;
+    assert!(
+        html.contains("<table id=\"live-demo\"><tbody><tr><td>ready</td></tr></tbody></table>"),
+        "the finite drain must still reach the content task before yielding: {html}"
     );
     server.shutdown().await;
     Ok(())

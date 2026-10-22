@@ -65,6 +65,9 @@ impl PageVm {
             RendererPageCommand::CompleteChildFrameLifecycleWorkBestEffort { .. } => Err(anyhow!(
                 "child-frame lifecycle best-effort observation must be routed through the renderer owner continuation"
             )),
+            RendererPageCommand::CompletePostLoadReadyTasks { .. } => Err(anyhow!(
+                "post-load ready task completion must be routed through the renderer owner continuation"
+            )),
             RendererPageCommand::SetDocumentContent { frame_id, html } => self
                 .vm_mut()
                 .set_document_content_for_frame(&frame_id, &html)
@@ -1142,9 +1145,6 @@ impl PageVm {
                 self.set_blocked_url_patterns(&patterns);
                 Ok(RendererPageReply::Unit)
             }
-            RendererPageCommand::CompletePostLoadReadyTasks { .. } => unreachable!(
-                "post-load ready tasks are consumed by the renderer owner"
-            ),
             RendererPageCommand::MsToNextTimeout => Ok(RendererPageReply::OptionalU64(
                 self.vm().ms_to_next_timeout(),
             )),
