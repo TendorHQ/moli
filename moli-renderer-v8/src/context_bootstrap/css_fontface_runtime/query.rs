@@ -6,7 +6,7 @@ mod selection;
 
 struct Candidate<'s> {
     face: v8::Local<'s, v8::Value>,
-    family: String,
+    family: moli_dom::native::DomStringValue,
     selection: selection::Selection,
     ranges: Vec<moli_layout::WebFontUnicodeRange>,
 }
@@ -35,14 +35,14 @@ pub(super) fn font_face_set_matching_faces_array<'s>(
         let Ok(face_object) = v8::Local::<v8::Object>::try_from(face) else {
             continue;
         };
-        let family = super::loading::string_slot(scope, face_object, FONT_FACE_FAMILY_SLOT);
+        let Some(family) = super::font_face::font_face_raw_family(scope, face_object) else { continue; };
         let weight = super::loading::string_slot(scope, face_object, FONT_FACE_WEIGHT_SLOT);
         let stretch = super::loading::string_slot(scope, face_object, FONT_FACE_STRETCH_SLOT);
         let style = super::loading::string_slot(scope, face_object, FONT_FACE_STYLE_SLOT);
         let ranges = super::loading::string_slot(scope, face_object, FONT_FACE_UNICODE_RANGE_SLOT);
         candidates.push(Candidate {
             face,
-            family: moli_css_parse::unquote_css_string(&family),
+            family,
             selection: selection::Selection::new(&weight, &stretch, &style),
             ranges: crate::css_resource_urls::parse_font_unicode_ranges(&ranges)
                 .unwrap_or_default(),
@@ -53,7 +53,7 @@ pub(super) fn font_face_set_matching_faces_array<'s>(
     for family in query.families {
         let family_faces = candidates
             .iter()
-            .filter(|face| family.eq_ignore_ascii_case(&face.family))
+            .filter(|face| face.family.as_str().is_some_and(|candidate| family.eq_ignore_ascii_case(candidate)))
             .collect::<Vec<_>>();
         let Some(best) = family_faces
             .iter()
