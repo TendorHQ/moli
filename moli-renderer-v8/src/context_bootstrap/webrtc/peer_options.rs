@@ -38,7 +38,7 @@ pub(super) struct LocalDescriptionArgs<'s> {
 #[derive(webidl::WebIdlDictionary)]
 #[webidl(prefix = "RTCDataChannelInit", snapshot)]
 pub(super) struct DataChannelInit {
-    #[webidl(nullable, converter = "enforce_range_unsigned_short", snapshot_slot = RTC_DATA_CHANNEL_ID_SLOT)]
+    #[webidl(converter = "enforce_range_unsigned_short", snapshot_slot = RTC_DATA_CHANNEL_ID_SLOT, snapshot_default = v8::null(scope).into())]
     pub(super) id: Option<u16>,
     #[webidl(name = "maxPacketLifeTime", snapshot_slot = RTC_DATA_CHANNEL_MAX_PACKET_LIFETIME_SLOT, snapshot_default = v8::null(scope).into())]
     pub(super) max_packet_lifetime: Option<u16>,
