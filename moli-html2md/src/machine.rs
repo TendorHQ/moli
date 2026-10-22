@@ -9,6 +9,7 @@ enum Task<'a, Id> {
     Children(Option<Id>, usize),
     Boundary,
     ChoiceBoundary,
+    Fallback(String, usize),
     RestoreSvg(bool),
     PopStyle,
     EndLink(usize),
@@ -74,6 +75,13 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
                 Task::Children(None, _) | Task::RawChildren(None, _, _) => {}
                 Task::Boundary => self.writer().boundary(2),
                 Task::ChoiceBoundary => self.writer().boundary(1),
+                Task::Fallback(label, before) => {
+                    if self.writer().content_mark() == before {
+                        self.writer().text(" ");
+                        self.writer().text(&label);
+                        self.writer().text(" ");
+                    }
+                }
                 Task::RestoreSvg(previous) => self.in_svg = previous,
                 Task::PopStyle => self.writer().pop_style(),
                 Task::EndLink(serial) => self.writer().end_link(serial),
@@ -227,7 +235,7 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
                 self.writer().block("---".into(), 2, 2);
                 return;
             }
-            "select" | "optgroup" | "option" | "button" | "time" => {
+            "select" | "optgroup" | "option" => {
                 self.writer().boundary(1);
                 if matches!(tag, "optgroup" | "option")
                     && let Some(label) = self.dom.attribute(node, "label")
@@ -247,7 +255,7 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
                 if let Some(href) = self
                     .dom
                     .attribute(node, "href")
-                    .filter(|href| !href.is_empty() && crate::media::safe_url(href, false))
+                    .filter(|href| !href.is_empty() && crate::media::safe_link_url(href))
                 {
                     self.serial += 1;
                     let serial = self.serial;
@@ -344,11 +352,9 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
             }
             _ => {}
         }
-        if let Some(label) = crate::content::fallback_text(self.dom, node)
-            && !subtree_has_content(self.dom, node, self.options.max_depth - depth)
-        {
-            self.writer().text(&label);
-            return;
+        if let Some(label) = crate::content::fallback_text(self.dom, node) {
+            let before = self.writer().content_mark();
+            self.tasks.push(Task::Fallback(label, before));
         }
         self.children(node, depth + 1);
     }
@@ -365,7 +371,8 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
                 .attribute(node, "poster")
                 .filter(|src| !src.is_empty() && crate::media::safe_url(src, true))
         {
-            self.writer().image("", poster, None);
+            let poster_label = crate::media::poster_label(self.dom, node);
+            self.writer().image(&poster_label, poster, None);
             self.writer().boundary(1);
         }
         let label = crate::media::label(self.dom, node, tag);
@@ -380,6 +387,12 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
             self.writer().text(label);
             if opened {
                 self.writer().end_link(serial);
+            } else {
+                // Markdown cannot nest a media link inside a surrounding link.
+                // Retain its destination as text rather than silently losing it.
+                self.writer().text(" (");
+                self.writer().text(href);
+                self.writer().text(")");
             }
             self.writer().boundary(1);
         }
@@ -533,10 +546,6 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
         block.push_str(&fence);
         self.writer().block(block.into(), 2, 2);
     }
-}
-
-fn subtree_has_content<D: Dom + ?Sized>(dom: &D, root: D::NodeId, limit: usize) -> bool {
-    crate::content::has_readable_content(dom, root, limit)
 }
 
 fn class_language(class: Option<&str>) -> Option<&str> {

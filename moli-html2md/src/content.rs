@@ -1,59 +1,64 @@
 use crate::{Dom, NodeKind};
 
-pub(crate) fn has_readable_content<D: Dom + ?Sized>(
-    dom: &D,
-    root: D::NodeId,
-    limit: usize,
-) -> bool {
-    let mut pending = vec![(root, 0)];
-    while let Some((node, depth)) = pending.pop() {
-        if matches!(
-            dom.node_kind(node),
-            NodeKind::Element("head" | "title" | "script" | "style" | "noscript" | "template")
-        ) {
-            continue;
-        }
-        match dom.node_kind(node) {
-            NodeKind::Text(text) if !text.trim_matches(char::is_whitespace).is_empty() => {
-                return true;
-            }
-            NodeKind::Element("img")
-                if crate::media::source(dom, node).is_some()
-                    || dom
-                        .attribute(node, "alt")
-                        .is_some_and(|alt| !alt.trim().is_empty()) =>
-            {
-                return true;
-            }
-            NodeKind::Element("input") if crate::form::input_text(dom, node).is_some() => {
-                return true;
-            }
-            NodeKind::Element("textarea") => {
-                if let Some(value) = crate::form::textarea_text(dom, node) {
-                    if !value.trim().is_empty() {
-                        return true;
-                    }
-                    // A present live value is authoritative even when the user
-                    // cleared it. Do not inspect serialized default children.
-                    continue;
-                }
-            }
-            NodeKind::Element(_) if depth > 0 && fallback_text(dom, node).is_some() => return true,
-            _ => {}
-        }
-        if depth + 1 >= limit {
-            continue;
-        }
-        let mut child = dom.first_child(node);
-        while let Some(id) = child {
-            pending.push((id, depth + 1));
-            child = dom.next_sibling(id);
-        }
-    }
-    false
-}
-
 pub(crate) fn fallback_text<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Option<String> {
+    if dom
+        .attribute(node, "aria-hidden")
+        .is_some_and(|v| v.trim().eq_ignore_ascii_case("true"))
+        || dom.attribute(node, "hidden").is_some()
+        || dom.attribute(node, "role").is_some_and(|role| {
+            matches!(
+                role.split_ascii_whitespace()
+                    .next()
+                    .unwrap_or_default()
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "none" | "presentation"
+            )
+        })
+    {
+        return None;
+    }
+    let named_tag = matches!(
+        dom.node_kind(node),
+        NodeKind::Element(
+            "a" | "button"
+                | "img"
+                | "svg"
+                | "input"
+                | "textarea"
+                | "select"
+                | "option"
+                | "optgroup"
+                | "h1"
+                | "h2"
+                | "h3"
+                | "h4"
+                | "h5"
+                | "h6"
+        )
+    );
+    let named_role = dom.attribute(node, "role").is_some_and(|role| {
+        matches!(
+            role.split_ascii_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_ascii_lowercase()
+                .as_str(),
+            "button"
+                | "link"
+                | "img"
+                | "heading"
+                | "checkbox"
+                | "radio"
+                | "textbox"
+                | "combobox"
+                | "switch"
+                | "tab"
+        )
+    });
+    if !named_tag && !named_role {
+        return None;
+    }
     for name in ["aria-label", "title"] {
         if let Some(value) = dom
             .attribute(node, name)

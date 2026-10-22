@@ -121,3 +121,11 @@ are tested in `moli-renderer-v8`.
 Unavailable images retain their text alternatives. Media references use standard
 source declarations before lazy-loading fallbacks. Empty accessible controls retain
 their labels; password values and hidden or file input values are omitted.
+
+Plain DOM attributes describe the supplied snapshot, including default form
+values and checked state. Browser adapters can expose live attributes and
+`control_value` instead. Placeholder hints are not field values. Empty named
+controls may use accessible labels; generic containers do not acquire text
+from tooltip titles or prohibited names. Child output takes precedence over
+any fallback label. Links retain application protocols while executable
+JavaScript and inline HTML document URLs are excluded.

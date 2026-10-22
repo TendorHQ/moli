@@ -70,7 +70,7 @@ fn nested_accessible_labels_do_not_rescan_the_whole_tree() {
     let count = |depth| {
         let html = format!(
             "{}Readable terminal{}",
-            "<span aria-label='Fallback'>".repeat(depth),
+            "<span role='button' aria-label='Fallback'>".repeat(depth),
             "</span>".repeat(depth),
         );
         let dom = Counted {
@@ -102,7 +102,7 @@ fn accessible_label_queries_remain_linear_with_large_unreadable_branches() {
         let branch = "<svg><path d='M0 0'/><path d='M1 1'/></svg>".repeat(20);
         let html = format!(
             "{}{}{}",
-            format!("<span aria-label='Fallback'>{branch}").repeat(depth),
+            format!("<span role='button' aria-label='Fallback'>{branch}").repeat(depth),
             branch,
             "</span>".repeat(depth)
         );
@@ -117,4 +117,97 @@ fn accessible_label_queries_remain_linear_with_large_unreadable_branches() {
     let small = count(30);
     let large = count(120);
     assert!(large <= small * 5, "{small} -> {large}");
+}
+
+#[test]
+fn labels_cannot_replace_media_choices_or_rules() {
+    for html in [
+        "<div title='Demo'><video src='/demo.mp4'></video></div>",
+        "<a href='/watch' title='Watch'><iframe src='https://example.test/movie'></iframe></a>",
+        "<button aria-label='Demo'><audio><source src='/demo.ogg'></audio></button>",
+    ] {
+        let result = markdown(html);
+        assert!(
+            result.contains("demo.mp4")
+                || result.contains("example.test/movie")
+                || result.contains("demo.ogg"),
+            "{html}: {result}"
+        );
+    }
+    let result = markdown(
+        "<button aria-label='Choices'><select><optgroup label='Group'><option label='First'></option></optgroup></select></button>",
+    );
+    assert!(
+        result.contains("Group") && result.contains("First"),
+        "{result}"
+    );
+    let result = markdown("<button aria-label='Rule'><hr></button>");
+    assert!(result.contains("---"), "{result}");
+}
+
+#[test]
+fn accessible_fallback_is_named_content_and_has_word_boundaries() {
+    let result = markdown(
+        "<p>x<button aria-label='Save'></button>y</p><nav aria-label='Pagination'></nav><div aria-label='Advertisement'></div><span title='tooltip'></span><button aria-hidden='true' aria-label='Hidden'></button><div role='progressbar' aria-label='Loading'></div><button aria-label='Download'><script type='application/json'>private state</script></button>",
+    );
+    assert!(result.contains("x Save y"), "{result}");
+    assert!(result.contains("Download"), "{result}");
+    for excluded in [
+        "Pagination",
+        "Advertisement",
+        "tooltip",
+        "Hidden",
+        "Loading",
+        "private state",
+    ] {
+        assert!(!result.contains(excluded), "{result}");
+    }
+}
+
+#[test]
+fn phrasing_controls_and_dates_keep_inline_styles_and_table_cells() {
+    let result = markdown(
+        "<strong>Posted <time>today</time></strong><a href='/p'>Posted <time>Oct 1</time></a><table><tr><th>Date</th><th>Action</th></tr><tr><td>x <time>Oct 1</time> y</td><td>a <button>Save</button> b</td></tr></table>",
+    );
+    let html = rendered_html(&result);
+    assert!(html.contains("<strong>Posted today</strong>"), "{html}");
+    assert!(html.contains("<a href=\"/p\">Posted Oct 1</a>"), "{html}");
+    assert!(!result.contains("<br>"), "{result}");
+}
+
+#[test]
+fn input_hints_do_not_masquerade_as_filled_values() {
+    let result = markdown(
+        "<input type='email' value='' placeholder='Your Email'><input value='Actual value'><input type='password' value='secret' aria-label='Password'>",
+    );
+    assert!(!result.contains("Your Email"), "{result}");
+    assert!(
+        result.contains("Actual value") && result.contains("Password"),
+        "{result}"
+    );
+    assert!(!result.contains("secret"), "{result}");
+}
+
+#[test]
+fn links_retain_legitimate_non_web_destinations() {
+    for href in [
+        "magnet:?xt=urn:btih:123",
+        "sms:+12025550123",
+        "geo:1,2",
+        "file:///tmp/manual.pdf",
+        "myapp:open/123",
+        "blob:https://example.test/id",
+        "data:application/pdf;base64,JVBERi0=",
+    ] {
+        let result = markdown(&format!("<a href='{href}'>Open</a>"));
+        assert!(result.contains(href), "{href}: {result}");
+    }
+    for href in [
+        "javascript:alert(1)",
+        "vbscript:run()",
+        "data:text/html,unsafe",
+    ] {
+        let result = markdown(&format!("<a href='{href}'>Safe label</a>"));
+        assert!(!result.contains(href), "{result}");
+    }
 }

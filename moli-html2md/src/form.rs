@@ -24,13 +24,12 @@ pub(crate) fn input_text<'a, D: Dom + ?Sized>(dom: &'a D, node: D::NodeId) -> Op
             .map(Cow::Borrowed);
     }
     let value = (!kind.eq_ignore_ascii_case("password"))
-        .then(|| dom.attribute(node, "value"))
+        .then(|| {
+            dom.control_value(node)
+                .or_else(|| dom.attribute(node, "value"))
+        })
         .flatten()
         .filter(|value| !value.is_empty())
-        .or_else(|| {
-            dom.attribute(node, "placeholder")
-                .filter(|value| !value.is_empty())
-        })
         .or_else(|| {
             dom.attribute(node, "aria-label")
                 .filter(|value| !value.is_empty())
