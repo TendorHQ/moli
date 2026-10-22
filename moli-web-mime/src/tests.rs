@@ -338,6 +338,9 @@ fn matches_script_and_form_content_types() {
     assert!(!is_media_source_type_supported(
         "video/webm; codecs=\"avc1.42E01E\""
     ));
+    assert!(!is_media_source_type_supported(
+        "video/webm; codecs=\"vp09.00.10.08\""
+    ));
 }
 
 #[test]

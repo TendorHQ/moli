@@ -2164,7 +2164,11 @@ fn media_source_support_claim_requires_an_operational_mse_surface() {
       type: 'media-source',
       video: { contentType, width: 1920, height: 1080, bitrate: 5000000, framerate: 30 }
     });
-    return [mediaSource, decoding.supported];
+    const file = await navigator.mediaCapabilities.decodingInfo({
+      type: 'file',
+      video: { contentType, width: 1920, height: 1080, bitrate: 5000000, framerate: 30 }
+    });
+    return [mediaSource, decoding.supported, file.supported];
   })).then(results => {
     globalThis.__mediaSourceCapabilityResult = JSON.stringify(results);
   });
@@ -2176,7 +2180,7 @@ fn media_source_support_claim_requires_an_operational_mse_surface() {
     assert_eq!(
         vm.eval("String(globalThis.__mediaSourceCapabilityResult)")
             .expect("MediaSource capability promises should settle"),
-        "[[false,false],[false,false]]"
+        "[[false,false,true],[false,false,true]]"
     );
 }
 #[test]

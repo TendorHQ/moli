@@ -522,9 +522,13 @@ fn configuration_supported(
     if matches!(
         configuration_type,
         MediaConfigurationType::Decoding(MediaDecodingType::MediaSource)
-    ) && !moli_web_mime::media_source_available()
-    {
-        return false;
+    ) {
+        return configuration.audio.as_ref().is_none_or(|audio| {
+            moli_web_mime::is_media_source_type_supported(&audio.content_type)
+        }) && configuration.video.as_ref().is_none_or(|video| {
+            moli_web_mime::is_media_source_type_supported(&video.content_type)
+                && video_codec_color_supported(video)
+        });
     }
     // File MIME support does not provide an RTP codec backend.
     if configuration_type.is_webrtc() {

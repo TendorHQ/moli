@@ -1,4 +1,4 @@
-use crate::parse::{mime_essence, mime_parameter};
+use crate::parse::mime_essence;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MediaMimeSupport {
@@ -40,14 +40,8 @@ pub const fn media_source_available() -> bool {
 }
 
 /// Reports support only when both the MIME shape and the MSE playback pipeline
-/// are available. Recognizing an AVC codec does not make SourceBuffer usable.
+/// are available. Recognizing a playable container does not make SourceBuffer
+/// usable.
 pub fn is_media_source_type_supported(input: &str) -> bool {
-    media_source_available()
-        && mime_essence(input).as_deref() == Some("video/mp4")
-        && mime_parameter(input, "codecs").is_some_and(|codecs| {
-            codecs
-                .split(',')
-                .map(str::trim)
-                .any(|codec| codec.to_ascii_lowercase().starts_with("avc1."))
-        })
+    media_source_available() && media_mime_support(input) != MediaMimeSupport::Unsupported
 }
