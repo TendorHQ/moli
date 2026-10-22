@@ -259,7 +259,14 @@ def _target_ids(infos: list[dict[str, Any]]) -> frozenset[str]:
 
 async def _close_target(client: RawCdpClient, target_id: str) -> None:
     command_id = await client.send("Target.closeTarget", {"targetId": target_id})
-    response, _ = await client.recv_until_id(command_id, timeout=5)
+    try:
+        response, _ = await client.recv_until_id(command_id, timeout=5)
+    except RawCdpError:
+        # Another target/context cleanup can win this race. Confirm that the
+        # requested target is gone before accepting the close failure.
+        if target_id not in _target_ids(await _target_infos(client)):
+            return
+        raise
     success = (response.get("result") or {}).get("success")
     if success is False:
         raise RawCdpError(f"Target.closeTarget rejected target {target_id}")
