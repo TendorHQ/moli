@@ -31,7 +31,7 @@ impl<'s> UiEventInit<'s> {
     }
 
     pub(super) fn initialize(
-        self,
+        &self,
         scope: &mut v8::PinScope<'s, '_>,
         event: v8::Local<'s, v8::Object>,
     ) {

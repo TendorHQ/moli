@@ -1,4 +1,4 @@
-use super::super::ui::{UiEventInit, initialize_legacy_ui_event};
+use super::super::ui::initialize_legacy_ui_event;
 use super::*;
 use crate::webidl;
 use moli_webapi_declare::WebApiObject;
@@ -40,14 +40,13 @@ impl Default for KeyboardEventInitMembers {
 
 #[derive(Default)]
 pub(super) struct KeyboardEventInit<'s> {
-    ui: UiEventInit<'s>,
-    modifiers: super::super::modifiers::EventModifierInitMembers,
+    modifiers: super::super::modifiers::EventModifierInit<'s>,
     keyboard: KeyboardEventInitMembers,
 }
 
 impl KeyboardEventInit<'_> {
     pub(super) fn event_flags(&self) -> (bool, bool, bool) {
-        self.ui.event_flags()
+        self.modifiers.event_flags()
     }
 }
 
@@ -63,7 +62,6 @@ pub(super) fn parse_keyboard_event_init<'s>(
             // Parse the inheritance chain base-first. Each group's members are
             // read once in lexical order, before initializing any event state.
             Ok(KeyboardEventInit {
-                ui: webidl::parse_dictionary_object(scope, object)?,
                 modifiers: webidl::parse_dictionary_object(scope, object)?,
                 keyboard: webidl::parse_dictionary_object(scope, object)?,
             })
@@ -82,7 +80,6 @@ pub(super) fn initialize_keyboard_event<'s>(
     event: v8::Local<'s, v8::Object>,
     parsed: KeyboardEventInit<'s>,
 ) {
-    parsed.ui.initialize(scope, event);
     parsed.modifiers.initialize(scope, event);
     parsed
         .keyboard
