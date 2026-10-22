@@ -302,7 +302,7 @@ Moli는 Chromium 래퍼가 아닌 독립형 브라우저 커널입니다. Rust�
 | 웹 표준 및 회귀 테스트 | 선택된 [WPT](https://github.com/web-platform-tests/wpt) 및 [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) 테스트 | 통과한 테스트 및 기능 회귀 |
 | 브라우저 자동화 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · 1,308개 브라우저 및 웹 테스트 | 작업 및 기능 테스트 통과율 |
 | CPU 및 메모리 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · 557개 작업 중 네 로컬 브라우저가 모두 완료한 작업 | CPU 시간과 최대 메모리 |
-| 저장 페이지의 본문 추출 | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · HTML 스냅샷 545개와 본문 참조 | 본문, 코드, 수식, 표의 유사도 |
+| HTML 스냅샷의 본문 추출 | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · HTML 스냅샷 545개와 본문 참조 | 본문, 코드, 수식, 표의 유사도 |
 
 ### 혼합 공개 웹 크롤 테스트
 
@@ -364,7 +364,7 @@ Moli는 Chrome CPU 시간의 약 15%, 최대 메모리의 약 13%를 사용했�
 [리소스 카드](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md)를
 참조하세요.
 
-### WebMainBench: 고정된 545개 페이지의 콘텐츠 추출
+### WebMainBench: HTML 스냅샷 545개의 콘텐츠 추출
 
 다음은 콘텐츠 수정 개발 빌드의 과거 측정값이며, 정식 출시 버전의 결과가 아닙니다. 5개 방법이 동일한 HTML 스냅샷 545개를 처리하고 사람이 작성한 본문 참조와 비교했습니다. 이 빌드는 모든 페이지에서 본문을 추출했으며, 종합 유사도(5개 지표의 평균) 39.27%와 코드 유사도 91.06%로 두 항목 모두 가장 높았습니다.
 

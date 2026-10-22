@@ -239,7 +239,7 @@ Dokument und Stil haben genau eine verbindliche Datenquelle: die Integration aus
 | Standards und Regressionen | Ausgewählte [WPT](https://github.com/web-platform-tests/wpt)-Tests; [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml)-Regressionstests | Bestandene Tests und Regressionen |
 | Browserautomatisierung | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · 1.308 Browseraktions- und Webtests | Anteil bestandener Aktions- und Funktionstests |
 | CPU- und Speicherverbrauch | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · gemeinsam abgeschlossene Aufgaben aus 557 CDP-/Webaufgaben | CPU-Zeit und maximaler Speicherbedarf |
-| Inhaltsextraktion aus gespeicherten Seiten | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 HTML-Snapshots und Referenztexte | Erhalt von Text, Code, Formeln und Tabellen |
+| Inhaltsextraktion aus HTML-Snapshots | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 HTML-Snapshots und Referenztexte | Erhalt von Text, Code, Formeln und Tabellen |
 
 ### Gemischter Crawling-Test im öffentlichen Web
 
@@ -283,7 +283,7 @@ Der vollständige Aufgabenbestand von [Lexbench-Headless-Browser](https://github
 
 Kitesurf ist ein entfernter Dienst, dessen CPU, Arbeitsspeicher und Prozessanzahl nicht messbar sind. Der Ressourcenvergleich umfasst daher nur die vier lokalen Engines. Ein separater Lauf mit 557 Aufgaben berücksichtigt nur Arbeiten, die alle vier abgeschlossen haben. Molis Median pro Aufgabe lag bei **100,6 ms CPU-Zeit** und **92 MiB Spitzenspeicher**; Chrome erreichte **687 ms** beziehungsweise **697 MiB**. Damit lag Moli bei rund 15 % der CPU-Zeit und 13 % des Spitzenspeichers von Chrome. Methodik und vollständige Daten stehen in der [Ressourcenübersicht](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) des Benchmarks.
 
-### WebMainBench: Extraktion aus 545 eingefrorenen Seiten
+### WebMainBench: Inhaltsextraktion aus 545 HTML-Snapshots
 
 Die Tabelle zeigt historische Messungen eines Entwicklungsstands mit Inhaltskorrekturen, keine veröffentlichte Moli-Version. Auf denselben 545 gespeicherten HTML-Seiten lieferte dieser Stand für jede Seite Hauptinhalt. Unter den fünf Methoden erreichte er die höchste Gesamtähnlichkeit (39,27 %, Mittelwert aus fünf Kennzahlen) und Codeähnlichkeit (91,06 %). Als Vergleich dienten manuell erstellte Referenzen für den Hauptinhalt.
 

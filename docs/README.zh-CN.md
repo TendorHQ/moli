@@ -238,7 +238,7 @@ Moli 是一个独立的浏览器内核，而不是对 Chromium 的封装。它�
 | 标准与回归测试 | 选定的 [WPT](https://github.com/web-platform-tests/wpt) 测试与 [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) 回归测试 | 测试通过项数、功能回退 |
 | 浏览器自动化 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · 1,308 项浏览器操作与 Web 测试 | 操作与功能测试通过率 |
 | CPU 与内存开销 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · 557 项 CDP/Web 任务中四个本地浏览器共同完成的部分 | CPU 时间、内存峰值 |
-| 冻结页正文提取 | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 份 HTML 快照及正文参考 | 正文、代码、公式、表格保真度 |
+| 网页快照正文提取 | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 份 HTML 快照及正文参考 | 正文、代码、公式、表格保真度 |
 
 ### 公开网页混合抓取测试
 
