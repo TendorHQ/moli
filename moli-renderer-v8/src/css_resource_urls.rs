@@ -215,11 +215,20 @@ fn stylesheet_web_font_resource_with_descriptor(
     // projections of the same parsed rule (the import response and the later
     // retained style world) must converge on one slot. Conversely, identical
     // relative declarations parsed under different stylesheet bases must not
-    // alias, so identity includes the resolved request URL.
-    let mut slot_material = Vec::with_capacity(request_url.as_str().len() + css_text.len() + 1);
-    slot_material.extend_from_slice(request_url.as_str().as_bytes());
-    slot_material.push(0);
+    // alias, so identity includes every resolved fallback, its kind and order.
+    // Length-prefix strings so source boundaries cannot collide.
+    let mut slot_material = Vec::new();
+    slot_material.extend_from_slice(&(css_text.len() as u64).to_le_bytes());
     slot_material.extend_from_slice(css_text.as_bytes());
+    for source in &sources {
+        let (kind, value) = match source {
+            moli_css_parse::CssFontSource::Local(value) => (0, value),
+            moli_css_parse::CssFontSource::Url(value) => (1, value),
+        };
+        slot_material.push(kind);
+        slot_material.extend_from_slice(&(value.len() as u64).to_le_bytes());
+        slot_material.extend_from_slice(value.as_bytes());
+    }
     let slot = format!("stylesheet-font:{}", sha256_hex(&slot_material));
     StylesheetLoadBlockingResource::font(
         request_url,
@@ -483,6 +492,46 @@ mod tests {
             first.web_font().expect("first font").slot(),
             second.web_font().expect("second font").slot(),
             "equal relative text parsed in different stylesheet directories must not alias",
+        );
+    }
+
+    #[test]
+    fn font_slot_includes_every_resolved_fallback_in_source_order() {
+        use moli_css_parse::CssFontSource::{Local, Url as SourceUrl};
+        let css =
+            "@font-face{font-family:Fallback;src:url(data:font/woff2;base64,YmFk),url(font.woff2)}";
+        let first = stylesheet_web_font_resource(
+            css,
+            &Url::parse("https://example.test/a/style.css").unwrap(),
+        )
+        .unwrap();
+        let second = stylesheet_web_font_resource(
+            css,
+            &Url::parse("https://example.test/b/style.css").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(first.request_url(), second.request_url());
+        assert_ne!(
+            first.web_font().unwrap().slot(),
+            second.web_font().unwrap().slot()
+        );
+        let slot = |sources| {
+            stylesheet_web_font_resource_with_resolved_sources(css, sources)
+                .unwrap()
+                .web_font()
+                .unwrap()
+                .slot()
+                .to_owned()
+        };
+        let url = "https://example.test/font.woff2".to_owned();
+        let other = "https://example.test/other.woff2".to_owned();
+        assert_ne!(
+            slot(vec![SourceUrl(url.clone()), SourceUrl(other.clone())]),
+            slot(vec![SourceUrl(other.clone()), SourceUrl(url.clone())]),
+        );
+        assert_ne!(
+            slot(vec![SourceUrl(url.clone()), Local(other.clone())]),
+            slot(vec![SourceUrl(url), SourceUrl(other)]),
         );
     }
 
