@@ -27,8 +27,8 @@ pub trait Dom {
     fn next_sibling(&self, node: Self::NodeId) -> Option<Self::NodeId>;
     fn attribute(&self, node: Self::NodeId, name: &str) -> Option<&str>;
     /// Current input/textarea value supplied by an adapter. None uses the
-    /// source default; Some("") suppresses that default after a clear. An input
-    /// may still retain its accessible name when its current value is empty.
+    /// source default; Some("") suppresses that default after a clear. Empty
+    /// text-entry controls do not emit their name as a field value.
     fn control_value(&self, _node: Self::NodeId) -> Option<&str> {
         None
     }

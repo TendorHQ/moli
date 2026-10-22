@@ -371,6 +371,7 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
             self.writer().text(" ");
         }
         let label = crate::media::label(self.dom, node, tag);
+        let has_source = !urls.is_empty();
         for href in urls {
             self.serial += 1;
             let serial = self.serial;
@@ -396,7 +397,7 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
         } else {
             self.writer().text(" ");
         }
-        true
+        has_source
     }
 
     fn table_cell(&mut self) {

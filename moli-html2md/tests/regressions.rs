@@ -655,13 +655,12 @@ fn source_form_values_preserve_readable_state_without_secrets() {
         "Search term",
         "Search",
         "Map button",
-        "Password",
         "Notes",
     ] {
         assert!(result.contains(value), "missing {value}: {result}");
     }
     assert!(!result.contains("Your Email"), "{result}");
-    for secret in ["secret", "token", "private.pdf"] {
+    for secret in ["secret", "Password", "token", "private.pdf"] {
         assert!(!result.contains(secret), "leaked {secret}: {result}");
     }
 }
@@ -756,10 +755,12 @@ fn srcset_recovers_only_the_future_compatible_width_height_pair() {
     let paired = parse_srcset("/photo.jpg 640w 480h");
     assert_eq!(paired.len(), 1);
     assert_eq!(paired[0].url, "/photo.jpg");
-    assert_eq!(paired[0].score, 640.0);
+    assert_eq!(paired[0].width, Some(640));
 
     for invalid in [
         "/height-only.jpg 480h",
+        "/non-ascii.jpg \u{3000}2x",
+        "/nbsp.jpg 2x\u{a0}",
         "/duplicate-width.jpg 640w 800w",
         "/duplicate-height.jpg 640w 480h 720h",
         "/density-height.jpg 2x 480h",

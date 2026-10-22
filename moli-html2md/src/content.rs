@@ -80,19 +80,25 @@ fn role_matches(role: &str, candidates: &[&str]) -> bool {
 }
 
 pub(crate) fn image_label<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Cow<'_, str> {
-    if let Some(alt) = dom.attribute(node, "alt").filter(|alt| !alt.is_empty()) {
-        return Cow::Borrowed(alt);
-    }
-    if primary_role(dom, node).is_some_and(|role| role_matches(role, PRESENTATIONAL_ROLES)) {
+    if dom.attribute(node, "hidden").is_some()
+        || dom
+            .attribute(node, "aria-hidden")
+            .is_some_and(|v| v.eq_ignore_ascii_case("true"))
+        || primary_role(dom, node).is_some_and(|role| role_matches(role, PRESENTATIONAL_ROLES))
+    {
         return Cow::Borrowed("");
     }
-    ["aria-label", "title"]
-        .into_iter()
-        .find_map(|name| {
-            dom.attribute(node, name)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-        })
-        .map(Cow::Borrowed)
-        .unwrap_or(Cow::Borrowed(""))
+    match dom.attribute(node, "alt") {
+        Some(alt) if !alt.is_empty() => Cow::Borrowed(alt),
+        Some(_) => Cow::Borrowed(dom.attribute(node, "aria-label").unwrap_or("")),
+        None => ["aria-label", "title"]
+            .into_iter()
+            .find_map(|name| {
+                dom.attribute(node, name)
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+            })
+            .map(Cow::Borrowed)
+            .unwrap_or(Cow::Borrowed("")),
+    }
 }

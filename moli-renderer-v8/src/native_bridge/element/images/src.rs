@@ -779,14 +779,10 @@ fn parse_srcset_candidates(input: &str) -> Vec<SrcsetCandidate> {
     moli_html2md::parse_srcset(input)
         .into_iter()
         .filter_map(|candidate| {
-            let mut descriptor = SrcsetDescriptor::default();
-            for token in candidate.descriptor.split_ascii_whitespace() {
-                if let Some(value) = token.strip_suffix('w') {
-                    descriptor.width = Some(value.parse().ok()?);
-                } else if let Some(value) = token.strip_suffix('x') {
-                    descriptor.density = Some(value.parse().ok()?);
-                }
-            }
+            let descriptor = SrcsetDescriptor {
+                width: candidate.width.map(u32::try_from).transpose().ok()?,
+                density: candidate.density,
+            };
             Some(SrcsetCandidate {
                 url: candidate.url.to_owned(),
                 descriptor,
@@ -1077,6 +1073,16 @@ mod tests {
     fn select(srcset: &str, sizes: Option<&str>) -> Option<String> {
         selected_srcset_candidate(srcset, sizes, None, false, TEST_VIEWPORT)
             .map(|candidate| candidate.url)
+    }
+
+    #[test]
+    fn srcset_parser_rejects_unicode_descriptor_spaces() {
+        for input in ["a.png \u{3000}2x, b.png 1x", "a.png 2x\u{a0}, b.png 1x"] {
+            let candidates = parse_srcset_candidates(input);
+            assert_eq!(candidates.len(), 1, "{input}");
+            assert_eq!(candidates[0].url, "b.png");
+            assert_eq!(candidates[0].descriptor.density, Some(1.0));
+        }
     }
 
     #[test]

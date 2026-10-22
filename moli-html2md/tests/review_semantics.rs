@@ -182,7 +182,7 @@ fn input_hints_do_not_masquerade_as_filled_values() {
     );
     assert!(!result.contains("Your Email"), "{result}");
     assert!(
-        result.contains("Actual value") && result.contains("Password"),
+        result.contains("Actual value") && !result.contains("Password"),
         "{result}"
     );
     assert!(!result.contains("secret"), "{result}");
@@ -299,8 +299,29 @@ fn live_controls_replace_defaults_including_explicit_clears() {
             if !value.is_empty() {
                 assert_eq!(result, "Current");
             } else {
-                assert_eq!(result, if tag == "input" { "Field" } else { "" });
+                assert_eq!(result, "");
             }
         }
     }
+}
+
+#[test]
+fn media_fallback_and_decorative_images_keep_author_intent() {
+    for src in ["", "blob:https://site/id"] {
+        let output = markdown(&format!(
+            "<video poster='/cover.jpg' src='{src}'><a href='/clip.mp4'>Download</a></video>"
+        ));
+        assert!(output.contains("![Video poster](/cover.jpg)"), "{output}");
+        assert!(output.contains("[Download](/clip.mp4)"), "{output}");
+    }
+    assert_eq!(markdown("<img alt='' title='Avatar'>"), "");
+    assert_eq!(
+        markdown("<img src='/thumb.jpg' alt='' title='Gallery'>"),
+        "![](/thumb.jpg \"Gallery\")"
+    );
+    assert_eq!(markdown("<input type=search aria-label='Search'>"), "");
+    assert_eq!(
+        markdown("<input type=submit aria-label='Search'>"),
+        "Search"
+    );
 }
