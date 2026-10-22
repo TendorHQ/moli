@@ -50,9 +50,9 @@ impl InputTargetFrameProjection {
     }
 }
 
-/// Owned frame transforms from the input's selected snapshot. A raw-update
-/// listener can transfer capture to a frame that was neither the old capture
-/// nor the hit target. Copy only frame matrices before JS, not a layout tree.
+/// Owned frame transforms from the input's selected snapshot. Pointer
+/// callbacks can redirect compatibility mouse events or transfer capture to
+/// another frame. Copy only frame matrices before JS, not a layout tree.
 #[derive(Default)]
 pub(crate) struct InputFrameProjections {
     root_owner: Option<WindowDocumentTaskTarget>,
