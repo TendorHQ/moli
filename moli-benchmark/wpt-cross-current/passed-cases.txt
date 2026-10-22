@@ -619,6 +619,7 @@ css/css-flexbox/abspos/position-absolute-014.html
 css/css-flexbox/abspos/position-absolute-015.html
 css/css-flexbox/abspos/position-absolute-containing-block-001.html
 css/css-flexbox/abspos/position-absolute-containing-block-002.html
+css/css-flexbox/align-baseline.html
 css/css-flexbox/align-content-001.htm
 css/css-flexbox/align-content-002.htm
 css/css-flexbox/align-content-003.htm
@@ -1532,6 +1533,7 @@ css/css-flexbox/percentage-descendant-of-anonymous-flex-item.html
 css/css-flexbox/percentage-heights-000.html
 css/css-flexbox/percentage-heights-001.html
 css/css-flexbox/percentage-heights-002.html
+css/css-flexbox/percentage-heights-003.html
 css/css-flexbox/percentage-heights-005.html
 css/css-flexbox/percentage-heights-006.html
 css/css-flexbox/percentage-heights-007.html
@@ -1635,6 +1637,7 @@ css/css-font-loading/empty-family-load.html
 css/css-font-loading/fontface-font-variation-settings-persisted-js-api.html
 css/css-font-loading/fontface-fonts-loading.html
 css/css-font-loading/fontface-invalid-arraybuffer.html
+css/css-font-loading/fontface-load-in-modal-dialog.html
 css/css-font-loading/fontface-loadingevent.html
 css/css-font-loading/fontfaceset-clear-css-connected.html
 css/css-font-loading/fontfaceset-delete-css-connected.html
@@ -4109,6 +4112,8 @@ dom/nodes/Node-removeChild.html
 dom/nodes/Node-replaceChild.html
 dom/nodes/Node-textContent.html
 dom/nodes/NodeList-Iterable.html
+dom/nodes/NodeList-static-length-getter-tampered-1.html
+dom/nodes/NodeList-static-length-getter-tampered-2.html
 dom/nodes/NodeList-static-length-getter-tampered-3.html
 dom/nodes/NodeList-static-length-getter-tampered-indexOf-1.html
 dom/nodes/NodeList-static-length-getter-tampered-indexOf-2.html
@@ -5827,6 +5832,7 @@ html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/f
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/history-pushstate-during-load.html
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/history-pushstate-during-pageshow.html
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/history-pushstate.html
+html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/iframe-src.html
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/window-open-popup-during-load.html
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/window-open-popup-during-pageshow.html
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/window-open-popup.html
@@ -5838,6 +5844,7 @@ html/browsers/browsing-the-web/navigating-across-documents/source/navigate-child
 html/browsers/browsing-the-web/navigating-across-documents/source/navigate-child-function-src.html
 html/browsers/browsing-the-web/navigating-across-documents/source/navigate-child-src-about-blank.html
 html/browsers/browsing-the-web/overlapping-navigations-and-traversals/anchor-fragment-history-back-on-click.html
+html/browsers/browsing-the-web/overlapping-navigations-and-traversals/cross-document-traversal-cross-document-traversal.html
 html/browsers/browsing-the-web/overlapping-navigations-and-traversals/cross-document-traversal-same-document-nav.html
 html/browsers/browsing-the-web/overlapping-navigations-and-traversals/cross-document-traversal-same-document-traversal.html
 html/browsers/browsing-the-web/overlapping-navigations-and-traversals/cross-document-traversal-stop.html
@@ -6021,6 +6028,7 @@ html/browsers/the-window-object/window-prototype-chain.html
 html/browsers/the-windowproxy-exotic-object/windowproxy-define-own-property-unforgeable-same-origin.html
 html/browsers/the-windowproxy-exotic-object/windowproxy-prevent-extensions.html
 html/browsers/the-windowproxy-exotic-object/windowproxy-prototype-setting-same-origin.html
+html/browsers/windows/auxiliary-browsing-contexts/opener-multiple.html
 html/browsers/windows/auxiliary-browsing-contexts/opener.html
 html/browsers/windows/browsing-context-names/choose-_blank-001.html
 html/browsers/windows/browsing-context-names/choose-_parent-001.html
@@ -8435,6 +8443,7 @@ service-workers/service-worker/fetch-request-no-freshness-headers.https.html
 service-workers/service-worker/getregistration.https.html
 service-workers/service-worker/immutable-prototype-serviceworker.https.html
 service-workers/service-worker/import-scripts-data-url.https.html
+service-workers/service-worker/import-scripts-mime-types.https.html
 service-workers/service-worker/indexeddb.https.html
 service-workers/service-worker/install-event-type.https.html
 service-workers/service-worker/installing.https.html
@@ -8505,6 +8514,7 @@ shadow-dom/declarative/declarative-shadow-dom-slot-assignment.html
 shadow-dom/declarative/declarative-shadow-dom-write-to-iframe.html
 shadow-dom/declarative/declarative-with-disabled-shadow.html
 shadow-dom/declarative/gethtml-ordering.html
+shadow-dom/declarative/gethtml.html
 shadow-dom/declarative/innerhtml-before-closing-tag.html
 shadow-dom/declarative/innerhtml-on-ordinary-template.html
 shadow-dom/declarative/move-template-before-closing-tag.html
@@ -8649,6 +8659,7 @@ streams/piping/error-propagation-backward.any.js?moli-wpt-any=dedicatedworker
 streams/piping/error-propagation-backward.any.js?moli-wpt-any=window
 streams/piping/error-propagation-forward.any.js?moli-wpt-any=dedicatedworker
 streams/piping/error-propagation-forward.any.js?moli-wpt-any=window
+streams/piping/flow-control.any.js?moli-wpt-any=dedicatedworker
 streams/piping/flow-control.any.js?moli-wpt-any=window
 streams/piping/general-addition.any.js?moli-wpt-any=dedicatedworker
 streams/piping/general-addition.any.js?moli-wpt-any=window
@@ -9020,6 +9031,7 @@ trusted-types/should-sink-type-mismatch-violation-be-blocked-by-csp-003.html
 trusted-types/trusted-types-duplicate-names-list-report-only.html
 trusted-types/trusted-types-eval-reporting-no-unsafe-eval.html
 trusted-types/trusted-types-eval-reporting-report-only.html
+trusted-types/trusted-types-navigation.html?01-05
 trusted-types/trusted-types-navigation.html?16-20
 trusted-types/trusted-types-reporting-for-DOMParser-parseFromString.html
 trusted-types/trusted-types-reporting-for-DedicatedWorker-DedicatedWorker-constructor.html
@@ -9734,7 +9746,8 @@ xhr/open-url-base.htm
 xhr/open-url-encoding.htm
 xhr/open-url-javascript-window-2.htm
 xhr/open-url-javascript-window.htm
-xhr/open-url-multi-window-6.htm
+xhr/open-url-multi-window-2.htm
+xhr/open-url-multi-window-5.htm
 xhr/open-url-multi-window.htm
 xhr/open-url-redirected-sharedworker-origin.htm
 xhr/open-url-redirected-worker-origin.htm
@@ -9759,6 +9772,7 @@ xhr/responseurl.html
 xhr/responsexml-basic.htm
 xhr/responsexml-get-twice.htm
 xhr/responsexml-invalid-type.html
+xhr/responsexml-media-type.htm
 xhr/responsexml-non-document-types.htm
 xhr/responsexml-non-well-formed.htm
 xhr/send-accept-language.htm
@@ -9795,6 +9809,7 @@ xhr/setrequestheader-bogus-name.htm
 xhr/setrequestheader-bogus-value.htm
 xhr/setrequestheader-case-insensitive.htm
 xhr/setrequestheader-header-allowed.htm
+xhr/setrequestheader-header-forbidden.htm
 xhr/setrequestheader-open-setrequestheader.htm
 xhr/status-async.htm
 xhr/status-basic.htm

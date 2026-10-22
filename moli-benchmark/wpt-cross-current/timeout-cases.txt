@@ -23,6 +23,7 @@ cookiestore/serviceworker_cookieStore_cross_origin.https.sub.html
 css/css-cascade/all-prop-initial-xml.html
 css/css-easing/linear-timing-functions-duplicate-points-crash.html
 css/css-flexbox/inline-flex-column-image-load.html
+css/css-font-loading/font-face-reject.html
 css/css-values/dynamic-viewport-units-rule-cache.html
 css/css-variables/variable-animation-from-to.html
 css/css-variables/variable-animation-over-transition.html
@@ -70,9 +71,7 @@ html/browsers/browsing-the-web/history-traversal/pageswap/pageswap-reload-naviga
 html/browsers/browsing-the-web/history-traversal/pageswap/pageswap-replace-navigation.html
 html/browsers/browsing-the-web/navigating-across-documents/009.html
 html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/form-submit-popup.html
-html/browsers/browsing-the-web/navigating-across-documents/replace-before-load/iframe-src.html
 html/browsers/browsing-the-web/navigating-across-documents/unknown-protocol-reload-crash.html
-html/browsers/browsing-the-web/overlapping-navigations-and-traversals/cross-document-traversal-cross-document-traversal.html
 html/browsers/history/the-history-interface/joint_session_history/002.html
 html/browsers/history/the-history-interface/traverse_the_history_1.html
 html/browsers/history/the-history-interface/traverse_the_history_unload_1.html
@@ -87,7 +86,6 @@ html/browsers/the-window-object/open-close/close_pagehide.html
 html/browsers/the-window-object/open-close/close_unload.html
 html/browsers/the-window-object/open-close/script-closable.html
 html/browsers/windows/auxiliary-browsing-contexts/opener-closed.html
-html/browsers/windows/auxiliary-browsing-contexts/opener-multiple.html
 html/browsers/windows/auxiliary-browsing-contexts/opener-noopener.html
 html/browsers/windows/auxiliary-browsing-contexts/opener-noreferrer.html
 html/browsers/windows/browsing-context-names/choose-_blank-002.html
@@ -121,7 +119,6 @@ html/semantics/embedded-content/the-img-element/image-loading-lazy-move-into-scr
 html/semantics/embedded-content/the-img-element/image-loading-lazy-zero-intersection-area.html
 html/semantics/embedded-content/the-img-element/image-loading-lazy.html
 html/semantics/embedded-content/the-img-element/sizes/implicit-sizes-ignores-width.html
-html/semantics/embedded-content/the-img-element/sizes/parse-a-sizes-attribute-quirks-mode.html
 html/semantics/embedded-content/the-img-element/sizes/parse-a-sizes-attribute-standards-mode.html
 html/semantics/embedded-content/the-img-element/sizes/sizes-auto-dynamic-attributes.html
 html/semantics/embedded-content/the-img-element/sizes/sizes-auto-resize-observer-removes-auto.html
@@ -158,6 +155,7 @@ infrastructure/expected-fail/timeout.html
 navigation-api/navigate-event/defer/tentative/defer-back.html
 navigation-api/navigate-event/defer/tentative/defer-restore-callback-abort.html
 navigation-api/navigate-event/defer/tentative/defer-same-document.html
+navigation-api/navigate-event/intercept-cross-origin.html
 navigation-api/navigate-event/navigate-form-requestSubmit.html
 navigation-api/navigation-activation/activation-traverse-not-in-entries.html
 navigation-api/navigation-methods/return-value/traverseTo-detach-cross-document-before-navigate-event.html
@@ -207,7 +205,6 @@ service-workers/service-worker/fetch-request-css-base-url.https.html
 service-workers/service-worker/fetch-request-css-images.https.html
 service-workers/service-worker/fetch-request-resources.https.html
 service-workers/service-worker/fetch-response-xhr.https.html
-service-workers/service-worker/import-scripts-mime-types.https.html
 service-workers/service-worker/invalid-blobtype.https.html
 service-workers/service-worker/invalid-header.https.html
 service-workers/service-worker/iso-latin1-header.https.html
@@ -222,9 +219,7 @@ service-workers/service-worker/secure-context.https.html
 service-workers/service-worker/skip-waiting-without-client.https.html
 service-workers/service-worker/unregister-immediately-before-installed.https.html
 service-workers/service-worker/unregister-immediately-during-extendable-events.https.html
-streams/piping/flow-control.any.js?moli-wpt-any=dedicatedworker
 streams/transferable/deserialize-error.window.js?moli-wpt-script=window
-subresource-integrity/subresource-integrity.html
 svg/linking/scripted/href-animate-element.html
 svg/linking/scripted/href-mpath-element.html
 svg/linking/scripted/href-script-element.html
@@ -238,5 +233,3 @@ webusb/usb.serviceworker.https.html
 xhr/open-during-abort-processing.htm
 xhr/open-send-during-abort.htm
 xhr/open-url-multi-window-4.htm
-xhr/responsexml-media-type.htm
-xhr/setrequestheader-header-forbidden.htm

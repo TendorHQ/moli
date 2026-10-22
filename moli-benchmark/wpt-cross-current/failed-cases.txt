@@ -131,7 +131,6 @@ css/css-flexbox/abspos/abspos-autopos-vrl-ltr.html
 css/css-flexbox/abspos/abspos-autopos-vrl-rtl.html
 css/css-flexbox/abspos/flex-abspos-staticpos-justify-content-vertWM-002.html
 css/css-flexbox/abspos/position-absolute-004.html
-css/css-flexbox/align-baseline.html
 css/css-flexbox/align-items-007.html
 css/css-flexbox/align-items-baseline-column-horz.html
 css/css-flexbox/align-items-baseline-column-vert-lr-flexbox-item.html
@@ -339,7 +338,6 @@ css/css-flexbox/ortho-table-item-001.html
 css/css-flexbox/overflow-top-left.html
 css/css-flexbox/parsing/flex-computed.html
 css/css-flexbox/percent-height-flex-items-cross-sizes-with-mutations.html
-css/css-flexbox/percentage-heights-003.html
 css/css-flexbox/percentage-heights-004.html
 css/css-flexbox/percentage-heights-011.html
 css/css-flexbox/percentage-heights-013.html
@@ -361,9 +359,7 @@ css/css-flexbox/table-as-item-fixed-min-width-3.html
 css/css-flexbox/table-as-item-large-intrinsic-size.html
 css/css-flexbox/table-as-item-stretch-cross-size-5.html
 css/css-flexbox/table-with-infinite-max-intrinsic-width.html
-css/css-font-loading/font-face-reject.html
 css/css-font-loading/fontface-descriptor-updates-2.html
-css/css-font-loading/fontface-load-in-modal-dialog.html
 css/css-font-loading/fontfaceset-load-css-wide-keywords.html
 css/css-font-loading/fontfaceset-load-var.html
 css/css-forms/parsing/checkmark-pseudo-element.html
@@ -2886,6 +2882,7 @@ html/semantics/embedded-content/the-img-element/naturalWidth-naturalHeight-width
 html/semantics/embedded-content/the-img-element/relevant-mutations-lazy.html
 html/semantics/embedded-content/the-img-element/relevant-mutations.html
 html/semantics/embedded-content/the-img-element/sizes/parse-a-sizes-attribute-display-none.html
+html/semantics/embedded-content/the-img-element/sizes/parse-a-sizes-attribute-quirks-mode.html
 html/semantics/embedded-content/the-img-element/sizes/parse-a-sizes-attribute-width-1000px.html
 html/semantics/embedded-content/the-img-element/source-media-outside-doc.html
 html/semantics/embedded-content/the-img-element/source-relevant-mutations.html
@@ -3111,7 +3108,6 @@ navigation-api/navigate-event/defer/tentative/defer-with-multiple-handlers.html
 navigation-api/navigate-event/defer/tentative/defer-with-single-handler-reject.html
 navigation-api/navigate-event/defer/tentative/defer-with-single-handler.html
 navigation-api/navigate-event/defer/tentative/restore-after-bfcache.html
-navigation-api/navigate-event/intercept-cross-origin.html
 navigation-api/navigate-event/intercept-detach-multiple.html
 navigation-api/navigate-event/navigate-history-back-bfcache.html
 navigation-api/navigate-event/navigation-back-cross-document-preventDefault.html
@@ -3335,6 +3331,7 @@ streams/readable-streams/owning-type.any.js?moli-wpt-any=dedicatedworker
 streams/readable-streams/owning-type.any.js?moli-wpt-any=window
 subresource-integrity/integrity-policy/parsing.html?type=enforce
 subresource-integrity/signatures/tentative/inline.html
+subresource-integrity/subresource-integrity.html
 svg/coordinate-systems/outer-svg-intrinsic-size-001.html
 svg/coordinate-systems/outer-svg-intrinsic-size-002.html
 svg/extensibility/foreignObject/containing-block.html
@@ -3472,9 +3469,8 @@ xhr/open-during-abort-event.htm
 xhr/open-during-abort.htm
 xhr/open-method-bogus.htm
 xhr/open-method-insecure.htm
-xhr/open-url-multi-window-2.htm
 xhr/open-url-multi-window-3.htm
-xhr/open-url-multi-window-5.htm
+xhr/open-url-multi-window-6.htm
 xhr/overridemimetype-headers-received-state-force-shiftjis.htm
 xhr/overridemimetype-invalid-mime-type.htm
 xhr/responsedocument-decoding.htm
