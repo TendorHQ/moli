@@ -325,3 +325,39 @@ fn media_fallback_and_decorative_images_keep_author_intent() {
         "Search"
     );
 }
+
+#[test]
+fn authored_image_alternatives_survive_naming_exclusions() {
+    for attribute in ["hidden", "aria-hidden=' true '", "role='presentation'"] {
+        assert_eq!(
+            markdown(&format!(
+                "<img src='/c.png' alt='Revenue chart' {attribute}>"
+            )),
+            "![Revenue chart](/c.png)"
+        );
+        assert_eq!(
+            markdown(&format!(
+                "<img src='/c.png' aria-label='Synthetic' {attribute}>"
+            )),
+            "![](/c.png)"
+        );
+    }
+    assert_eq!(
+        markdown("<img src='/c.png' alt='' aria-label='   '>"),
+        "![](/c.png)"
+    );
+    assert_eq!(
+        markdown("<video poster=' /cover.jpg '></video>"),
+        "![Video poster](/cover.jpg)"
+    );
+    for poster in ["#cover", "about:blank"] {
+        assert_eq!(
+            markdown(&format!("<video poster='{poster}'>Fallback</video>")),
+            "Fallback"
+        );
+    }
+    assert_eq!(
+        markdown("<img src='/fallback.png' srcset='a.png ((x), b.png 2x'>"),
+        "![](b.png)"
+    );
+}

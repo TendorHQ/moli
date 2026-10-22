@@ -1076,6 +1076,13 @@ mod tests {
     }
 
     #[test]
+    fn srcset_parentheses_do_not_nest() {
+        let candidates = parse_srcset_candidates("a.png ((x), b.png 2x");
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].url, "b.png");
+    }
+
+    #[test]
     fn srcset_parser_rejects_unicode_descriptor_spaces() {
         for input in ["a.png \u{3000}2x, b.png 1x", "a.png 2x\u{a0}, b.png 1x"] {
             let candidates = parse_srcset_candidates(input);

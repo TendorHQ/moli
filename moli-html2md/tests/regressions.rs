@@ -646,14 +646,14 @@ fn responsive_image_falls_back_from_unusable_lazy_candidates() {
 
 #[test]
 fn source_form_values_preserve_readable_state_without_secrets() {
-    let source = "<table><tr><th>Period</th><th>Mon</th><th>Sun</th></tr><tr><td>Morning</td><td><input type=checkbox checked disabled></td><td><input type=checkbox disabled></td></tr></table><p><input value='Search term'><input type=email value='' placeholder='Your Email'><input type=submit value='Search'><input type=image alt='Map button'><input type=password value='secret' aria-label='Password'><input type=hidden value='token'><input type=file value='private.pdf'><textarea>Notes</textarea></p>";
+    let source = "<table><tr><th>Period</th><th>Mon</th><th>Sun</th></tr><tr><td>Morning</td><td><input type=checkbox checked disabled></td><td><input type=checkbox disabled></td></tr></table><p><input value='Search term'><input type=email value='' placeholder='Your Email'><input type=submit value='Go'><input type=image alt='Map button'><input type=password value='secret' aria-label='Password'><input type=hidden value='token'><input type=file value='private.pdf'><textarea>Notes</textarea></p>";
     let result = rendered_html(&markdown(source, false));
     for value in [
         "Morning",
         "☑",
         "☐",
         "Search term",
-        "Search",
+        "Go",
         "Map button",
         "Notes",
     ] {

@@ -42,7 +42,7 @@ fn direct_source<D: Dom + ?Sized>(dom: &D, node: D::NodeId, image: bool) -> Opti
     })
 }
 
-fn direct_attribute<'a, D: Dom + ?Sized>(
+pub(crate) fn direct_attribute<'a, D: Dom + ?Sized>(
     dom: &'a D,
     node: D::NodeId,
     name: &str,
@@ -105,12 +105,12 @@ pub fn parse_srcset(srcset: &str) -> Vec<SrcsetCandidate<'_>> {
         }
 
         let descriptor_start = offset;
-        let mut parentheses = 0usize;
+        let mut in_parentheses = false;
         while offset < bytes.len() {
             match bytes[offset] {
-                b'(' => parentheses += 1,
-                b')' => parentheses = parentheses.saturating_sub(1),
-                b',' if parentheses == 0 => break,
+                b'(' => in_parentheses = true,
+                b')' => in_parentheses = false,
+                b',' if !in_parentheses => break,
                 _ => {}
             }
             offset += 1;
