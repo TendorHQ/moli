@@ -1,4 +1,4 @@
-use super::storage::{font_face_set_owner_snapshot, is_font_face_value, set_font_face_set_status};
+use super::storage::{font_face_set_owner_snapshot, set_font_face_set_status};
 use super::*;
 use crate::context_bootstrap::events::initialize_event_object;
 use crate::util::{
@@ -165,63 +165,38 @@ fn frozen_font_face_array<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     values: impl IntoIterator<Item = v8::Local<'s, v8::Value>>,
 ) -> v8::Local<'s, v8::Array> {
-    let array = v8::Array::new(scope, 0);
-    for value in values {
-        let _ = array.set_index(scope, array.length(), value);
-    }
+    let values = values.into_iter().collect::<Vec<_>>();
+    let array = v8::Array::new_with_elements(scope, &values);
     let _ = array.set_integrity_level(scope, v8::IntegrityLevel::Frozen);
     array
 }
 
-fn font_face_values_from_init<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) -> Option<Vec<v8::Local<'s, v8::Value>>> {
-    let Some(init) = init else {
-        return Some(Vec::new());
-    };
-    let values = match webidl::optional_member::<webidl::Sequence<v8::Local<'s, v8::Value>>>(
-        scope,
-        init,
-        "fontfaces",
-        webidl::Context::member("FontFaceSetLoadEventInit", "fontfaces"),
-    ) {
-        Ok(values) => values.map(|values| values.0).unwrap_or_default(),
-        Err(error) => {
-            webidl::throw_error(scope, &error);
-            return None;
-        }
-    };
-    if values
-        .iter()
-        .copied()
-        .any(|value| !is_font_face_value(scope, value))
-    {
-        throw_type_error(
-            scope,
-            "Failed to construct 'FontFaceSetLoadEvent': member fontfaces is not a sequence of FontFace objects.",
-        );
-        return None;
-    }
-    Some(values)
+#[derive(webidl::WebIdlDictionary)]
+#[webidl(prefix = "FontFaceSetLoadEventInit")]
+pub(in crate::context_bootstrap) struct FontFaceSetLoadEventInit<'s> {
+    #[webidl(inherit)]
+    base: crate::context_bootstrap::events::EventInit,
+    #[webidl(sequence, interface = web_api_interfaces::FontFace, default = Vec::new())]
+    fontfaces: Vec<v8::Local<'s, v8::Object>>,
 }
 
-pub(in crate::context_bootstrap) fn initialize_font_face_set_load_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) -> bool {
-    let Some(values) = font_face_values_from_init(scope, init) else {
-        return false;
-    };
-    let fontfaces = frozen_font_face_array(scope, values);
-    set_private_value(
-        scope,
-        event,
-        FONT_FACE_SET_LOAD_EVENT_FONTFACES_SLOT,
-        fontfaces.into(),
-    );
-    true
+impl<'s> FontFaceSetLoadEventInit<'s> {
+    pub(in crate::context_bootstrap) fn event_flags(&self) -> (bool, bool, bool) {
+        (self.base.bubbles, self.base.cancelable, self.base.composed)
+    }
+    pub(in crate::context_bootstrap) fn initialize(
+        self,
+        scope: &mut v8::PinScope<'s, '_>,
+        event: v8::Local<'s, v8::Object>,
+    ) {
+        let fontfaces = frozen_font_face_array(scope, self.fontfaces.into_iter().map(Into::into));
+        set_private_value(
+            scope,
+            event,
+            FONT_FACE_SET_LOAD_EVENT_FONTFACES_SLOT,
+            fontfaces.into(),
+        );
+    }
 }
 
 fn dispatched_font_face_set_load_event<'s>(

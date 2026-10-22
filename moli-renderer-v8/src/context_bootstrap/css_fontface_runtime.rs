@@ -42,7 +42,7 @@ mod state;
 mod storage;
 
 pub(in crate::context_bootstrap) use events::{
-    initialize_font_face_set_load_event, install_font_face_set_event_handler_accessors,
+    FontFaceSetLoadEventInit, install_font_face_set_event_handler_accessors,
     install_font_face_set_load_event_template_accessors,
 };
 pub(super) use font_face::{

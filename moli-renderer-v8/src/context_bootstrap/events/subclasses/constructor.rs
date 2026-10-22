@@ -71,6 +71,16 @@ fn event_subclass_constructor_callback<'s>(
     } else {
         None
     };
+    let font_face_init = if kind == EventSubclassKind::FontFaceSetLoadEvent {
+        let Some(init) = super::super::parse_event_dictionary::<
+            crate::context_bootstrap::css_fontface_runtime::FontFaceSetLoadEventInit,
+        >(scope, &args, "FontFaceSetLoadEvent") else {
+            return;
+        };
+        Some(init)
+    } else {
+        None
+    };
     let storage_event_init = if kind == EventSubclassKind::StorageEvent {
         let Some(init) = data::parse_storage_event_init(scope, &args) else {
             return;
@@ -141,6 +151,7 @@ fn event_subclass_constructor_callback<'s>(
                 .as_ref()
                 .map(pointer::PointerEventInitPayload::event_flags)
         })
+        .or_else(|| font_face_init.as_ref().map(crate::context_bootstrap::css_fontface_runtime::FontFaceSetLoadEventInit::event_flags))
         .or_else(|| read_event_init(scope, &args))
     else {
         return;
@@ -257,11 +268,9 @@ fn event_subclass_constructor_callback<'s>(
         }
         EventSubclassKind::TrackEvent => data::initialize_track_event(scope, event, init),
         EventSubclassKind::FontFaceSetLoadEvent => {
-            if !crate::context_bootstrap::css_fontface_runtime::initialize_font_face_set_load_event(
-                scope, event, init,
-            ) {
-                return;
-            }
+            font_face_init
+                .expect("font event init is parsed")
+                .initialize(scope, event);
         }
     }
 

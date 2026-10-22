@@ -24,6 +24,7 @@ mod event_constructor_type;
 mod event_handlers;
 mod event_listener_options;
 mod events_selection_storage;
+mod font_face_event_init;
 mod fontface_descriptors;
 mod fonts;
 mod gamepad;
