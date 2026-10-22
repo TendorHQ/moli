@@ -1,8 +1,8 @@
 use super::{FrameDocumentLoadDeliveryTask, JsContextHost};
 use crate::{
     context_bootstrap::{
-        LocationNavigationKind, construct_original_event, construct_original_page_transition_event,
-        meta_refresh_navigation_kind, navigate_location_object_with_child_navigate_event,
+        construct_original_event, construct_original_page_transition_event,
+        navigate_child_meta_refresh,
     },
     document_runtime::{DocumentRuntime, DomHandle, EventTargetHandle, MetaRefreshNavigation},
     frame_owner_model::{
@@ -20,7 +20,6 @@ pub(in crate::native_bridge::context_host) struct ChildMetaRefreshNavigationTask
     timer_id: Option<u32>,
     owner: crate::frame_owner_model::FrameDocumentTaskOwner,
     scheduler: MetaRefreshScheduler,
-    navigation_kind: LocationNavigationKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -678,14 +677,9 @@ impl JsContextHost {
         {
             return;
         }
-        let Some(document_url) = self.child_browsing_context_current_url(handle) else {
-            return;
-        };
         let Some(owner) = self.current_child_document_task_owner(handle) else {
             return;
         };
-        let navigation_kind =
-            meta_refresh_navigation_kind(&document_url, &navigation.url, navigation.delay_ms);
         if self
             .child_meta_refresh_navigations
             .get(&handle)
@@ -702,13 +696,11 @@ impl JsContextHost {
                 timer_id: None,
                 owner,
                 scheduler: MetaRefreshScheduler::default(),
-                navigation_kind,
             });
-        if task.scheduler.note_candidates([navigation]) {
-            task.navigation_kind = navigation_kind;
-            if let Some(timer_id) = task.timer_id.take() {
-                runtime.cancel_timer(timer_id);
-            }
+        if task.scheduler.note_candidates([navigation])
+            && let Some(timer_id) = task.timer_id.take()
+        {
+            runtime.cancel_timer(timer_id);
         }
         self.arm_child_meta_refresh_navigation(scope, runtime, handle);
     }
@@ -942,9 +934,7 @@ fn child_meta_refresh_callback<'s>(
     {
         return;
     }
-    let Some(task) = host.child_meta_refresh_navigations.remove(&handle) else {
-        return;
-    };
+    host.child_meta_refresh_navigations.remove(&handle);
     let Some(window) = host.child_browsing_context_window_wrapper(scope, handle) else {
         return;
     };
@@ -954,12 +944,7 @@ fn child_meta_refresh_callback<'s>(
     else {
         return;
     };
-    navigate_location_object_with_child_navigate_event(
-        scope,
-        location,
-        task.navigation_kind,
-        Some(target_url.to_string()),
-    );
+    navigate_child_meta_refresh(scope, location, &target_url, delay_ms);
 }
 
 fn child_meta_refresh_handle_from_data(

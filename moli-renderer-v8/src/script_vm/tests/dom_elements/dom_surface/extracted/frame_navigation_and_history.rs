@@ -1409,6 +1409,197 @@ root.appendChild(frame);
     );
 }
 
+#[tokio::test]
+async fn child_meta_refresh_uses_the_current_url_to_classify_navigation() {
+    for (delay, method, target, current, kind) in [
+        (1, "replaceState", "/old", "/new", "replace"),
+        (2, "replaceState", "/old", "/new", "push"),
+        (2, "pushState", "/old", "/new", "push"),
+        (2, "replaceState", "/target", "/target", "reload"),
+    ] {
+        let server = StaticHttpServer::spawn(2).await;
+        let loader = static_http_loader([]);
+        let parent = server.base_url().join("parent").unwrap();
+        let mut vm = new_storage_page_task_executor_test_vm_with_loader(parent.as_str(), &loader);
+        vm.exec(
+            r#"
+globalThis.loads = 0;
+const frame = document.createElement('iframe');
+frame.onload = () => ++loads;
+frame.src = '/old';
+document.body.append(frame);
+const child = frame.contentWindow;
+"#,
+            None,
+        )
+        .unwrap();
+        advance_page_task_executor_until_eval_equals(
+            &mut vm,
+            &loader,
+            "String(loads)",
+            "1",
+            "the original child should load",
+        )
+        .await;
+        vm.exec(
+            &format!(
+                r#"
+const originalDocument = child.document;
+const meta = child.document.createElement('meta');
+meta.httpEquiv = 'refresh';
+meta.content = '{delay};url={target}';
+child.document.head.append(meta);
+child.history.{method}(null, '', '{current}');
+const beforeLength = child.history.length;
+const beforeEntries = child.navigation.entries().length;
+const beforeIndex = child.navigation.currentEntry.index;
+const events = [];
+child.navigation.addEventListener('navigate', event =>
+  events.push([event.navigationType, event.destination.sameDocument, event.hashChange]));
+"#
+            ),
+            None,
+        )
+        .unwrap();
+        advance_page_task_executor_until_eval_equals(
+            &mut vm,
+            &loader,
+            "String(loads)",
+            "2",
+            "meta refresh should load its fixed target",
+        )
+        .await;
+        let result = vm
+            .eval(
+                r#"JSON.stringify({
+path: child.location.pathname,
+sameDocument: child.document === originalDocument,
+historyDelta: child.history.length - beforeLength,
+entriesDelta: child.navigation.entries().length - beforeEntries,
+indexDelta: child.navigation.currentEntry.index - beforeIndex,
+events})"#,
+            )
+            .unwrap();
+        let pushes = i32::from(kind == "push");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&result).unwrap(),
+            serde_json::json!({
+                "path": target,
+                "sameDocument": false,
+                "historyDelta": pushes,
+                "entriesDelta": pushes,
+                "indexDelta": pushes,
+                "events": [[kind, false, false]],
+            }),
+            "delay={delay}, method={method}, current={current}, target={target}",
+        );
+        assert_eq!(server.finish_targets().await, vec!["/old", target]);
+    }
+}
+
+#[tokio::test]
+async fn child_meta_refresh_to_the_current_fragment_preserves_the_document() {
+    for fragment in ["#target", "#"] {
+        let server = StaticHttpServer::spawn(1).await;
+        let loader = static_http_loader([]);
+        let parent = server.base_url().join("parent").unwrap();
+        let mut vm = new_storage_page_task_executor_test_vm_with_loader(parent.as_str(), &loader);
+        vm.exec(
+            r#"
+globalThis.loads = 0;
+const frame = document.createElement('iframe');
+frame.onload = () => ++loads;
+frame.src = '/child#start';
+document.body.append(frame);
+const child = frame.contentWindow;
+"#,
+            None,
+        )
+        .unwrap();
+        advance_page_task_executor_until_eval_equals(
+            &mut vm,
+            &loader,
+            "String(loads)",
+            "1",
+            "the fragment child should load",
+        )
+        .await;
+        vm.exec(
+            &format!(
+                r#"
+const originalDocument = child.document;
+const meta = child.document.createElement('meta');
+meta.httpEquiv = 'refresh';
+meta.content = '1;url=/child{fragment}';
+child.document.head.append(meta);
+globalThis.hashChanges = 0;
+child.addEventListener('hashchange', () => ++hashChanges);
+child.location.hash = {fragment:?};
+"#
+            ),
+            None,
+        )
+        .unwrap();
+        advance_page_task_executor_until_eval_equals(
+            &mut vm,
+            &loader,
+            "String(hashChanges)",
+            "1",
+            "the child should reach the refresh fragment first",
+        )
+        .await;
+        vm.exec(
+            r#"
+const beforeLength = child.history.length;
+const beforeEntries = child.navigation.entries().length;
+const beforeIndex = child.navigation.currentEntry.index;
+const events = [];
+child.navigation.addEventListener('navigate', event =>
+  events.push([event.navigationType, event.destination.sameDocument, event.hashChange]));
+"#,
+            None,
+        )
+        .unwrap();
+        advance_page_task_executor_until_eval_equals(
+            &mut vm,
+            &loader,
+            "String(events.length)",
+            "1",
+            "the exact-fragment refresh should navigate",
+        )
+        .await;
+        assert!(
+            !vm.has_pending_child_navigation_commit_for_test(),
+            "an exact-fragment refresh must not queue a replacement Document: {fragment}",
+        );
+        let result = vm
+            .eval(
+                r#"JSON.stringify({
+sameDocument: child.document === originalDocument,
+loads, hashChanges,
+historyDelta: child.history.length - beforeLength,
+entriesDelta: child.navigation.entries().length - beforeEntries,
+indexDelta: child.navigation.currentEntry.index - beforeIndex,
+events})"#,
+            )
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&result).unwrap(),
+            serde_json::json!({
+                "sameDocument": true,
+                "loads": 1,
+                "hashChanges": 1,
+                "historyDelta": 1,
+                "entriesDelta": 1,
+                "indexDelta": 1,
+                "events": [["push", true, false]],
+            }),
+            "fragment={fragment}",
+        );
+        assert_eq!(server.finish_targets().await, vec!["/child"]);
+    }
+}
+
 async fn assert_child_meta_refresh_candidate_priority(
     initial_delay: u32,
     inserted_delay: u32,
