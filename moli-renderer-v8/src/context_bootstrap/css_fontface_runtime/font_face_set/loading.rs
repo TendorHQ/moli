@@ -28,8 +28,9 @@ pub(in crate::context_bootstrap) fn font_face_set_check_callback<'s>(
     let Some(parsed) = webidl::parse_args::<FontFaceSetCheckArgs>(scope, &args) else {
         return;
     };
-    let _ = &parsed.text;
-    let Some(faces) = font_face_set_matching_faces_array(scope, args.this(), &parsed.font) else {
+    let Some(faces) =
+        font_face_set_matching_faces_array(scope, args.this(), &parsed.font, &parsed.text)
+    else {
         webidl::throw_dom_exception(
             scope,
             "SyntaxError",
@@ -59,8 +60,9 @@ pub(in crate::context_bootstrap) fn font_face_set_load_callback<'s>(
     let Some(parsed) = webidl::parse_args::<FontFaceSetLoadArgs>(scope, &args) else {
         return;
     };
-    let _ = &parsed.text;
-    let Some(matching_faces) = font_face_set_matching_faces_array(scope, this, &parsed.font) else {
+    let Some(matching_faces) =
+        font_face_set_matching_faces_array(scope, this, &parsed.font, &parsed.text)
+    else {
         rv.set(
             make_rejected_dom_exception_promise(
                 scope,

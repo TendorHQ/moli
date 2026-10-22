@@ -5,6 +5,7 @@ from typing import Any
 
 from ..assertions import assert_equal, record_contract
 from ..config import REPO_ROOT
+from .font_face_matching import run_font_matching_contract
 
 
 async def run_font_face_payload_group(
@@ -160,5 +161,6 @@ async def run_font_face_payload_group(
             commands=["Runtime.evaluate"],
             observed=observed,
         )
+        await run_font_matching_contract(browser, fixture, results)
     finally:
         await context.close()

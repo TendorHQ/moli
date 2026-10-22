@@ -2,7 +2,9 @@ use super::*;
 use base64::Engine;
 use std::time::Duration;
 
+mod matching;
 mod readiness;
+mod selection_order;
 mod unicode_ranges;
 
 pub(super) fn fixture_font_url() -> String {

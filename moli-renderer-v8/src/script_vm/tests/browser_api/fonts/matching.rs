@@ -1,0 +1,193 @@
+use super::*;
+
+#[test]
+fn font_set_queries_resolve_css_calculations_in_requests_and_descriptors() {
+    let mut vm = new_storage_test_vm("https://font-query-calculations.test/");
+    let url = fixture_font_url();
+    vm.eval(&format!(r#"
+        const bytes=Uint8Array.from(atob('{}'),c=>c.charCodeAt(0));
+        globalThis.calculations=[];
+        for (const [family,goodDescriptor,badDescriptor,query] of [
+          ['MathWeight',{{weight:'400'}},{{weight:'700'}},'calc(400 + 300) 16px MathWeight'],
+          ['MathStyle',{{style:'oblique 14deg'}},{{style:'oblique 20deg'}},'oblique calc(10deg + 10deg) 16px MathStyle'],
+          ['MathWidth',{{}},{{stretch:'calc(50% + 25%)'}},'16px MathWidth']
+        ]) {{
+          const good=new FontFace(family,bytes,goodDescriptor);
+          const bad=new FontFace(family,'url(data:font/ttf;base64,AA==)',badDescriptor);
+          bad.loaded.catch(()=>{{}});
+          document.fonts.add(good);document.fonts.add(bad);
+          calculations.push(document.fonts.check(query,'A'));
+          document.fonts.load(query,'A').then(
+            faces=>calculations.push([faces.length,faces[0]===good,bad.status]),
+            error=>calculations.push(error.name));
+        }}
+    "#,url.split_once(',').unwrap().1)).unwrap();
+    assert_eq!(
+        vm.eval("JSON.stringify(calculations)").unwrap(),
+        r#"[false,false,true,"NetworkError","NetworkError",[1,true,"unloaded"]]"#
+    );
+    vm.eval(
+        r#"
+        globalThis.widthCalculations = [document.fonts.check('condensed 16px MathWidth','A')];
+        document.fonts.load('condensed 16px MathWidth','A').then(
+          () => widthCalculations.push('unexpected loaded normal face'),
+          error => widthCalculations.push(error.name));
+    "#,
+    )
+    .unwrap();
+    assert_eq!(
+        vm.eval("JSON.stringify(widthCalculations)").unwrap(),
+        r#"[false,"NetworkError"]"#
+    );
+}
+
+#[test]
+fn font_set_queries_filter_text_without_loading_unrelated_sources() {
+    let mut vm = new_storage_test_vm("https://font-query-text.test/");
+    vm.eval(
+        r#"
+        globalThis.face = new FontFace('ReviewProbe',
+          'url(data:font/ttf;base64,AA==)', {unicodeRange:'U+0041'});
+        face.loaded.catch(()=>{});
+        document.fonts.add(face);
+        globalThis.queryResults = {checks:[], loads:[]};
+        for (const text of ['B', '']) {
+          queryResults.checks.push(document.fonts.check('16px ReviewProbe',text));
+          document.fonts.load('16px ReviewProbe',text).then(
+            faces=>queryResults.loads.push([text,faces.length,face.status]),
+            error=>queryResults.loads.push([text,error.name,face.status]));
+        }
+    "#,
+    )
+    .unwrap();
+    assert_eq!(
+        vm.eval("JSON.stringify({...queryResults,status:face.status})")
+            .unwrap(),
+        r#"{"checks":[true,true],"loads":[["B",0,"unloaded"],["",0,"unloaded"]],"status":"unloaded"}"#
+    );
+    vm.eval(
+        r#"
+        globalThis.matched = [document.fonts.check('16px ReviewProbe','A')];
+        document.fonts.load('16px ReviewProbe','A').catch(e=>matched.push(e.name));
+    "#,
+    )
+    .unwrap();
+    assert_eq!(
+        vm.eval("JSON.stringify(matched)").unwrap(),
+        r#"[false,"NetworkError"]"#
+    );
+}
+
+#[test]
+fn font_set_queries_select_weight_style_and_stretch_before_loading() {
+    let mut vm = new_storage_test_vm("https://font-query-properties.test/");
+    let url = fixture_font_url();
+    vm.eval(&format!(
+        r#"
+        const bytes=Uint8Array.from(atob('{}'),c=>c.charCodeAt(0));
+        globalThis.queryResults={{checks:[],loads:[]}};
+        globalThis.badFaces=[];
+        globalThis.goodFaces=[];
+        for (const [family,descriptor] of [
+          ['WeightMatch',{{weight:'700'}}],['StyleMatch',{{style:'italic'}}],
+          ['WidthMatch',{{stretch:'condensed'}}]
+        ]) {{
+          const good=new FontFace(family,bytes);
+          const bad=new FontFace(family,'url(data:font/ttf;base64,AA==)',descriptor);
+          bad.loaded.catch(()=>{{}});
+          goodFaces.push(good);badFaces.push(bad);
+          document.fonts.add(good);document.fonts.add(bad);
+          queryResults.checks.push(document.fonts.check(`16px ${{family}}`,'A'));
+          document.fonts.load(`16px ${{family}}`,'A').then(
+            faces=>queryResults.loads.push([faces.length,faces[0]===good,bad.status]),
+            error=>queryResults.loads.push(error.name));
+        }}
+    "#,
+        url.split_once(',').unwrap().1
+    ))
+    .unwrap();
+    assert_eq!(
+        vm.eval("JSON.stringify(queryResults)").unwrap(),
+        r#"{"checks":[true,true,true],"loads":[[1,true,"unloaded"],[1,true,"unloaded"],[1,true,"unloaded"]]}"#
+    );
+    vm.eval(r#"
+        globalThis.selected = [];
+        for (const query of ['bold 16px WeightMatch','italic 16px StyleMatch','condensed 16px WidthMatch']) {
+          selected.push(document.fonts.check(query,'A'));
+          document.fonts.load(query,'A').catch(e=>selected.push(e.name));
+        }
+    "#).unwrap();
+    assert_eq!(
+        vm.eval("JSON.stringify(selected)").unwrap(),
+        r#"[false,false,false,"NetworkError","NetworkError","NetworkError"]"#
+    );
+}
+
+#[test]
+fn font_set_queries_select_capabilities_before_unicode_ranges_and_track_descriptor_writes() {
+    let mut vm = new_storage_test_vm("https://font-query-order.test/");
+    let url = fixture_font_url();
+    vm.eval(&format!(
+        r#"
+        const bytes=Uint8Array.from(atob('{}'),c=>c.charCodeAt(0));
+        globalThis.normal=new FontFace('RangeWeight',bytes,{{unicodeRange:'U+0042'}});
+        globalThis.bold=new FontFace('RangeWeight','url(data:font/ttf;base64,AA==)',
+          {{weight:'700',unicodeRange:'U+0041'}});
+        bold.loaded.catch(()=>{{}});
+        document.fonts.add(normal);document.fonts.add(bold);
+        globalThis.queryResults=[document.fonts.check('16px RangeWeight','A')];
+        document.fonts.load('16px RangeWeight','A').then(
+          faces=>queryResults.push(faces.length,bold.status),e=>queryResults.push(e.name));
+    "#,
+        url.split_once(',').unwrap().1
+    ))
+    .unwrap();
+    assert_eq!(
+        vm.eval("JSON.stringify(queryResults)").unwrap(),
+        r#"[true,0,"unloaded"]"#
+    );
+    vm.eval(
+        r#"
+        globalThis.writes=[];
+        normal.unicodeRange='U+0041';
+        writes.push(document.fonts.check('16px RangeWeight','A'));
+        bold.weight='400';
+        writes.push(document.fonts.check('16px RangeWeight','A'));
+        bold.weight='700';
+        writes.push(document.fonts.check('16px RangeWeight','A'));
+        writes.push(document.fonts.check('bolder 16px RangeWeight','A'));
+    "#,
+    )
+    .unwrap();
+    assert_eq!(
+        vm.eval("JSON.stringify(writes)").unwrap(),
+        "[true,false,true,false]"
+    );
+}
+
+#[test]
+fn font_set_queries_match_unicode_scalars_and_preserve_family_list_order() {
+    let mut vm = new_storage_test_vm("https://font-query-scalars.test/");
+    let url = fixture_font_url();
+    vm.eval(&format!(
+        r#"
+        const bytes=Uint8Array.from(atob('{}'),c=>c.charCodeAt(0));
+        globalThis.first=new FontFace('FirstQueryFamily',bytes);
+        globalThis.second=new FontFace('SecondQueryFamily',bytes);
+        const emoji=new FontFace('EmojiQueryFamily','url(data:font/ttf;base64,AA==)',
+          {{unicodeRange:'U+1F600'}});
+        emoji.loaded.catch(()=>{{}});
+        document.fonts.add(first);document.fonts.add(second);document.fonts.add(emoji);
+        globalThis.queryResults=[document.fonts.check('16px EmojiQueryFamily','😁'),
+          document.fonts.check('16px EmojiQueryFamily','😀')];
+        document.fonts.load('16px SecondQueryFamily, FirstQueryFamily','A').then(
+          faces=>queryResults.push(faces.length,faces[0]===second,faces[1]===first));
+    "#,
+        url.split_once(',').unwrap().1
+    ))
+    .unwrap();
+    assert_eq!(
+        vm.eval("JSON.stringify(queryResults)").unwrap(),
+        "[true,false,2,true,true]"
+    );
+}

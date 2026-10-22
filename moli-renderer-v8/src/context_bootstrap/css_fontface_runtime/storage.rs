@@ -250,10 +250,46 @@ pub(crate) fn rebuild_font_face_set_faces<'s>(
         serialize_v8_iter_array(scope, combined).unwrap_or_else(|| v8::Array::new(scope, 0));
     set_font_face_set_slot_value(scope, object, FONT_FACE_SET_FACES_SLOT, combined.into());
     sync_font_face_set_size(scope, object);
+    sync_font_face_set_matching_order(scope, object);
     // Publish membership before changing owners can start a loading cycle.
     // Reentrant FontFaceSet queries must see the same members as that cycle.
     sync_font_face_set_owners(scope, object, previous, combined);
     super::events::finish_font_set_if_idle(scope, object);
+}
+
+fn sync_font_face_set_matching_order<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    fonts: v8::Local<'s, v8::Object>,
+) {
+    let Some((host_ptr, document)) = font_face_set_document_context(scope, fonts) else {
+        return;
+    };
+    let connected = font_face_set_connected_faces_array(scope, fonts);
+    let manual = font_face_set_manual_faces_array(scope, fonts);
+    let mut slots = |faces: Option<v8::Local<'s, v8::Array>>| {
+        let mut slots = Vec::new();
+        if let Some(faces) = faces {
+            for index in 0..faces.length() {
+                if let Some(face) = faces
+                    .get_index(scope, index)
+                    .and_then(|face| v8::Local::<v8::Object>::try_from(face).ok())
+                    && let Some(load) = super::state::get(scope, face)
+                {
+                    slots.push(load.borrow().slot().to_owned());
+                }
+            }
+        }
+        slots
+    };
+    let connected = slots(connected);
+    let manual = slots(manual);
+    // SAFETY: the native font service cannot call V8 while borrowed.
+    let host = unsafe { &*host_ptr };
+    if host.with_font_services(document, |services| {
+        services.set_web_font_order(&connected, &manual)
+    }) {
+        host.invalidate_document_font_layout(document);
+    }
 }
 
 pub(super) fn font_face_set_owner_snapshot<'s>(

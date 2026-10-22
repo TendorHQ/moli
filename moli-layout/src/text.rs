@@ -706,6 +706,9 @@ pub struct DocumentLayoutServices {
     local_font_sources: Option<Box<font_source::LocalFontSources>>,
     system_font_policy: SystemFontPolicy,
     web_fonts: BTreeMap<String, RegisteredWebFont>,
+    // Resource slots retain identity across removals and shared FontFaces.
+    // Selection priority belongs to this Document's current FontFaceSet.
+    web_font_order: BTreeMap<String, (bool, usize)>,
     pub(crate) text_layout_passes: u64,
 }
 
@@ -723,6 +726,7 @@ impl DocumentLayoutServices {
             local_font_sources: None,
             system_font_policy: SystemFontPolicy::Enabled,
             web_fonts: BTreeMap::new(),
+            web_font_order: BTreeMap::new(),
             text_layout_passes: 0,
         }
     }
@@ -734,6 +738,7 @@ impl DocumentLayoutServices {
             local_font_sources: None,
             system_font_policy,
             web_fonts: BTreeMap::new(),
+            web_font_order: BTreeMap::new(),
             text_layout_passes: 0,
         }
     }
@@ -754,6 +759,46 @@ impl DocumentLayoutServices {
 
     pub fn web_font_count(&self) -> usize {
         self.web_fonts.len()
+    }
+
+    /// Publishes CSS-connected order followed by manual insertion order for
+    /// this owner. Unloaded faces keep their place for a later completion.
+    /// Returns true only when registered candidates actually change priority.
+    pub fn set_web_font_order(&mut self, stylesheet: &[String], manual: &[String]) -> bool {
+        let order = stylesheet
+            .iter()
+            .enumerate()
+            .map(|(index, slot)| (slot.clone(), (false, index)))
+            .chain(
+                manual
+                    .iter()
+                    .enumerate()
+                    .map(|(index, slot)| (slot.clone(), (true, index))),
+            )
+            .collect::<BTreeMap<_, _>>();
+        if self.web_font_order == order {
+            return false;
+        }
+        let previous = ordered_web_fonts(&self.web_fonts, &self.web_font_order)
+            .into_iter()
+            .map(|(slot, _)| slot.clone())
+            .collect::<Vec<_>>();
+        self.web_font_order = order;
+        let current = ordered_web_fonts(&self.web_fonts, &self.web_font_order)
+            .into_iter()
+            .map(|(slot, _)| slot.clone())
+            .collect::<Vec<_>>();
+        if current == previous {
+            return false;
+        }
+        if self.parley.is_some() {
+            self.parley = Some(Box::new(build_parley_services(
+                self.system_font_policy,
+                &self.web_fonts,
+                &self.web_font_order,
+            )));
+        }
+        true
     }
 
     /// Adds or replaces one owner-validated font face.
@@ -789,6 +834,7 @@ impl DocumentLayoutServices {
             self.parley = Some(Box::new(build_parley_services(
                 self.system_font_policy,
                 &self.web_fonts,
+                &self.web_font_order,
             )));
         }
         Ok(outcome)
@@ -803,6 +849,7 @@ impl DocumentLayoutServices {
             self.parley = Some(Box::new(build_parley_services(
                 self.system_font_policy,
                 &self.web_fonts,
+                &self.web_font_order,
             )));
         }
         true
@@ -847,6 +894,7 @@ impl DocumentLayoutServices {
             local_font_sources: None,
             system_font_policy: self.system_font_policy,
             web_fonts,
+            web_font_order: self.web_font_order.clone(),
             text_layout_passes: 0,
         };
         let result = consume(&mut temporary);
@@ -873,15 +921,31 @@ impl DocumentLayoutServices {
             self.parley = Some(Box::new(build_parley_services(
                 self.system_font_policy,
                 &self.web_fonts,
+                &self.web_font_order,
             )));
         }
         self.parley.as_deref_mut().expect("Parley was initialized")
     }
 }
 
+fn ordered_web_fonts<'a>(
+    fonts: &'a BTreeMap<String, RegisteredWebFont>,
+    order: &BTreeMap<String, (bool, usize)>,
+) -> Vec<(&'a String, &'a RegisteredWebFont)> {
+    let mut fonts = fonts.iter().collect::<Vec<_>>();
+    fonts.sort_by_key(|(slot, font)| {
+        order
+            .get(*slot)
+            .copied()
+            .unwrap_or((!font.stylesheet, usize::MAX))
+    });
+    fonts
+}
+
 fn build_parley_services(
     system_font_policy: SystemFontPolicy,
     web_fonts: &BTreeMap<String, RegisteredWebFont>,
+    web_font_order: &BTreeMap<String, (bool, usize)>,
 ) -> ParleyDocumentServices {
     let mut collection = Collection::new(CollectionOptions {
         shared: false,
@@ -895,7 +959,10 @@ fn build_parley_services(
         source_cache: Default::default(),
     };
     let mut web_font_families = BTreeMap::<String, SegmentedWebFontFamily>::new();
-    for (source_order, font) in web_fonts.values().enumerate() {
+    for (source_order, (_, font)) in ordered_web_fonts(web_fonts, web_font_order)
+        .into_iter()
+        .enumerate()
+    {
         let data: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(Arc::clone(&font.sfnt_bytes));
         let blob = Blob::new(data);
         let selector_fonts = font_context.collection.register_fonts(
@@ -1168,7 +1235,11 @@ mod tests {
 
     #[test]
     fn system_family_substitution_preserves_css_fallback_order() {
-        let mut parley = build_parley_services(SystemFontPolicy::Disabled, &BTreeMap::new());
+        let mut parley = build_parley_services(
+            SystemFontPolicy::Disabled,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
         parley.system_font_family_resolver = Some(SystemFontFamilyResolver::new(
             &mut parley.font_context.collection,
         ));
