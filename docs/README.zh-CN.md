@@ -233,37 +233,23 @@ Moli 是一个独立的浏览器内核，而不是对 Chromium 的封装。它�
 
 | 评测方式 | 评测集 | 指标 |
 | --- | --- | --- |
-| Web Fetch 任务 | [LexBench WebFetch](https://github.com/lexmount/lexbench-webfetch) · 七类场景，共 430 道任务 | 题目要求是否满足 |
 | 网页内容提取 | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 份 HTML 快照及正文参考 | 正文、代码、公式、表格保真度 |
 | 浏览器自动化 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · 1,308 项浏览器操作与 Web 测试 | 操作与功能测试通过率 |
 | CPU 与内存开销 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · 557 项 CDP/Web 任务中四个本地浏览器共同完成的部分 | CPU 时间、内存峰值 |
 | 标准与回归测试 | 选定的 [WPT](https://github.com/web-platform-tests/wpt) 测试与 [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) 回归测试 | 测试通过项数、功能回退 |
 
+以下评测分别比较内容提取、浏览器自动化和资源开销。
 
-下面的实测数据展示了 Moli 目前的能力区间。测试覆盖真实网站、自动化客户端、Chromium/WPT 行为验证，以及大规模的 nextest 回归测试套件。
+### 公开网页混合抓取测试
 
-### 网页内容提取
+测试对象是 192 个公开 URL，覆盖中国国内和国际主流网站。判定成功的标准是：页面必须生成有实际意义的 JavaScript 执行后内容——仅仅返回 HTTP 200、验证质询页面、登录墙、空响应，或者只有外壳的应用界面，都不计入成功。
 
-<details open>
-<summary><strong>LexBench WebFetch · 430 道任务</strong></summary>
-
-五种 Web Fetch 方法使用相同的 430 道任务，覆盖七类场景。只有返回的正文、结构、资源地址或文件字节满足题目要求，才算通过。
-
-| 方法 | 通过任务数 | 通过率 |
-| --- | ---: | ---: |
-| Moli 1.1.17（修复版结果） | **385/430** | **89.53%** |
-| Chromium 155.0.8059.39 | 234/430 | 54.42% |
-| Lightpanda 1.0.0 | 229/430 | 53.26% |
-| Obscura 0.2.4 | 223/430 | 51.86% |
-| Kitesurf (托管服务) | 192/430 | 44.65% |
-
-评测日期为 2026 年 10 月 15 日。固定版本的报告记录了 Moli 的准确构建信息和全部逐题结果。
-
-题目定义由 [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch) 维护，执行与报告工具由 [`browser-eval`](https://github.com/lexmount/browser-eval) 维护。
-
-[完整报告、任务要求及失败证据](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo).
-
-</details>
+| 浏览器 | 有效页面 | 成功率 | 中位耗时 | RSS 中位数 |
+| --- | ---: | ---: | ---: | ---: |
+| **Moli** | **103** | **53.6%** | **1.43 s** | **73 MiB** |
+| Chrome Headless | 101 | 52.6% | 1.43 s | 773 MiB |
+| Lightpanda | 85 | 44.3% | 0.97 s | 40 MiB |
+| Obscura | 57 | 29.7% | 1.30 s | 39 MiB |
 
 ### 智能体工作负载样例
 
@@ -308,8 +294,7 @@ Kitesurf 是远程服务，无法测量 CPU、内存和进程数，因此资源�
 | Chrome for Testing 154.0.8037.57 | 545/545 | 27.02% | 39.40% | 35.86% | 21.12% | **25.01%** | 13.73% |
 | Kitesurf（托管服务） | 524/545 | 33.43% | 36.99% | 80.70% | 19.32% | 18.25% | 11.87% |
 
-[用 browser-eval 复现](https://github.com/lexmount/browser-eval)。Moli 实测提交：[`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe)。 [固定测量配置](https://github.com/lexmount/browser-eval/blob/345ea09370a633e871670fde2de4ec25b53a4d05/evaluation/webmainbench-full/moli-content-fixed-report.json).
-
+[用 browser-eval 复现](https://github.com/lexmount/browser-eval)。Moli 实测提交：[`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe)。[固定测量配置](https://github.com/lexmount/browser-eval/blob/345ea09370a633e871670fde2de4ec25b53a4d05/evaluation/webmainbench-full/moli-content-fixed-report.json)。
 
 ## 项目范围
 

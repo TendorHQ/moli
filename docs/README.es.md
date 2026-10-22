@@ -235,37 +235,23 @@ El documento y los estilos tienen una única fuente de verdad: la integración d
 
 | Evaluación | Pruebas | Métricas |
 | --- | --- | --- |
-| Tareas Web Fetch | [LexBench WebFetch](https://github.com/lexmount/lexbench-webfetch) · 430 tareas en siete categorías | Cumplimiento de los requisitos de cada tarea |
 | Extracción de contenido web | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 páginas HTML guardadas y referencias del contenido principal | Fidelidad del texto, código, fórmulas y tablas |
 | Automatización del navegador | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · 1.308 pruebas de acciones y funciones web | Tasa de éxito de las pruebas de acciones y funciones |
 | CPU y memoria | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · trabajo completado por todos en 557 tareas CDP/web | Tiempo de CPU y memoria máxima |
 | Estándares y regresiones | Pruebas [WPT](https://github.com/web-platform-tests/wpt) seleccionadas; pruebas de regresión de [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) | Pruebas superadas y regresiones |
 
+Los siguientes benchmarks comparan la extracción de contenido, la automatización del navegador y el uso de recursos.
 
-Las siguientes mediciones muestran las capacidades actuales de Moli. Cubren sitios web reales, clientes de automatización, verificaciones del comportamiento de Chromium/WPT y una batería grande de regresión con nextest.
+### Prueba de rastreo mixto de la web pública
 
-### Extracción de contenido web
+La prueba cubre 192 URLs públicas de sitios importantes de China y del resto del mundo. Para contar como éxito, una página tiene que generar contenido realmente útil después de ejecutar JavaScript: un simple 200 OK, una página de verificación, un muro de login, una respuesta vacía o una interfaz de aplicación que solo muestre su esqueleto básico no cuentan como resultado válido.
 
-<details open>
-<summary><strong>LexBench WebFetch · 430 tareas</strong></summary>
-
-Se comparan cinco métodos de Web Fetch con las mismas 430 tareas de siete categorías. Solo se aprueba cuando el contenido, la estructura, las direcciones de recursos o los bytes del archivo cumplen los requisitos de la tarea.
-
-| Método | Tareas aprobadas | Porcentaje |
-| --- | ---: | ---: |
-| Moli 1.1.17 (resultado corregido) | **385/430** | **89.53%** |
-| Chromium 155.0.8059.39 | 234/430 | 54.42% |
-| Lightpanda 1.0.0 | 229/430 | 53.26% |
-| Obscura 0.2.4 | 223/430 | 51.86% |
-| Kitesurf (alojado) | 192/430 | 44.65% |
-
-Medición realizada el 15 de octubre de 2026. El informe fijado registra las compilaciones exactas de Moli y el resultado de cada tarea.
-
-Las tareas se mantienen en [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch); la ejecución y los informes, en [`browser-eval`](https://github.com/lexmount/browser-eval).
-
-[Informe completo, requisitos y evidencias de fallos](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo).
-
-</details>
+| Navegador | Páginas útiles | Tasa de éxito | Tiempo mediano | RSS mediana |
+| --- | ---: | ---: | ---: | ---: |
+| **Moli** | **103** | **53.6%** | **1.43 s** | **73 MiB** |
+| Chrome Headless | 101 | 52.6% | 1.43 s | 773 MiB |
+| Lightpanda | 85 | 44.3% | 0.97 s | 40 MiB |
+| Obscura | 57 | 29.7% | 1.30 s | 39 MiB |
 
 ### Ejemplo de carga de trabajo de un agente
 
@@ -311,7 +297,6 @@ Estas mediciones históricas corresponden a una versión de desarrollo de Moli c
 | Kitesurf (servicio alojado) | 524/545 | 33,43 % | 36,99 % | 80,70 % | 19,32 % | 18,25 % | 11,87 % |
 
 [Reproducir con browser-eval](https://github.com/lexmount/browser-eval). Commit de Moli evaluado: [`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe). [Configuración de medición fijada](https://github.com/lexmount/browser-eval/blob/345ea09370a633e871670fde2de4ec25b53a4d05/evaluation/webmainbench-full/moli-content-fixed-report.json).
-
 
 ## Alcance del proyecto
 

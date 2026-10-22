@@ -307,39 +307,26 @@ retained display list, GPU compositor, or persistent window.
 
 | Evaluation | Test suite | Measures |
 | --- | --- | --- |
-| Web fetch tasks | [LexBench WebFetch](https://github.com/lexmount/lexbench-webfetch) · 430 tasks across seven families | Task requirements met |
 | Web content extraction | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 HTML snapshots and main-content references | Text, code, formula and table fidelity |
 | Browser automation | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · 1,308 browser-operation and Web tests | Operation and feature test pass rate |
 | CPU and memory use | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · work completed by all four local browsers in 557 CDP/Web tasks | CPU time and peak memory |
 | Standards and regressions | Selected [WPT](https://github.com/web-platform-tests/wpt) tests; [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) regression tests | Tests passed and functional regressions |
 
+The benchmarks below measure content extraction, browser automation and resource use.
 
-The following measurements show Moli's current capability envelope. They cover
-real websites, automation clients, Chromium/WPT behavior checks, and a large
-nextest regression suite.
+### Mixed public-web crawl test
 
-### Web content extraction
+The test covers 192 public URLs from major Chinese and international sites. A
+page only counts as successful if it produces meaningful content after
+JavaScript runs — an HTTP 200, challenge page, login wall, empty response, or
+shell-only application does not count.
 
-<details open>
-<summary><strong>LexBench WebFetch · 430 tasks</strong></summary>
-
-Five web-fetch methods are compared on the same 430 tasks across seven families. A task passes only when its requested content, structure, resource addresses or file bytes meet the task requirements.
-
-| Method | Tasks passed | Pass rate |
-| --- | ---: | ---: |
-| Moli 1.1.17 (repair result) | **385/430** | **89.53%** |
-| Chromium 155.0.8059.39 | 234/430 | 54.42% |
-| Lightpanda 1.0.0 | 229/430 | 53.26% |
-| Obscura 0.2.4 | 223/430 | 51.86% |
-| Kitesurf (hosted) | 192/430 | 44.65% |
-
-Measured on October 15, 2026. The pinned report records the exact Moli builds and every task result.
-
-Task definitions are maintained in [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch); execution and reporting are maintained in [`browser-eval`](https://github.com/lexmount/browser-eval).
-
-[Full report, task contracts and failure evidence](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo).
-
-</details>
+| Browser | Useful pages | Success rate | Median time | Median RSS |
+| --- | ---: | ---: | ---: | ---: |
+| **Moli** | **103** | **53.6%** | **1.43 s** | **73 MiB** |
+| Chrome Headless | 101 | 52.6% | 1.43 s | 773 MiB |
+| Lightpanda | 85 | 44.3% | 0.97 s | 40 MiB |
+| Obscura | 57 | 29.7% | 1.30 s | 39 MiB |
 
 ### Sample agent workload
 
@@ -403,7 +390,6 @@ These are historical measurements of Moli’s content-repair development build, 
 | Kitesurf (hosted) | 524/545 | 33.43% | 36.99% | 80.70% | 19.32% | 18.25% | 11.87% |
 
 [Reproduce with browser-eval](https://github.com/lexmount/browser-eval). Moli was measured at commit [`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe). [Frozen measurement profile](https://github.com/lexmount/browser-eval/blob/345ea09370a633e871670fde2de4ec25b53a4d05/evaluation/webmainbench-full/moli-content-fixed-report.json).
-
 
 ## Project scope
 

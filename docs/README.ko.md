@@ -297,38 +297,25 @@ Moli는 Chromium 래퍼가 아닌 독립형 브라우저 커널입니다. Rust�
 
 | 평가 방식 | 벤치마크 | 지표 |
 | --- | --- | --- |
-| Web Fetch 작업 | [LexBench WebFetch](https://github.com/lexmount/lexbench-webfetch) · 7개 유형의 430개 작업 | 작업 요구사항 충족률 |
 | 웹 콘텐츠 추출 | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · HTML 스냅샷 545개와 본문 참조 | 본문, 코드, 수식, 표의 유사도 |
 | 브라우저 자동화 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · 1,308개 브라우저 및 웹 테스트 | 작업 및 기능 테스트 통과율 |
 | CPU 및 메모리 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · 557개 작업 중 네 로컬 브라우저가 모두 완료한 작업 | CPU 시간과 최대 메모리 |
 | 웹 표준 및 회귀 테스트 | 선택된 [WPT](https://github.com/web-platform-tests/wpt) 및 [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) 테스트 | 통과한 테스트 및 기능 회귀 |
 
+아래 벤치마크는 콘텐츠 추출, 브라우저 자동화, 리소스 사용량을 비교합니다.
 
-다음 측정값은 Moli의 현재 기능 범위를 보여 줍니다. 실제 웹사이트, 자동화 클라이언트,
-Chromium/WPT 동작 검사, 대규모 nextest 회귀 테스트 모음을 다룹니다.
+### 혼합 공개 웹 크롤 테스트
 
-### 웹 콘텐츠 추출
+이 테스트는 중국과 국제 주요 사이트의 공개 URL 192개를 다룹니다. JavaScript 실행 뒤
+의미 있는 콘텐츠를 생성해야만 페이지를 성공으로 계산합니다. HTTP 200, 챌린지 페이지,
+로그인 차단벽, 빈 응답, 셸만 있는 애플리케이션은 성공으로 계산하지 않습니다.
 
-<details open>
-<summary><strong>LexBench WebFetch · 430개 작업</strong></summary>
-
-5개 Web Fetch 방식을 7개 유형의 동일한 430개 작업으로 비교합니다. 본문, 구조, 리소스 주소 또는 파일 바이트가 작업 요구사항을 충족해야 통과합니다.
-
-| 방식 | 통과 작업 수 | 통과율 |
-| --- | ---: | ---: |
-| Moli 1.1.17(수정 결과) | **385/430** | **89.53%** |
-| Chromium 155.0.8059.39 | 234/430 | 54.42% |
-| Lightpanda 1.0.0 | 229/430 | 53.26% |
-| Obscura 0.2.4 | 223/430 | 51.86% |
-| Kitesurf (호스팅) | 192/430 | 44.65% |
-
-측정일은 2026년 10월 15일입니다. 고정된 보고서에 Moli의 정확한 빌드 정보와 모든 작업 결과가 기록되어 있습니다.
-
-작업 정의는 [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch), 실행과 보고서는 [`browser-eval`](https://github.com/lexmount/browser-eval)에서 관리합니다.
-
-[전체 보고서, 작업 요구사항 및 실패 증거](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo).
-
-</details>
+| 브라우저 | 유효 페이지 | 성공률 | 중앙 시간 | 중앙 RSS |
+| --- | ---: | ---: | ---: | ---: |
+| **Moli** | **103** | **53.6%** | **1.43초** | **73 MiB** |
+| Chrome Headless | 101 | 52.6% | 1.43초 | 773 MiB |
+| Lightpanda | 85 | 44.3% | 0.97초 | 40 MiB |
+| Obscura | 57 | 29.7% | 1.30초 | 39 MiB |
 
 ### 에이전트 워크로드 예시
 
@@ -390,7 +377,6 @@ Moli는 Chrome CPU 시간의 약 15%, 최대 메모리의 약 13%를 사용했�
 | Kitesurf (hosted) | 524/545 | 33.43% | 36.99% | 80.70% | 19.32% | 18.25% | 11.87% |
 
 [browser-eval로 재현](https://github.com/lexmount/browser-eval). Moli 측정 커밋: [`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe). [고정된 측정 설정](https://github.com/lexmount/browser-eval/blob/345ea09370a633e871670fde2de4ec25b53a4d05/evaluation/webmainbench-full/moli-content-fixed-report.json).
-
 
 ## 프로젝트 범위
 

@@ -233,37 +233,23 @@ Moli は、Chromium を外から操作するだけの仕組みではなく、独
 
 | 評価方法 | テストセット | 指標 |
 | --- | --- | --- |
-| Web Fetch タスク | [LexBench WebFetch](https://github.com/lexmount/lexbench-webfetch) · 7 分野、430 タスク | タスク要件の達成率 |
 | Web ページの内容抽出 | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · HTML スナップショット 545 件と本文の参照データ | 本文・コード・数式・表の保持 |
 | ブラウザの自動操作 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · ブラウザ操作・Web 機能テスト 1,308 件 | 操作・機能テストの合格率 |
 | CPU・メモリ使用量 | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · CDP/Web の 557 タスク中、ローカル 4 ブラウザが完了した処理 | CPU 時間・ピークメモリ |
 | Web 標準・回帰テスト | 選定した [WPT](https://github.com/web-platform-tests/wpt) テストと [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) 回帰テスト | 合格件数・不具合の再発 |
 
+以下では、内容抽出、ブラウザ自動操作、リソース使用量を比較します。
 
-以下の実測値は、Moli が現在対応できる範囲を示しています。検証対象には、実在する Web サイト、自動操作クライアント、Chromium/WPT の動作、大規模な nextest 回帰テストを含みます。
+### 公開 Web サイトの横断取得試験
 
-### Web コンテンツの抽出
+中国国内および世界の主要サイトから、192 件の公開 URL を対象としました。JavaScript の実行後に、本文に相当する内容を取得できた場合だけを成功としています。HTTP 200 が返るだけの場合や、自動アクセス対策の確認画面、ログインが必要な画面、空の応答、内容がなく外枠だけの画面は、成功に含めません。
 
-<details open>
-<summary><strong>LexBench WebFetch · 430 タスク</strong></summary>
-
-5 種類の Web Fetch 方式を、7 分類の同じ 430 タスクで比較します。本文、構造、リソース URL、ファイルのバイト列が各タスクの要件を満たした場合に合格となります。
-
-| 方式 | 合格タスク数 | 合格率 |
-| --- | ---: | ---: |
-| Moli 1.1.17（修正版） | **385/430** | **89.53%** |
-| Chromium 155.0.8059.39 | 234/430 | 54.42% |
-| Lightpanda 1.0.0 | 229/430 | 53.26% |
-| Obscura 0.2.4 | 223/430 | 51.86% |
-| Kitesurf (ホスト型) | 192/430 | 44.65% |
-
-測定日は 2026 年 10 月 15 日です。固定版レポートには、Moli の正確なビルド情報と全タスクの結果が記録されています。
-
-タスク定義は [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch)、実行とレポートは [`browser-eval`](https://github.com/lexmount/browser-eval) で管理されています。
-
-[完全なレポート、タスク要件と失敗の証拠](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo).
-
-</details>
+| ブラウザ | 取得できたページ | 成功率 | 所要時間の中央値 | RSS 中央値 |
+| --- | ---: | ---: | ---: | ---: |
+| **Moli** | **103** | **53.6%** | **1.43 s** | **73 MiB** |
+| Chrome Headless | 101 | 52.6% | 1.43 s | 773 MiB |
+| Lightpanda | 85 | 44.3% | 0.97 s | 40 MiB |
+| Obscura | 57 | 29.7% | 1.30 s | 39 MiB |
 
 ### AI エージェント処理の測定例
 
@@ -308,8 +294,7 @@ Kitesurf はリモートサービスのため、CPU、メモリ、プロセス�
 | Chrome for Testing 154.0.8037.57 | 545/545 | 27.02% | 39.40% | 35.86% | 21.12% | **25.01%** | 13.73% |
 | Kitesurf (ホスト型サービス) | 524/545 | 33.43% | 36.99% | 80.70% | 19.32% | 18.25% | 11.87% |
 
-[browser-eval で再現](https://github.com/lexmount/browser-eval)。Moli の測定コミット：[`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe)。 [固定した測定設定](https://github.com/lexmount/browser-eval/blob/345ea09370a633e871670fde2de4ec25b53a4d05/evaluation/webmainbench-full/moli-content-fixed-report.json).
-
+[browser-eval で再現](https://github.com/lexmount/browser-eval)。Moli の測定コミット：[`721bd2e`](https://github.com/lexmount/moli/commit/721bd2e329f96c06573db6e6b257a149cf17a6fe)。[固定した測定設定](https://github.com/lexmount/browser-eval/blob/345ea09370a633e871670fde2de4ec25b53a4d05/evaluation/webmainbench-full/moli-content-fixed-report.json)。
 
 ## 対応範囲
 
