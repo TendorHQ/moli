@@ -67,6 +67,7 @@ mod speech_synthesis_events;
 mod storage_access;
 mod storage_event_init;
 mod structured_clone;
+mod stylesheet_init;
 mod transferable_streams;
 mod traversal;
 mod traversal_coordinator;
