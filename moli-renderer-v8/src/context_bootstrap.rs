@@ -789,7 +789,8 @@ struct WorkerAbortSignalTemplateDeclaration {
     interface = web_api_interfaces::AbortController,
     constructor_callback = crate::worker::abort::worker_abort_controller_constructor_callback,
     constructor_length = 0,
-    enumerable
+    enumerable,
+    receiver
 )]
 struct WorkerAbortControllerTemplateDeclaration {
     #[webapi(
@@ -800,7 +801,7 @@ struct WorkerAbortControllerTemplateDeclaration {
 
     #[webapi(
         method = "abort",
-        length = 1,
+        length = 0,
         callback = crate::worker::abort::worker_abort_controller_abort_callback
     )]
     abort: (),
