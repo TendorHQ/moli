@@ -403,7 +403,7 @@ fn constructor_rejects_invalid_worker_type_option() {
         r#"new Worker("postMessage('hi')", { type: "potato" })"#,
     );
     assert!(
-        err.contains("worker type is invalid"),
+        err.contains("type is not a valid enum value of type WorkerType"),
         "expected invalid worker type error, got: {err}"
     );
 }
@@ -418,7 +418,7 @@ fn constructor_rejects_null_worker_type_option_member() {
         r#"new Worker("postMessage('hi')", { type: null })"#,
     );
     assert!(
-        err.contains("worker type is invalid"),
+        err.contains("type is not a valid enum value of type WorkerType"),
         "expected invalid worker type error, got: {err}"
     );
 }

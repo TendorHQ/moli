@@ -77,6 +77,7 @@ mod webrtc;
 mod webrtc_events;
 mod window_legacy_objects;
 mod worker_listener_invocation;
+mod worker_options;
 
 mod document_domain_lifetime;
 mod document_domain_setter;
