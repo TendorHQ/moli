@@ -79,6 +79,17 @@ pub(super) fn parse_window_fetch_input<'s>(
             (inherited.priority != moli_fetch::FetchPriorityHint::Auto)
                 .then_some(inherited.priority)
         });
+        // Legacy request-like signals have not passed RequestInit conversion.
+        // Validate the selected value so an explicit init.signal can override it.
+        let signal = init.signal.unwrap_or(inherited.signal);
+        if let Some(signal) = signal.as_ref() {
+            let signal = v8::Local::new(scope, signal);
+            webidl::convert::<crate::abort_signal_route::ResolvedAbortSignal>(
+                scope,
+                signal.into(),
+                webidl::Context::member("Request", "signal"),
+            )?;
+        }
         Ok(ParsedWindowFetchInput {
             url,
             method,
@@ -93,7 +104,7 @@ pub(super) fn parse_window_fetch_input<'s>(
             referrer_policy: init.referrer_policy.unwrap_or(inherited.referrer_policy),
             integrity: init.integrity.unwrap_or(inherited.integrity),
             keepalive: init.keepalive.unwrap_or(inherited.keepalive),
-            signal: init.signal.unwrap_or(inherited.signal),
+            signal,
             request_body_owner,
         })
     } else {

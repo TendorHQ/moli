@@ -1878,6 +1878,15 @@ pub(in crate::worker) fn resolve_worker_fetch_input<'s>(
             keepalive: init.keepalive.unwrap_or(inherited.keepalive),
             use_cors_preflight: false,
         };
+        // Validate the merged signal without rereading the legacy input getter.
+        if let Some(signal) = signal.as_ref() {
+            let signal = v8::Local::new(scope, signal);
+            webidl::convert::<crate::abort_signal_route::ResolvedAbortSignal>(
+                scope,
+                signal.into(),
+                webidl::Context::member("Request", "signal"),
+            )?;
+        }
         (
             url,
             method,
