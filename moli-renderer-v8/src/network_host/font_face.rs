@@ -2,7 +2,7 @@ use super::subresource::{PreparedSubresourceFetch, SubresourceFetchOptions};
 use super::*;
 use crate::{
     native_bridge::JsContextHost,
-    types::{AsyncSubresourceFetchCompletion, PendingFontFaceFetch, SubresourceResourceType},
+    types::{AsyncSubresourceFetchCompletion, PendingFontFaceFetch},
 };
 
 /// Resolve URL sources at construction, before a later base mutation or source
@@ -14,11 +14,13 @@ pub(crate) fn resolve_font_face_sources(
 ) -> Vec<moli_css_parse::CssFontSource> {
     use moli_css_parse::CssFontSource;
 
-    let base = crate::worker::worker_current_script_url(scope).or_else(|| crate::util::context_host_ptr_from_global_bridge(scope).and_then(|host_ptr| {
-        let host = unsafe { &*host_ptr };
-        let owner = effective_subresource_request_owner(scope, host);
-        subresource_api_base_url(scope, host, owner)
-    }));
+    let base = crate::worker::worker_current_script_url(scope).or_else(|| {
+        crate::util::context_host_ptr_from_global_bridge(scope).and_then(|host_ptr| {
+            let host = unsafe { &*host_ptr };
+            let owner = effective_subresource_request_owner(scope, host);
+            subresource_api_base_url(scope, host, owner)
+        })
+    });
     sources
         .into_iter()
         .filter_map(|source| match source {
@@ -34,9 +36,9 @@ pub(crate) fn resolve_font_face_sources(
 
 /// Explicit CSS Font Loading requests share document ownership, CORS and the
 /// renderer network queue with other resources. Never call page-defined fetch.
-pub(crate) fn start_font_face_fetch(
-    scope: &mut v8::PinScope<'_, '_>,
-    face: v8::Local<'_, v8::Object>,
+pub(crate) fn start_font_face_fetch<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    face: v8::Local<'s, v8::Object>,
     source: &str,
 ) -> Result<(), String> {
     if crate::worker::get_worker_state(scope).is_some() {
@@ -48,7 +50,10 @@ pub(crate) fn start_font_face_fetch(
     // SAFETY: the current live realm owns the bridge. No author callback runs
     // while the host is used except its existing CSP notification boundary.
     let host: &mut JsContextHost = unsafe { &mut *host_ptr };
-    let owner = effective_subresource_request_owner(scope, host);
+    let binding = host
+        .current_runtime_window_execution_context_binding(scope)
+        .ok_or("FontFace Window is no longer active")?;
+    let owner = binding.dispatch_scope();
     let resource_loader = host
         .document_resource_loader_for_dispatch_scope(owner)
         .ok_or_else(|| "Font request has no live document resource loader".to_owned())?;
@@ -67,14 +72,20 @@ pub(crate) fn start_font_face_fetch(
         );
     let report_context = capture_window_csp_report_request_context(scope, host, owner)
         .ok_or("FontFace reporting owner is unavailable")?;
-    let (reports, enforced) = policy.check_url(
-        &environment.document_url,
-        &request_url,
-        crate::content_security_policy::ContentSecurityPolicyRedirectStatus::NoRedirect,
-    ).into_violations();
+    let (reports, enforced) = policy
+        .check_url(
+            &environment.document_url,
+            &request_url,
+            crate::content_security_policy::ContentSecurityPolicyRedirectStatus::NoRedirect,
+        )
+        .into_violations();
     let blocked = !enforced.is_empty();
     for violation in reports.into_iter().chain(enforced) {
-        send_content_security_policy_violation_report_from_window_context(host, &report_context, &violation);
+        send_content_security_policy_violation_report_from_window_context(
+            host,
+            &report_context,
+            &violation,
+        );
         host.dispatch_document_connect_csp_violation_event_for_exact_owner_without_report_best_effort(
             scope, host_ptr, report_context.identity(), &violation,
         );
@@ -84,11 +95,6 @@ pub(crate) fn start_font_face_fetch(
     }
     moli_fetch::FetchUrlList::new(&request_url, &[])
         .validate_request_mode(moli_fetch::RequestMode::Cors, &environment.request_origin)?;
-    if matches!(request_url.scheme(), "http" | "https")
-        && !resource_loader.request_client().optional_resource_fetch_enabled(SubresourceResourceType::Font)
-    {
-        return Err("FontFace requests are disabled by the resource policy".to_owned());
-    }
     let font = PendingFontFaceFetch {
         face: v8::Global::new(scope, face),
         redirect_state: FetchCspRedirectState::new(&policy),
@@ -104,32 +110,40 @@ pub(crate) fn start_font_face_fetch(
         request_url.clone(),
         SubresourceFetchOptions::FONT,
     )?;
-    let internal_id = host.record_async_font_face_fetch(
-        v8::Global::new(scope, scope.get_current_context()),
-        font,
-        owner,
-        prepared.cancel_handle.clone(),
-        prepared.network_partition_key.clone(),
-        prepared.network_context.policy_context,
-        prepared.pending_info.clone(),
-    );
+    let internal_id = host
+        .record_async_font_face_fetch(
+            binding,
+            &resource_loader,
+            font,
+            prepared.cancel_handle.clone(),
+            prepared.network_partition_key.clone(),
+            prepared.network_context.policy_context,
+            prepared.pending_info.clone(),
+        )
+        .ok_or("FontFace Document was retired")?;
     // Local URL responses use the same resource completion task as network
     // responses, preserving the observable loading state before settlement.
     let blob = CapturedBlobUrl::capture(&request_url);
-    if let Some(response) = local_url_response_with_blob_entry(&request_url, "GET", &[], blob.as_ref()) {
-        let result = response.map(Into::into).map_err(|error| error.into_message());
-        let _ = host.resource_completion_sender().send_async_subresource(AsyncSubresourceFetchCompletion {
-            internal_id,
-            request_url,
-            request_method: "GET".to_owned(),
-            request_headers: Default::default(),
-            request_body: None,
-            response_status_text: None,
-            skip_fetch_security_validation: false,
-            response_filter: None,
-            network_error_text: None,
-            result: result.into(),
-        });
+    if let Some(response) =
+        local_url_response_with_blob_entry(&request_url, "GET", &[], blob.as_ref())
+    {
+        let result = response
+            .map(Into::into)
+            .map_err(|error| error.into_message());
+        let _ = host.resource_completion_sender().send_async_subresource(
+            AsyncSubresourceFetchCompletion {
+                internal_id,
+                request_url,
+                request_method: "GET".to_owned(),
+                request_headers: Default::default(),
+                request_body: None,
+                response_status_text: None,
+                skip_fetch_security_validation: false,
+                response_filter: None,
+                network_error_text: None,
+                result: result.into(),
+            },
+        );
         return Ok(());
     }
     prepared.dispatch(

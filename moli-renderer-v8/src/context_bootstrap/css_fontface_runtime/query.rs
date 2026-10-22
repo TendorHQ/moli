@@ -35,7 +35,9 @@ pub(super) fn font_face_set_matching_faces_array<'s>(
         let Ok(face_object) = v8::Local::<v8::Object>::try_from(face) else {
             continue;
         };
-        let Some(family) = super::font_face::font_face_raw_family(scope, face_object) else { continue; };
+        let Some(family) = super::font_face::font_face_raw_family(scope, face_object) else {
+            continue;
+        };
         let weight = super::loading::string_slot(scope, face_object, FONT_FACE_WEIGHT_SLOT);
         let stretch = super::loading::string_slot(scope, face_object, FONT_FACE_STRETCH_SLOT);
         let style = super::loading::string_slot(scope, face_object, FONT_FACE_STYLE_SLOT);
@@ -53,7 +55,11 @@ pub(super) fn font_face_set_matching_faces_array<'s>(
     for family in query.families {
         let family_faces = candidates
             .iter()
-            .filter(|face| face.family.as_str().is_some_and(|candidate| family.eq_ignore_ascii_case(candidate)))
+            .filter(|face| {
+                face.family
+                    .as_str()
+                    .is_some_and(|candidate| family.eq_ignore_ascii_case(candidate))
+            })
             .collect::<Vec<_>>();
         let Some(best) = family_faces
             .iter()
