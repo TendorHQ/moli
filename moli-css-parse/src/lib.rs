@@ -7,6 +7,7 @@ mod color;
 mod declaration;
 mod font_face;
 mod font_palette;
+mod font_selection;
 mod math;
 mod root_margin;
 mod stylo_stylesheet;
@@ -27,6 +28,7 @@ pub use font_face::{
 pub use font_palette::{
     CssFontPaletteValuesProperty, parse_font_palette_values_property_with_stylo,
 };
+pub use font_selection::{FontSelectionCapabilities, FontSelectionRange};
 pub use math::{
     ContainerQueryLengthContext, CssNumericContext, CssNumericKind, CssNumericValue, UnitlessAngle,
     UnitlessLength, balanced_function_len, css_number_value_is_supported,

@@ -3042,6 +3042,7 @@ dependencies = [
  "brotlic",
  "euclid",
  "kurbo",
+ "moli-css-parse",
  "moli-image",
  "moli-system-fonts",
  "moli-trace",

@@ -2,6 +2,7 @@ use super::*;
 use base64::Engine;
 use std::time::Duration;
 
+mod descriptor_ranges;
 mod matching;
 mod ownership;
 mod readiness;

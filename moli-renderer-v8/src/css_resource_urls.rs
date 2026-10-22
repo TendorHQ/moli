@@ -4,7 +4,7 @@ use moli_css_parse::{
     DeclarationParseOptions, parse_declaration_list, parse_font_face_rule_view_with_stylo,
     parse_font_faces, parse_stylesheet_rule_snapshots_with_stylo,
 };
-use moli_layout::{WebFontFace, WebFontStyle, WebFontUnicodeRange};
+use moli_layout::{WebFontFace, WebFontUnicodeRange};
 use url::Url;
 
 use crate::protocol_types::OptionalResourceFetchMask;
@@ -245,9 +245,9 @@ fn collect_font_face_rule_css(rules: &[moli_css_parse::CssRuleSnapshot], output:
 struct ParsedWebFontFace {
     family: String,
     source: String,
-    weight: Option<f32>,
-    stretch: Option<f32>,
-    style: Option<WebFontStyle>,
+    weight: String,
+    stretch: String,
+    style: String,
     unicode_ranges: Vec<WebFontUnicodeRange>,
 }
 
@@ -257,17 +257,9 @@ impl ParsedWebFontFace {
     }
 
     fn into_face(self) -> WebFontFace {
-        let mut face = WebFontFace::new(self.family);
-        if let Some(weight) = self.weight {
-            face = face.with_weight(weight);
-        }
-        if let Some(stretch) = self.stretch {
-            face = face.with_stretch(stretch);
-        }
-        if let Some(style) = self.style {
-            face = face.with_style(style);
-        }
-        face.with_unicode_ranges(self.unicode_ranges)
+        WebFontFace::new(self.family)
+            .with_css_descriptors(&self.weight, &self.stretch, &self.style)
+            .with_unicode_ranges(self.unicode_ranges)
     }
 }
 
@@ -292,9 +284,9 @@ fn parsed_web_font_face(css_text: &str) -> Option<ParsedWebFontFace> {
     Some(ParsedWebFontFace {
         family: parsed.family,
         source: parsed.source,
-        weight: descriptor("font-weight").and_then(parse_font_weight_lower_bound),
-        stretch: descriptor("font-stretch").and_then(parse_font_stretch_lower_bound),
-        style: descriptor("font-style").and_then(parse_font_style_lower_bound),
+        weight: descriptor("font-weight").unwrap_or("normal").to_owned(),
+        stretch: descriptor("font-stretch").unwrap_or("normal").to_owned(),
+        style: descriptor("font-style").unwrap_or("normal").to_owned(),
         unicode_ranges: descriptor("unicode-range")
             .and_then(parse_font_unicode_ranges)
             .unwrap_or_default(),
@@ -312,61 +304,6 @@ pub(crate) fn parse_font_unicode_ranges(value: &str) -> Option<Vec<WebFontUnicod
         .ok()
 }
 
-pub(crate) fn parse_font_weight_lower_bound(value: &str) -> Option<f32> {
-    match value
-        .split_ascii_whitespace()
-        .next()?
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "normal" => Some(400.0),
-        "bold" => Some(700.0),
-        value => value
-            .parse::<f32>()
-            .ok()
-            .filter(|value| (1.0..=1000.0).contains(value)),
-    }
-}
-
-pub(crate) fn parse_font_stretch_lower_bound(value: &str) -> Option<f32> {
-    let value = value.split_ascii_whitespace().next()?.to_ascii_lowercase();
-    let percentage = match value.as_str() {
-        "ultra-condensed" => 50.0,
-        "extra-condensed" => 62.5,
-        "condensed" => 75.0,
-        "semi-condensed" => 87.5,
-        "normal" => 100.0,
-        "semi-expanded" => 112.5,
-        "expanded" => 125.0,
-        "extra-expanded" => 150.0,
-        "ultra-expanded" => 200.0,
-        value => value.strip_suffix('%')?.parse::<f32>().ok()?,
-    };
-    (percentage > 0.0 && percentage.is_finite()).then_some(percentage)
-}
-
-pub(crate) fn parse_font_style_lower_bound(value: &str) -> Option<WebFontStyle> {
-    let mut values = value.split_ascii_whitespace();
-    match values.next()?.to_ascii_lowercase().as_str() {
-        "normal" => Some(WebFontStyle::Normal),
-        "italic" => Some(WebFontStyle::Italic),
-        "oblique" => Some(WebFontStyle::Oblique(
-            values.next().and_then(parse_css_angle_degrees),
-        )),
-        _ => None,
-    }
-}
-
-fn parse_css_angle_degrees(value: &str) -> Option<f32> {
-    let value = value.to_ascii_lowercase();
-    let parse = |suffix: &str| value.strip_suffix(suffix)?.parse::<f32>().ok();
-    parse("deg")
-        .or_else(|| parse("grad").map(|value| value * 0.9))
-        .or_else(|| parse("rad").map(f32::to_degrees))
-        .or_else(|| parse("turn").map(|value| value * 360.0))
-        .filter(|value| value.is_finite())
-}
-
 pub(crate) use moli_css_parse::legacy_variations_font_format;
 
 fn resolve_font_source_url(raw_url: &str, base_url: &Url) -> Option<Url> {
@@ -381,6 +318,7 @@ fn resolve_font_source_url(raw_url: &str, base_url: &Url) -> Option<Url> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use moli_layout::WebFontStyle;
 
     fn base_url() -> Url {
         Url::parse("https://example.test/assets/app.css").expect("base URL should parse")

@@ -21,17 +21,11 @@ pub(crate) fn script_font_descriptor(
     style: &str,
     unicode_range: &str,
 ) -> WebFontFace {
-    use crate::css_resource_urls::{
-        parse_font_stretch_lower_bound, parse_font_style_lower_bound, parse_font_unicode_ranges,
-        parse_font_weight_lower_bound,
-    };
     WebFontFace::new(moli_css_parse::unquote_css_string(family))
-        .with_weight(parse_font_weight_lower_bound(weight).unwrap_or(400.0))
-        .with_stretch(parse_font_stretch_lower_bound(stretch).unwrap_or(100.0))
-        .with_style(
-            parse_font_style_lower_bound(style).unwrap_or(moli_layout::WebFontStyle::Normal),
+        .with_css_descriptors(weight, stretch, style)
+        .with_unicode_ranges(
+            crate::css_resource_urls::parse_font_unicode_ranges(unicode_range).unwrap_or_default(),
         )
-        .with_unicode_ranges(parse_font_unicode_ranges(unicode_range).unwrap_or_default())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

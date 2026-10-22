@@ -11,6 +11,7 @@ use std::{
     sync::Arc,
 };
 
+use moli_css_parse::{FontSelectionCapabilities as WebFontCapabilities, FontSelectionRange};
 use moli_system_fonts::SystemFontFamilyResolver;
 use parley::{
     FontContext, FontFamily, FontFamilyName, LayoutContext, TextStyle,
@@ -53,16 +54,23 @@ const MAX_FONT_FAMILY_RESOLUTION_PLANS: usize = 1024;
 const MAX_CHARACTER_RESOLUTIONS_PER_PLAN: usize = 4096;
 const MAX_INLINE_FONT_METRICS_CACHE_ENTRIES: usize = 1024;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct WebFontCapabilities {
-    width: FontWidth,
-    style: FontStyle,
-    weight: FontWeight,
+fn font_selection_capabilities(attributes: Attributes) -> WebFontCapabilities {
+    let slope = match attributes.style {
+        FontStyle::Normal => 0.0,
+        FontStyle::Italic => 14.0,
+        FontStyle::Oblique(angle) => angle.unwrap_or(14.0),
+    };
+    WebFontCapabilities::single(
+        attributes.weight.value(),
+        attributes.width.percentage(),
+        slope,
+    )
 }
 
 #[derive(Clone, Debug)]
 struct SegmentedWebFontFace {
     internal_family_name: String,
+    source_order: usize,
     unicode_ranges: Vec<WebFontUnicodeRange>,
 }
 
@@ -79,7 +87,6 @@ impl SegmentedWebFontFace {
 #[derive(Clone, Debug)]
 struct SegmentedWebFontCapabilityGroup {
     capabilities: WebFontCapabilities,
-    selector_font_identities: Vec<(u64, u32)>,
     faces: Vec<SegmentedWebFontFace>,
 }
 
@@ -269,39 +276,33 @@ impl ParleyDocumentServices {
                 continue;
             }
 
-            let selected_identity = {
-                let FontContext {
-                    collection,
-                    source_cache,
-                } = &mut self.font_context;
-                let mut query = collection.query(source_cache);
-                query.set_families([QueryFamily::Named(name)]);
-                query.set_attributes(attributes);
-                let mut identity = None;
-                query.matches_with(|font| {
-                    identity = Some((font.blob.id(), font.index));
-                    QueryStatus::Stop
-                });
-                identity
-            };
-            let Some(selected_identity) = selected_identity else {
-                resolved.push(family);
-                continue;
-            };
-            let Some(group) = self.web_font_families[&family_key]
-                .groups
+            let groups = &self.web_font_families[&family_key].groups;
+            let requested = font_selection_capabilities(attributes);
+            let Some(best) = groups
                 .iter()
-                .find(|group| group.selector_font_identities.contains(&selected_identity))
+                .min_by(|first, second| first.capabilities.compare(second.capabilities, requested))
             else {
                 resolved.push(family);
                 continue;
             };
+            // Overlapping ranges can tie even when their endpoints differ.
+            // Keep all best matches in this Document's FontFaceSet order.
+            let mut faces = groups
+                .iter()
+                .filter(|group| {
+                    group
+                        .capabilities
+                        .compare(best.capabilities, requested)
+                        .is_eq()
+                })
+                .flat_map(|group| &group.faces)
+                .collect::<Vec<_>>();
+            faces.sort_by_key(|face| face.source_order);
             let default_uses_latin_metrics =
-                character.is_none() && group.faces.iter().any(|face| face.contains('x'));
+                character.is_none() && faces.iter().any(|face| face.contains('x'));
             resolved.extend(
-                group
-                    .faces
-                    .iter()
+                faces
+                    .into_iter()
                     .rev()
                     .filter(|face| match character {
                         Some(character) => face.contains(character),
@@ -518,6 +519,7 @@ pub struct WebFontFace {
     weight: Option<f32>,
     stretch: Option<f32>,
     style: Option<WebFontStyle>,
+    capabilities: Option<WebFontCapabilities>,
     unicode_ranges: Vec<WebFontUnicodeRange>,
 }
 
@@ -528,22 +530,53 @@ impl WebFontFace {
             weight: None,
             stretch: None,
             style: None,
+            capabilities: None,
             unicode_ranges: Vec::new(),
         }
     }
 
     pub fn with_weight(mut self, weight: f32) -> Self {
         self.weight = Some(weight);
+        if let Some(capabilities) = &mut self.capabilities {
+            capabilities.weight = FontSelectionRange::new(weight, weight);
+        }
         self
     }
 
     pub fn with_stretch(mut self, percentage: f32) -> Self {
         self.stretch = Some(percentage);
+        if let Some(capabilities) = &mut self.capabilities {
+            capabilities.width = FontSelectionRange::new(percentage, percentage);
+        }
         self
     }
 
     pub fn with_style(mut self, style: WebFontStyle) -> Self {
         self.style = Some(style);
+        if let Some(capabilities) = &mut self.capabilities {
+            let slope = match style {
+                WebFontStyle::Normal => 0.0,
+                WebFontStyle::Italic => 14.0,
+                WebFontStyle::Oblique(angle) => angle.unwrap_or(14.0),
+            };
+            capabilities.slope = FontSelectionRange::new(slope, slope);
+        }
+        self
+    }
+
+    /// Retains full computed CSS capabilities for selection before shaping.
+    /// Fontique's scalar overrides describe the physical internal family;
+    /// they must not reduce a CSS range to one point for family selection.
+    pub fn with_css_descriptors(mut self, weight: &str, stretch: &str, style: &str) -> Self {
+        let capabilities = WebFontCapabilities::new(weight, stretch, style);
+        self.weight = Some(capabilities.weight.min);
+        self.stretch = Some(capabilities.width.min);
+        self.style = Some(match style.split_ascii_whitespace().next() {
+            Some("italic") => WebFontStyle::Italic,
+            Some("oblique") => WebFontStyle::Oblique(Some(capabilities.slope.min)),
+            _ => WebFontStyle::Normal,
+        });
+        self.capabilities = Some(capabilities);
         self
     }
 
@@ -1020,11 +1053,13 @@ fn build_parley_services(
             .or_default();
         for (_, fonts) in selector_fonts {
             for selector_font in fonts {
-                let capabilities = WebFontCapabilities {
-                    width: selector_font.width(),
-                    style: selector_font.style(),
-                    weight: selector_font.weight(),
-                };
+                let capabilities = font.face.capabilities.unwrap_or_else(|| {
+                    font_selection_capabilities(Attributes::new(
+                        selector_font.width(),
+                        selector_font.style(),
+                        selector_font.weight(),
+                    ))
+                });
                 let group_index = family
                     .groups
                     .iter()
@@ -1033,15 +1068,11 @@ fn build_parley_services(
                         let index = family.groups.len();
                         family.groups.push(SegmentedWebFontCapabilityGroup {
                             capabilities,
-                            selector_font_identities: Vec::new(),
                             faces: Vec::new(),
                         });
                         index
                     });
                 let group = &mut family.groups[group_index];
-                group
-                    .selector_font_identities
-                    .push((blob.id(), selector_font.index()));
                 if !group
                     .faces
                     .iter()
@@ -1049,6 +1080,7 @@ fn build_parley_services(
                 {
                     group.faces.push(SegmentedWebFontFace {
                         internal_family_name: internal_family_name.clone(),
+                        source_order,
                         unicode_ranges: font.face.unicode_ranges.clone(),
                     });
                 }

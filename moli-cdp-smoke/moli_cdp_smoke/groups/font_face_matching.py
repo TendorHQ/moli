@@ -19,6 +19,38 @@ FONT_MATCHING_PROBE = r"""async ({narrowData, wideData}) => {
     document.fonts.add(face);
     return face;
   };
+  const descriptorRanges = [];
+  for (const [property, range, single, request, changed] of [
+    ['weight','100 900','400','700','100'],
+    ['stretch','75% 125%','100%','expanded','75%'],
+    ['style','oblique 10deg 30deg','oblique 20deg','oblique 30deg','oblique 10deg'],
+    ['weight','calc(100 + 200) calc(800 + 100)','700','800','100'],
+    ['stretch','calc(50% + 25%) calc(100% + 25%)','100%','expanded','75%'],
+    ['style','oblique calc(5deg + 5deg) calc(15deg + 15deg)','oblique 20deg','oblique 30deg','oblique 10deg'],
+    ['weight','900 100','400','700','100'],
+    ['stretch','125% 75%','100%','expanded','75%'],
+    ['style','oblique 30deg 10deg','oblique 20deg','oblique 30deg','oblique 10deg'],
+  ]) {
+    const family = 'GeometryRange' + descriptorRanges.length;
+    const good = new FontFace(family, bytes(wideData), {[property]:range});
+    const other = new FontFace(family, bytes(narrowData), {[property]:single});
+    document.fonts.add(good); document.fonts.add(other);
+    const matches = await document.fonts.load(`${request} 40px ${family}`, 'AAAA');
+    const target = document.createElement('span');
+    target.textContent = 'AAAA'; target.style.cssText = `display:inline-block;font:${request} 40px ${family}`;
+    document.body.append(target);
+    const result = [matches.length, matches[0] === good, target.getBoundingClientRect().width];
+    good[property] = changed;
+    result.push(target.getBoundingClientRect().width);
+    // Use a fresh family to distinguish stale selection from descriptor parsing.
+    const freshFamily = family + 'Fresh';
+    const replacement = new FontFace(freshFamily, bytes(wideData), {[property]: good[property]});
+    const freshOther = new FontFace(freshFamily, bytes(narrowData), {[property]: single});
+    document.fonts.add(replacement); document.fonts.add(freshOther);
+    target.style.fontFamily = freshFamily;
+    result.push(target.getBoundingClientRect().width);
+    descriptorRanges.push(result);
+  }
   const range = bad('ReviewRange', {unicodeRange: 'U+0041'});
   const text = {
     checks: ['B', ''].map(text => document.fonts.check('16px ReviewRange', text)),
@@ -122,12 +154,13 @@ FONT_MATCHING_PROBE = r"""async ({narrowData, wideData}) => {
   const owners = [widths()];
   document.fonts.delete(narrow); document.fonts.add(narrow); owners.push(widths());
   child.fonts.delete(wide); child.fonts.add(wide); owners.push(widths());
-  return {text, properties, calculations, capabilityBeforeRange, descriptorWrites, scalars, familyOrder,
+  return {descriptorRanges, text, properties, calculations, capabilityBeforeRange, descriptorWrites, scalars, familyOrder,
     order, cssVsManual, lateCss, owners};
 }"""
 
 
 EXPECTED_FONT_MATCHING = {
+    "descriptorRanges": [[1, True, 160, 80, 80] for _ in range(9)],
     "text": {"checks": [True, True], "loads": [[], []], "status": "unloaded", "included": False},
     "properties": [
         [True, ["ReviewWeight"], "unloaded", False],
@@ -166,10 +199,13 @@ async def run_font_matching_contract(browser: Any, fixture: str, results: list[d
         await page.goto(f"{fixture}/plain", wait_until="load", timeout=10_000)
         observed = await page.evaluate(FONT_MATCHING_PROBE, font_matching_payload())
         expected = EXPECTED_FONT_MATCHING
-        # The pinned CI Chromium build reports true immediately after the
-        # weight setter. Moli and Chromium 147 keep the strict false result.
+        # Chromium 145.0.7632.6 retains stale selection metadata after a
+        # descriptor write, in both check() and layout. A fresh equivalent family
+        # must still select correctly. Moli and Chromium 147 use the updated
+        # descriptor immediately; keep those assertions strict.
         if not is_moli_browser() and browser.version == "145.0.7632.6":
-            expected = {**expected, "descriptorWrites": [True, True, True, False]}
+            expected = {**expected, "descriptorWrites": [True, True, True, False],
+                        "descriptorRanges": [[1, True, 160, 160, 80] for _ in range(9)]}
         assert_equal(observed, expected, "FontFaceSet matching and per-document selection order")
         record_contract(
             results,

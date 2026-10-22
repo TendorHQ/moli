@@ -1,6 +1,6 @@
 use super::*;
 
-fn order_font_data() -> (String, String) {
+pub(super) fn order_font_data() -> (String, String) {
     let encode = |bytes: &[u8]| base64::engine::general_purpose::STANDARD.encode(bytes);
     (
         encode(include_bytes!(concat!(
@@ -14,7 +14,7 @@ fn order_font_data() -> (String, String) {
     )
 }
 
-fn order_vm() -> StandaloneScriptVmHarness {
+pub(super) fn order_vm() -> StandaloneScriptVmHarness {
     let mut vm = new_parsed_test_vm(
         "https://font-selection-order.test/",
         "<!doctype html><html><head></head><body><span id='probe' style='display:inline-block;font:40px OrderFace'>AAAA</span><iframe id='frame'></iframe></body></html>",
