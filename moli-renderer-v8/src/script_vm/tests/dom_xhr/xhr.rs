@@ -4071,3 +4071,78 @@ fn xml_http_request_queued_document_response_uses_parsed_overrides_and_xml_error
     }
     assert_eq!(result, serde_json::to_string(&expected).unwrap());
 }
+
+#[test]
+fn xhr_open_inactive_document_errors_use_the_invoked_method_realm() {
+    for callee_is_child in [false, true] {
+        for retire_during_conversion in [false, true] {
+            let mut vm = new_parsed_test_vm(
+                "https://xhr-open-exception-realm.test/",
+                "<!doctype html><body><iframe id='xhr-owner'></iframe></body>",
+            );
+            materialize_single_child_default_realm_for_test(&mut vm, "XHR exception realm");
+            let result = vm
+                .eval(&format!(
+                    r#"
+(() => {{
+  const frame = document.getElementById('xhr-owner');
+  const owner = frame.contentWindow;
+  const xhr = new owner.XMLHttpRequest();
+  const callee = {callee_is_child} ? owner : window;
+  const open = callee.XMLHttpRequest.prototype.open;
+  const expectedPrototype = callee.DOMException.prototype;
+  let conversions = 0;
+  const url = {{toString() {{
+    conversions++;
+    if ({retire_during_conversion}) frame.remove();
+    return '/resource';
+  }}}};
+  if (!{retire_during_conversion}) frame.remove();
+  let caught;
+  try {{ open.call(xhr, 'GET', url); }} catch (error) {{ caught = error; }}
+  return JSON.stringify([
+    caught && caught.name, caught && caught.code,
+    !!caught && Object.getPrototypeOf(caught) === expectedPrototype,
+    conversions, xhr.readyState
+  ]);
+}})()
+"#
+                ))
+                .expect("retired XHR owner probe should run");
+            assert_eq!(
+                result, r#"["InvalidStateError",11,true,1,0]"#,
+                "callee_is_child={callee_is_child}, retire_during_conversion={retire_during_conversion}",
+            );
+        }
+    }
+}
+
+#[test]
+fn xhr_open_live_document_errors_use_the_invoked_method_realm() {
+    let mut vm = new_parsed_test_vm(
+        "https://xhr-open-live-exception-realm.test/",
+        "<!doctype html><body><iframe id='xhr-owner'></iframe></body>",
+    );
+    materialize_single_child_default_realm_for_test(&mut vm, "live XHR exception realm");
+    let result = vm.eval(r#"
+(() => {
+  const child = document.getElementById('xhr-owner').contentWindow;
+  for (const callee of [window, child]) {
+    for (const owner of [window, child]) {
+      const xhr = new owner.XMLHttpRequest();
+      xhr.timeout = 1;
+      let caught;
+      try {
+        callee.XMLHttpRequest.prototype.open.call(xhr, 'GET', 'https://example.test/resource', false);
+      } catch (error) { caught = error; }
+      if (!caught || caught.name !== 'InvalidAccessError' || caught.code !== 15 ||
+          Object.getPrototypeOf(caught) !== callee.DOMException.prototype || xhr.readyState !== 0) {
+        throw new Error('synchronous open errors must retain the method realm and unopened state');
+      }
+    }
+  }
+  return 'ok';
+})()
+"#).expect("live XHR exception realm probe should run");
+    assert_eq!(result, "ok");
+}

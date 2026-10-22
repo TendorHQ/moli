@@ -139,7 +139,7 @@ fn xhr_open_url_context(
         })
     } else {
         let Some(host_ptr) = context_host_ptr_from_global_bridge(scope) else {
-            xhr_open_throw_invalid_state(
+            xhr_throw_invalid_state(
                 scope,
                 "Failed to execute 'open' on 'XMLHttpRequest': The object's document is not fully active.",
             );
@@ -147,7 +147,7 @@ fn xhr_open_url_context(
         };
         let host = unsafe { &*host_ptr };
         let Some(execution_context) = xhr_execution_context_binding(scope, host, xhr) else {
-            xhr_open_throw_invalid_state(
+            xhr_throw_invalid_state(
                 scope,
                 "Failed to execute 'open' on 'XMLHttpRequest': The object's document is not fully active.",
             );
@@ -176,7 +176,7 @@ fn xhr_open_url_context(
         })
     };
     if context.is_none() {
-        xhr_open_throw_invalid_state(
+        xhr_throw_invalid_state(
             scope,
             "Failed to execute 'open' on 'XMLHttpRequest': The object's execution context is unavailable.",
         );
@@ -212,13 +212,6 @@ fn xhr_open_request_url(
         }
     }
     Some(request_url)
-}
-
-fn xhr_open_throw_invalid_state(scope: &mut v8::PinScope<'_, '_>, message: &'static str) {
-    let current_context = scope.get_current_context();
-    let incumbent_context = scope.get_incumbent_context().unwrap_or(current_context);
-    let incumbent_scope = &mut v8::ContextScope::new(scope, incumbent_context);
-    xhr_throw_invalid_state(incumbent_scope, message);
 }
 
 #[cfg(test)]
