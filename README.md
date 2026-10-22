@@ -318,17 +318,17 @@ Five web-fetch methods are compared on the same 430 tasks across seven families.
 
 | Method | Tasks passed | Pass rate |
 | --- | ---: | ---: |
-| Moli 1.1.17 (repair result) | **385/430** | **89.53%** |
-| Chromium 155.0.8059.39 | 234/430 | 54.42% |
-| Lightpanda 1.0.0 | 229/430 | 53.26% |
-| Obscura 0.2.4 | 223/430 | 51.86% |
-| Kitesurf (hosted) | 192/430 | 44.65% |
+| Moli development build (WebFetch fixes) | **384/430** | **89.30%** |
+| Chromium 155.0.8059.39 | 233/430 | 54.19% |
+| Lightpanda 1.0.0 | 227/430 | 52.79% |
+| Obscura 0.2.4 | 222/430 | 51.63% |
+| Kitesurf (hosted) | 194/430 | 45.12% |
 
-Measured on October 15, 2026. The pinned report records the exact Moli builds and every task result.
+Calls were made from October 9 to 15, 2026. The Moli row is an unreleased development cohort: 374 retained tasks used commit `a737f2ae`, and 56 declared correction tasks used `0d9a7ceb`. It is not the Moli 1.1.17 release binary.
 
-Task definitions are maintained in [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch); execution and reporting are maintained in [`browser-eval`](https://github.com/lexmount/browser-eval).
+Tasks are drawn from the [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch) suites. [`browser-eval`](https://github.com/lexmount/browser-eval) assembles and corrects the 430-task cohort, runs it, and builds the report.
 
-[Full report, task contracts and failure evidence](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo).
+[Full report, task contracts and failure evidence (Chinese)](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_494ef0fafb1a4529ab3c28762b7c3ca6).
 
 </details>
 

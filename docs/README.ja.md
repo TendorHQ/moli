@@ -242,17 +242,17 @@ Moli は、Chromium を外から操作するだけの仕組みではなく、独
 
 | 方式 | 合格タスク数 | 合格率 |
 | --- | ---: | ---: |
-| Moli 1.1.17（修正版） | **385/430** | **89.53%** |
-| Chromium 155.0.8059.39 | 234/430 | 54.42% |
-| Lightpanda 1.0.0 | 229/430 | 53.26% |
-| Obscura 0.2.4 | 223/430 | 51.86% |
-| Kitesurf (ホスト型) | 192/430 | 44.65% |
+| Moli 開発ビルド（WebFetch 修正を含む） | **384/430** | **89.30%** |
+| Chromium 155.0.8059.39 | 233/430 | 54.19% |
+| Lightpanda 1.0.0 | 227/430 | 52.79% |
+| Obscura 0.2.4 | 222/430 | 51.63% |
+| Kitesurf（ホスト型） | 194/430 | 45.12% |
 
-測定日は 2026 年 10 月 15 日です。固定版レポートには、Moli の正確なビルド情報と全タスクの結果が記録されています。
+各方式の呼び出しは 2026 年 10 月 9 日から 15 日に実施しました。Moli の行は未公開の開発ビルドです。保持した 374 タスクはコミット `a737f2ae`、申告済みの修正対象 56 タスクは `0d9a7ceb` を使っています。Moli 1.1.17 のリリースバイナリではありません。
 
-タスク定義は [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch)、実行とレポートは [`browser-eval`](https://github.com/lexmount/browser-eval) で管理されています。
+タスクは [`lexbench-webfetch`](https://github.com/lexmount/lexbench-webfetch) の各スイートから採用しています。[`browser-eval`](https://github.com/lexmount/browser-eval) が 430 タスクを編成、修正、実行し、レポートを生成します。
 
-[完全なレポート、タスク要件と失敗の証拠](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo).
+[完全なレポート、タスク要件と失敗の証拠（中国語）](https://artifact-site.lexmount.cn/v/IqGpMUYHWat-dw4n8usQttTptoPzboAo?version=ver_494ef0fafb1a4529ab3c28762b7c3ca6)
 
 </details>
 
