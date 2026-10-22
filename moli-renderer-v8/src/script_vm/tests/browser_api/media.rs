@@ -2158,19 +2158,23 @@ fn media_source_support_claim_requires_an_operational_mse_surface() {
     'video/mp4; codecs="mp4a.40.2, avc1.640028"'
   ];
   globalThis.__mediaSourceCapabilityResult = 'pending';
-  Promise.all(types.map(async contentType => {
-    const mediaSource = MediaSource.isTypeSupported(contentType);
-    const decoding = await navigator.mediaCapabilities.decodingInfo({
+  const probes = types.map(contentType => ({
+    mediaSource: MediaSource.isTypeSupported(contentType),
+    decoding: navigator.mediaCapabilities.decodingInfo({
       type: 'media-source',
       video: { contentType, width: 1920, height: 1080, bitrate: 5000000, framerate: 30 }
-    });
-    const file = await navigator.mediaCapabilities.decodingInfo({
+    }),
+    file: navigator.mediaCapabilities.decodingInfo({
       type: 'file',
       video: { contentType, width: 1920, height: 1080, bitrate: 5000000, framerate: 30 }
-    });
-    return [mediaSource, decoding.supported, file.supported];
-  })).then(results => {
-    globalThis.__mediaSourceCapabilityResult = JSON.stringify(results);
+    })
+  }));
+  Promise.all(probes.flatMap(probe => [probe.decoding, probe.file])).then(capabilities => {
+    globalThis.__mediaSourceCapabilityResult = JSON.stringify(probes.map((probe, index) => [
+      probe.mediaSource,
+      capabilities[index * 2].supported,
+      capabilities[index * 2 + 1].supported
+    ]));
   });
 })()
 "#,
