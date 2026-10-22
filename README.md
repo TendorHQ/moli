@@ -305,14 +305,14 @@ retained display list, GPU compositor, or persistent window.
 
 ## Benchmarks
 
+### Public test suites
+
 | Evaluation | Test suite | Measures |
 | --- | --- | --- |
-| Web content extraction | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 HTML snapshots and main-content references | Text, code, formula and table fidelity |
+| Standards and regressions | Selected [WPT](https://github.com/web-platform-tests/wpt) tests; [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) regression tests | Tests passed and functional regressions |
 | Browser automation | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · 1,308 browser-operation and Web tests | Operation and feature test pass rate |
 | CPU and memory use | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · work completed by all four local browsers in 557 CDP/Web tasks | CPU time and peak memory |
-| Standards and regressions | Selected [WPT](https://github.com/web-platform-tests/wpt) tests; [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) regression tests | Tests passed and functional regressions |
-
-The benchmarks below measure content extraction, browser automation and resource use.
+| Frozen-page extraction | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 HTML snapshots and main-content references | Text, code, formula and table fidelity |
 
 ### Mixed public-web crawl test
 

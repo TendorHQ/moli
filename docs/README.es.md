@@ -233,14 +233,14 @@ El documento y los estilos tienen una única fuente de verdad: la integración d
 
 ## Datos de las pruebas
 
+### Conjuntos de pruebas públicos
+
 | Evaluación | Pruebas | Métricas |
 | --- | --- | --- |
-| Extracción de contenido web | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 páginas HTML guardadas y referencias del contenido principal | Fidelidad del texto, código, fórmulas y tablas |
+| Estándares y regresiones | Pruebas [WPT](https://github.com/web-platform-tests/wpt) seleccionadas; pruebas de regresión de [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) | Pruebas superadas y regresiones |
 | Automatización del navegador | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · 1.308 pruebas de acciones y funciones web | Tasa de éxito de las pruebas de acciones y funciones |
 | CPU y memoria | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · trabajo completado por todos en 557 tareas CDP/web | Tiempo de CPU y memoria máxima |
-| Estándares y regresiones | Pruebas [WPT](https://github.com/web-platform-tests/wpt) seleccionadas; pruebas de regresión de [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) | Pruebas superadas y regresiones |
-
-Los siguientes benchmarks comparan la extracción de contenido, la automatización del navegador y el uso de recursos.
+| Extracción de páginas guardadas | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 páginas HTML guardadas y referencias del contenido principal | Fidelidad del texto, código, fórmulas y tablas |
 
 ### Prueba de rastreo mixto de la web pública
 

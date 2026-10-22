@@ -232,14 +232,14 @@ Dokument und Stil haben genau eine verbindliche Datenquelle: die Integration aus
 
 ## Benchmarks
 
+### Öffentliche Testsammlungen
+
 | Test | Testsammlung | Messgrößen |
 | --- | --- | --- |
-| Extraktion von Webinhalten | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 HTML-Snapshots und Referenztexte | Erhalt von Text, Code, Formeln und Tabellen |
+| Standards und Regressionen | Ausgewählte [WPT](https://github.com/web-platform-tests/wpt)-Tests; [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml)-Regressionstests | Bestandene Tests und Regressionen |
 | Browserautomatisierung | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · 1.308 Browseraktions- und Webtests | Anteil bestandener Aktions- und Funktionstests |
 | CPU- und Speicherverbrauch | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · gemeinsam abgeschlossene Aufgaben aus 557 CDP-/Webaufgaben | CPU-Zeit und maximaler Speicherbedarf |
-| Standards und Regressionen | Ausgewählte [WPT](https://github.com/web-platform-tests/wpt)-Tests; [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml)-Regressionstests | Bestandene Tests und Regressionen |
-
-Die folgenden Benchmarks vergleichen Inhaltsextraktion, Browserautomatisierung und Ressourcenverbrauch.
+| Inhaltsextraktion aus gespeicherten Seiten | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 HTML-Snapshots und Referenztexte | Erhalt von Text, Code, Formeln und Tabellen |
 
 ### Gemischter Crawling-Test im öffentlichen Web
 

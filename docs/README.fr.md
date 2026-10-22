@@ -233,14 +233,14 @@ Le document et les styles n'ont qu'une seule source de vérité : le DOM natif, 
 
 ## Données de test
 
+### Jeux de tests publics
+
 | Évaluation | Jeu de tests | Mesures |
 | --- | --- | --- |
-| Extraction de contenu Web | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 instantanés HTML et références du contenu principal | Fidélité du texte, du code, des formules et des tableaux |
+| Standards et régressions | Sélection de tests [WPT](https://github.com/web-platform-tests/wpt) ; tests de régression [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) | Tests réussis et régressions |
 | Automatisation du navigateur | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser) · 1 308 tests d’actions et de fonctions Web | Taux de réussite des tests d’actions et de fonctions |
 | CPU et mémoire | [Lexbench](https://github.com/lexmount/Lexbench-Headless-Browser/blob/main/docs/reports/resource-card-20260812.md) · travail terminé par tous sur 557 tâches CDP/Web | Temps CPU et mémoire maximale |
-| Standards et régressions | Sélection de tests [WPT](https://github.com/web-platform-tests/wpt) ; tests de régression [Moli](https://github.com/lexmount/moli/blob/main/.github/workflows/ci.yml) | Tests réussis et régressions |
-
-Les benchmarks ci-dessous comparent l’extraction de contenu, l’automatisation du navigateur et la consommation de ressources.
+| Extraction de pages figées | [WebMainBench](https://github.com/lexmount/WebMainBench/tree/lex-main) · 545 instantanés HTML et références du contenu principal | Fidélité du texte, du code, des formules et des tableaux |
 
 ### Test d'exploration mixte du Web public
 
