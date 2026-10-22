@@ -132,12 +132,6 @@ struct NavigateEventMethodsDeclaration {
 
 #[derive(WebApiObject)]
 #[webapi(plain, data_properties, enumerable)]
-struct ClipboardEventInitDeclaration<'scope> {
-    clipboard_data: v8::Local<'scope, v8::Value>,
-}
-
-#[derive(WebApiObject)]
-#[webapi(plain, data_properties, enumerable)]
 struct CapturedMouseEventInitDeclaration {
     surface_x: i32,
     surface_y: i32,
@@ -149,43 +143,6 @@ struct InputEventInitDeclaration<'scope> {
     data: v8::Local<'scope, v8::Value>,
     input_type: v8::Local<'scope, v8::String>,
     is_composing: bool,
-}
-
-#[derive(WebApiObject)]
-#[webapi(plain, data_properties, enumerable)]
-struct CommandEventInitDeclaration<'scope> {
-    source: v8::Local<'scope, v8::Value>,
-    command: String,
-}
-
-#[derive(WebApiObject)]
-#[webapi(plain, data_properties, enumerable)]
-struct InterestEventInitDeclaration<'scope> {
-    source: v8::Local<'scope, v8::Value>,
-}
-
-#[derive(WebApiObject)]
-#[webapi(plain, data_properties, enumerable)]
-struct PopStateEventInitDeclaration<'scope> {
-    state: v8::Local<'scope, v8::Value>,
-    #[webapi(data_property = "hasUAVisualTransition")]
-    has_ua_visual_transition: bool,
-}
-
-/// Members are declared in Web IDL lexicographic order.
-#[derive(Default, webidl::WebIdlDictionary)]
-#[webidl(prefix = "HashChangeEventInit", snapshot)]
-struct HashChangeEventInitMembers {
-    #[webidl(name = "newURL", default = "", converter = "usv_string")]
-    new_url: String,
-    #[webidl(name = "oldURL", default = "", converter = "usv_string")]
-    old_url: String,
-}
-
-#[derive(WebApiObject)]
-#[webapi(plain, data_properties, enumerable)]
-struct PageTransitionEventOwnInitDeclaration {
-    persisted: bool,
 }
 
 #[derive(webidl::WebIdlDictionary)]
@@ -219,20 +176,6 @@ struct NavigateEventInitDeclaration<'scope> {
     #[webapi(data_property = "hasUAVisualTransition")]
     has_ua_visual_transition: bool,
     source_element: v8::Local<'scope, v8::Value>,
-}
-
-#[derive(webidl::WebIdlDictionary)]
-#[webidl(prefix = "ToggleEventInit", snapshot)]
-struct ToggleEventInitMembers<'s> {
-    #[webidl(default = "")]
-    #[webidl(snapshot_attributes = v8::PropertyAttribute::READ_ONLY | v8::PropertyAttribute::DONT_DELETE | v8::PropertyAttribute::DONT_ENUM)]
-    old_state: String,
-    #[webidl(default = "")]
-    #[webidl(snapshot_attributes = v8::PropertyAttribute::READ_ONLY | v8::PropertyAttribute::DONT_DELETE | v8::PropertyAttribute::DONT_ENUM)]
-    new_state: String,
-    #[webidl(converter = "raw", snapshot_default = v8::null(scope).into())]
-    #[webidl(snapshot_attributes = v8::PropertyAttribute::READ_ONLY | v8::PropertyAttribute::DONT_DELETE | v8::PropertyAttribute::DONT_ENUM)]
-    source: Option<v8::Local<'s, v8::Value>>,
 }
 
 #[derive(Default, webidl::WebIdlDictionary)]
@@ -284,18 +227,6 @@ pub(super) fn parse_storage_event_init<'s>(
     args: &v8::FunctionCallbackArguments<'s>,
 ) -> Option<StorageEventInitMembers<'s>> {
     crate::context_bootstrap::events::parse_event_dictionary(scope, args, "StorageEvent")
-}
-
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_clipboard_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) {
-    let clipboard_data =
-        init_value_property(scope, init, "clipboardData").unwrap_or_else(|| v8::null(scope).into());
-    ClipboardEventInitDeclaration::new(clipboard_data)
-        .initialize(scope, event)
-        .expect("ClipboardEvent init declaration should initialize");
 }
 
 fn captured_mouse_coordinate<'s>(
@@ -380,76 +311,6 @@ pub(in crate::context_bootstrap::events::subclasses) fn initialize_input_event<'
     InputEventInitDeclaration::new(data, input_type_value, is_composing)
         .initialize(scope, event)
         .expect("InputEvent init declaration should initialize");
-}
-
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_pop_state_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) {
-    let state = init_value_property(scope, init, "state").unwrap_or_else(|| v8::null(scope).into());
-    PopStateEventInitDeclaration::new(state, false)
-        .initialize(scope, event)
-        .expect("PopStateEvent init declaration should initialize");
-}
-
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_hash_change_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) -> bool {
-    let parsed = match init {
-        Some(init) => {
-            match webidl::parse_dictionary_object::<HashChangeEventInitMembers>(scope, init) {
-                Ok(parsed) => parsed,
-                Err(error) => {
-                    webidl::throw_error(scope, &error);
-                    return false;
-                }
-            }
-        }
-        None => HashChangeEventInitMembers::default(),
-    };
-    parsed
-        .initialize_snapshot(scope, event)
-        .expect("HashChangeEvent init declaration should initialize");
-    true
-}
-
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_page_transition_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) {
-    let persisted = init_bool_property(scope, init, "persisted", false);
-    PageTransitionEventOwnInitDeclaration::new(persisted)
-        .initialize(scope, event)
-        .expect("PageTransitionEvent init declaration should initialize");
-}
-
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_toggle_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) -> bool {
-    let parsed = match init {
-        Some(init) => {
-            match webidl::parse_dictionary_object::<ToggleEventInitMembers>(scope, init) {
-                Ok(parsed) => parsed,
-                Err(error) => {
-                    webidl::throw_error(scope, &error);
-                    return false;
-                }
-            }
-        }
-        None => ToggleEventInitMembers {
-            old_state: String::new(),
-            new_state: String::new(),
-            source: None,
-        },
-    };
-    let _ = parsed.initialize_snapshot(scope, event);
-    true
 }
 
 pub(in crate::context_bootstrap::events::subclasses) fn initialize_promise_rejection_event<'s>(
@@ -1140,35 +1001,6 @@ fn navigate_event_scroll_callback<'s>(
     }
 }
 
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_close_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) {
-    let was_clean = init_bool_property(scope, init, "wasClean", false);
-    let code = init_number_property(scope, init, "code", 0.0);
-    let reason = init_string_property(scope, init, "reason", "");
-    let reason_value = v8_string(scope, &reason).unwrap().into();
-    crate::context_bootstrap::set_event_private_value(
-        scope,
-        event,
-        CLOSE_EVENT_WAS_CLEAN_SLOT,
-        v8::Boolean::new(scope, was_clean).into(),
-    );
-    crate::context_bootstrap::set_event_private_value(
-        scope,
-        event,
-        CLOSE_EVENT_CODE_SLOT,
-        v8::Number::new(scope, code).into(),
-    );
-    crate::context_bootstrap::set_event_private_value(
-        scope,
-        event,
-        CLOSE_EVENT_REASON_SLOT,
-        reason_value,
-    );
-}
-
 pub(in crate::context_bootstrap::events::subclasses) fn initialize_submit_event<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     event: v8::Local<'s, v8::Object>,
@@ -1235,17 +1067,6 @@ pub(in crate::context_bootstrap::events::subclasses) fn initialize_form_data_eve
     true
 }
 
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_command_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) {
-    let source =
-        init_value_property(scope, init, "source").unwrap_or_else(|| v8::null(scope).into());
-    let command = init_string_property(scope, init, "command", "");
-    let _ = CommandEventInitDeclaration::new(source, command).initialize(scope, event);
-}
-
 pub(in crate::context_bootstrap::events::subclasses) fn initialize_track_event<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     event: v8::Local<'s, v8::Object>,
@@ -1253,16 +1074,6 @@ pub(in crate::context_bootstrap::events::subclasses) fn initialize_track_event<'
 ) {
     let track = init_value_property(scope, init, "track").unwrap_or_else(|| v8::null(scope).into());
     crate::context_bootstrap::set_event_private_value(scope, event, TRACK_EVENT_TRACK_SLOT, track);
-}
-
-pub(in crate::context_bootstrap::events::subclasses) fn initialize_interest_event<'s>(
-    scope: &mut v8::PinScope<'s, '_>,
-    event: v8::Local<'s, v8::Object>,
-    init: Option<v8::Local<'s, v8::Object>>,
-) {
-    let source =
-        init_value_property(scope, init, "source").unwrap_or_else(|| v8::null(scope).into());
-    let _ = InterestEventInitDeclaration::new(source).initialize(scope, event);
 }
 
 fn submit_event_submitter<'s>(

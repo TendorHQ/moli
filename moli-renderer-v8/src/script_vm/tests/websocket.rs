@@ -1131,7 +1131,7 @@ fn websocket_wpt_target_global_constructor_and_prototype_descriptors() {
 }
 
 #[test]
-fn websocket_wpt_target_close_event_reason_usvstring_conversion() {
+fn websocket_wpt_target_close_event_reason_domstring_conversion() {
     let mut vm = new_storage_test_vm("https://websocket-wpt-target.test/");
 
     let result = vm
@@ -1146,9 +1146,9 @@ fn websocket_wpt_target_close_event_reason_usvstring_conversion() {
             })()
             "#,
         )
-        .expect("target CloseEvent USVString conversion test should evaluate");
+        .expect("target CloseEvent DOMString conversion test should evaluate");
 
-    assert_eq!(result, "1|fffd");
+    assert_eq!(result, "1|d800");
 }
 
 #[test]

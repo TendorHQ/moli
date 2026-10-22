@@ -71,6 +71,24 @@ fn event_subclass_constructor_callback<'s>(
     } else {
         None
     };
+    let value_event_init = if matches!(
+        kind,
+        EventSubclassKind::ClipboardEvent
+            | EventSubclassKind::CloseEvent
+            | EventSubclassKind::CommandEvent
+            | EventSubclassKind::ToggleEvent
+            | EventSubclassKind::InterestEvent
+            | EventSubclassKind::PopStateEvent
+            | EventSubclassKind::HashChangeEvent
+            | EventSubclassKind::PageTransitionEvent
+    ) {
+        let Some(init) = values::ValueEventInit::parse(scope, &args, kind) else {
+            return;
+        };
+        Some(init)
+    } else {
+        None
+    };
     let font_face_init = if kind == EventSubclassKind::FontFaceSetLoadEvent {
         let Some(init) = super::super::parse_event_dictionary::<
             crate::context_bootstrap::css_fontface_runtime::FontFaceSetLoadEventInit,
@@ -152,6 +170,7 @@ fn event_subclass_constructor_callback<'s>(
                 .map(pointer::PointerEventInitPayload::event_flags)
         })
         .or_else(|| font_face_init.as_ref().map(crate::context_bootstrap::css_fontface_runtime::FontFaceSetLoadEventInit::event_flags))
+        .or_else(|| value_event_init.as_ref().map(values::ValueEventInit::event_flags))
         .or_else(|| read_event_init(scope, &args))
     else {
         return;
@@ -185,9 +204,16 @@ fn event_subclass_constructor_callback<'s>(
                 .expect("pointing event init is parsed")
                 .initialize(scope, event);
         }
-        EventSubclassKind::ClipboardEvent => {
-            data::initialize_clipboard_event(scope, event, init);
-        }
+        EventSubclassKind::ClipboardEvent
+        | EventSubclassKind::CloseEvent
+        | EventSubclassKind::CommandEvent
+        | EventSubclassKind::ToggleEvent
+        | EventSubclassKind::InterestEvent
+        | EventSubclassKind::PopStateEvent
+        | EventSubclassKind::HashChangeEvent
+        | EventSubclassKind::PageTransitionEvent => value_event_init
+            .expect("value event init is parsed")
+            .initialize(scope, event),
         EventSubclassKind::CapturedMouseEvent => {
             if !data::initialize_captured_mouse_event(scope, event, init) {
                 return;
@@ -239,7 +265,6 @@ fn event_subclass_constructor_callback<'s>(
                 return;
             }
         }
-        EventSubclassKind::CloseEvent => data::initialize_close_event(scope, event, init),
         EventSubclassKind::SubmitEvent => {
             if !data::initialize_submit_event(scope, event, init) {
                 return;
@@ -249,22 +274,6 @@ fn event_subclass_constructor_callback<'s>(
             if !data::initialize_form_data_event(scope, event, init) {
                 return;
             }
-        }
-        EventSubclassKind::CommandEvent => data::initialize_command_event(scope, event, init),
-        EventSubclassKind::ToggleEvent => {
-            if !data::initialize_toggle_event(scope, event, init) {
-                return;
-            }
-        }
-        EventSubclassKind::InterestEvent => data::initialize_interest_event(scope, event, init),
-        EventSubclassKind::PopStateEvent => data::initialize_pop_state_event(scope, event, init),
-        EventSubclassKind::HashChangeEvent => {
-            if !data::initialize_hash_change_event(scope, event, init) {
-                return;
-            }
-        }
-        EventSubclassKind::PageTransitionEvent => {
-            data::initialize_page_transition_event(scope, event, init);
         }
         EventSubclassKind::TrackEvent => data::initialize_track_event(scope, event, init),
         EventSubclassKind::FontFaceSetLoadEvent => {
