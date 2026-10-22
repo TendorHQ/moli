@@ -211,19 +211,24 @@ fn detached_bridge_value_for_this<'s>(
     receiver: v8::Local<'s, v8::Object>,
     method: &str,
 ) -> Option<v8::Local<'s, v8::Value>> {
+    let receiver = detached_node_backing_object(scope, receiver)?;
+    call_global_bridge_method(scope, method, &[receiver.into()])
+}
+
+fn detached_node_backing_object<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    receiver: v8::Local<'s, v8::Object>,
+) -> Option<v8::Local<'s, v8::Object>> {
     let receiver = node_backing_object(scope, receiver)?;
     get_private_value(scope, receiver, super::document::DETACHED_STATE_SLOT)?;
-    call_global_bridge_method(scope, method, &[receiver.into()])
+    Some(receiver)
 }
 
 pub(super) fn receiver_has_detached_state<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     receiver: v8::Local<'s, v8::Object>,
 ) -> bool {
-    let Some(receiver) = node_backing_object(scope, receiver) else {
-        return false;
-    };
-    get_private_value(scope, receiver, super::document::DETACHED_STATE_SLOT).is_some()
+    detached_node_backing_object(scope, receiver).is_some()
 }
 
 pub(super) fn throw_incompatible_getter_receiver(
@@ -537,11 +542,10 @@ fn node_node_value_setter_function<'s>(
 ) {
     let raw_value = args.get(0);
     let Ok((runtime_ptr, handle)) = node_runtime_and_handle_from_args(scope, &args) else {
-        if !receiver_has_detached_state(scope, args.this()) {
+        let Some(node) = detached_node_backing_object(scope, args.this()) else {
             throw_incompatible_setter_receiver(scope, "Node", "nodeValue");
             return;
-        }
-        let node = args.this();
+        };
         let _ =
             call_global_bridge_method(scope, "__setDetachedNodeValue", &[node.into(), raw_value]);
         return;
@@ -864,11 +868,11 @@ fn node_text_content_setter_function<'s>(
 ) {
     let raw_value = args.get(0);
     let Ok((runtime_ptr, handle)) = node_runtime_and_handle_from_args(scope, &args) else {
-        if !receiver_has_detached_state(scope, args.this()) {
+        let Some(node) = detached_node_backing_object(scope, args.this()) else {
             throw_incompatible_setter_receiver(scope, "Node", "textContent");
             return;
-        }
-        super::document::set_detached_node_text_content(scope, args.this(), raw_value);
+        };
+        super::document::set_detached_node_text_content(scope, node, raw_value);
         return;
     };
     let runtime = unsafe { &*runtime_ptr };
