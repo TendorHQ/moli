@@ -1,7 +1,11 @@
 use crate::{Dom, NodeKind};
 use std::borrow::Cow;
 
-pub(crate) fn fallback_text<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Option<String> {
+pub(crate) fn fallback_text<D: Dom + ?Sized>(
+    dom: &D,
+    node: D::NodeId,
+    remaining_depth: usize,
+) -> Option<String> {
     if excluded_from_naming(dom, node) {
         return None;
     }
@@ -10,7 +14,6 @@ pub(crate) fn fallback_text<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Option
         NodeKind::Element(
             "a" | "button"
                 | "svg"
-                | "textarea"
                 | "select"
                 | "option"
                 | "optgroup"
@@ -36,7 +39,8 @@ pub(crate) fn fallback_text<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Option
             return Some(value.to_owned());
         }
     }
-    if matches!(dom.node_kind(node), NodeKind::Element("svg")) {
+    // Title text is two levels below SVG and obeys the same depth limit as body text.
+    if matches!(dom.node_kind(node), NodeKind::Element("svg")) && remaining_depth > 2 {
         let mut child = dom.first_child(node);
         while let Some(id) = child {
             if dom.node_kind(id) == NodeKind::Element("title") {

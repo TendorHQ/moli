@@ -229,7 +229,10 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
             "select" | "optgroup" | "option" => {
                 self.writer().boundary(1);
                 if matches!(tag, "optgroup" | "option")
-                    && let Some(label) = self.dom.attribute(node, "label")
+                    && let Some(label) = self
+                        .dom
+                        .attribute(node, "label")
+                        .filter(|label| !label.is_empty())
                 {
                     self.writer().text(label);
                     self.writer().boundary(1);
@@ -281,8 +284,10 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
             "textarea" => {
                 if let Some(value) = crate::form::textarea_text(self.dom, node) {
                     self.writer().text(&value);
-                    return;
+                } else {
+                    self.children(node, depth + 1);
                 }
+                return;
             }
             "iframe" | "video" | "audio" => {
                 if self.media(node, tag, depth) {
@@ -343,7 +348,9 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
             }
             _ => {}
         }
-        if let Some(label) = crate::content::fallback_text(self.dom, node) {
+        if let Some(label) =
+            crate::content::fallback_text(self.dom, node, self.options.max_depth - depth)
+        {
             let before = self.writer().content_mark();
             self.tasks.push(Task::Fallback(label, before));
         }

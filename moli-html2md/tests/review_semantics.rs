@@ -1,6 +1,6 @@
 mod support;
 
-use moli_html2md::convert;
+use moli_html2md::{Converter, Dom, Options, convert};
 use std::cell::Cell;
 use support::{Tree, rendered_html};
 
@@ -94,6 +94,36 @@ fn textarea_uses_its_content_not_a_nonstandard_value_attribute() {
         assert!(result.contains("Authored text"), "{result}");
         assert!(!result.contains("unrelated"), "{result}");
     }
+}
+
+#[test]
+fn empty_option_labels_keep_their_text_and_choice_boundaries() {
+    assert_eq!(
+        markdown(
+            "<select><option label=''>First choice</option><option label='Public label'>Internal label</option><optgroup label=''><option label=''>Third choice</option></optgroup></select>"
+        ),
+        "First choice\nPublic label\nThird choice"
+    );
+}
+
+#[test]
+fn empty_default_textareas_do_not_emit_accessible_names() {
+    for attributes in [
+        "aria-label='Comment'",
+        "title='Comment'",
+        "aria-label='Comment' role='textbox'",
+    ] {
+        for content in ["", " \n\t"] {
+            let html = format!("<textarea {attributes}>{content}</textarea>");
+            assert_eq!(markdown(&html), "", "{html}");
+        }
+        let html = format!("<textarea {attributes}>Authored text</textarea>");
+        assert_eq!(markdown(&html), "Authored text", "{html}");
+    }
+    assert_eq!(
+        markdown("<label>Comment<textarea aria-label='Hint'></textarea></label>"),
+        "Comment"
+    );
 }
 
 #[test]
@@ -266,6 +296,44 @@ fn named_images_and_poster_only_video_keep_their_alternatives() {
 }
 
 #[test]
+fn svg_title_fallback_obeys_the_conversion_depth_limit() {
+    let dom = Tree::parse("<svg><title>Chart title</title><path/></svg>");
+    let svg = dom.first_child(dom.root).unwrap();
+    for (root, svg_depth) in [(svg, 0), (dom.root, 1)] {
+        for max_depth in [0, 1, 2, 3, 4, usize::MAX] {
+            let converter = Converter::new(Options {
+                max_depth,
+                ..Default::default()
+            });
+            let expected = if max_depth > svg_depth + 2 {
+                "Chart title"
+            } else {
+                ""
+            };
+            assert_eq!(
+                converter.convert(&dom, root),
+                expected,
+                "svg_depth={svg_depth}, max_depth={max_depth}"
+            );
+        }
+    }
+    for attribute in ["aria-label", "title"] {
+        let dom = Tree::parse(&format!(
+            "<svg {attribute}='Authored name'><title>Child title</title></svg>"
+        ));
+        let svg = dom.first_child(dom.root).unwrap();
+        assert_eq!(
+            Converter::new(Options {
+                max_depth: 1,
+                ..Default::default()
+            })
+            .convert(&dom, svg),
+            "Authored name"
+        );
+    }
+}
+
+#[test]
 fn live_controls_replace_defaults_including_explicit_clears() {
     struct Live(Tree);
     impl moli_html2md::Dom for Live {
@@ -291,7 +359,9 @@ fn live_controls_replace_defaults_including_explicit_clears() {
             let html = if tag == "input" {
                 format!("<input value='Stale' data-live='{value}' aria-label='Field'>")
             } else {
-                format!("<textarea data-live='{value}'>Stale</textarea>")
+                format!(
+                    "<textarea data-live='{value}' aria-label='Field' title='Hint' role='textbox'>Stale</textarea>"
+                )
             };
             let dom = Live(Tree::parse(&html));
             let result = convert(&dom, dom.0.root);
