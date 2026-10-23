@@ -5,10 +5,10 @@ pub(crate) fn simple_event_target_add_event_listener_callback<'s>(
     args: v8::FunctionCallbackArguments<'s>,
     _rv: v8::ReturnValue<'s, v8::Value>,
 ) {
-    let Some(target) = simple_event_target_receiver(scope, args.this()) else {
+    let Some(target) = resolve_simple_event_target(scope, args.this()) else {
         return;
     };
-    simple_object_event_target_add_listener_for_target(scope, &args, target);
+    simple_object_event_target_add_listener_for_target(scope, &args, target.listener_owner);
 }
 
 pub(crate) fn simple_event_target_remove_event_listener_callback<'s>(
@@ -16,10 +16,10 @@ pub(crate) fn simple_event_target_remove_event_listener_callback<'s>(
     args: v8::FunctionCallbackArguments<'s>,
     _rv: v8::ReturnValue<'s, v8::Value>,
 ) {
-    let Some(target) = simple_event_target_receiver(scope, args.this()) else {
+    let Some(target) = resolve_simple_event_target(scope, args.this()) else {
         return;
     };
-    simple_object_event_target_remove_listener_for_target(scope, &args, target);
+    simple_object_event_target_remove_listener_for_target(scope, &args, target.listener_owner);
 }
 
 pub(crate) fn simple_event_target_dispatch_event_callback<'s>(
@@ -27,7 +27,7 @@ pub(crate) fn simple_event_target_dispatch_event_callback<'s>(
     args: v8::FunctionCallbackArguments<'s>,
     mut rv: v8::ReturnValue<'s, v8::Value>,
 ) {
-    let Some(target) = simple_event_target_receiver(scope, args.this()) else {
+    let Some(target) = resolve_simple_event_target(scope, args.this()) else {
         rv.set(v8::Boolean::new(scope, true).into());
         return;
     };

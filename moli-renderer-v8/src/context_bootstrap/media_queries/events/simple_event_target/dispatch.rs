@@ -1,4 +1,5 @@
 use super::*;
+use crate::context_bootstrap::shared_event_targets::{ResolvedEventTarget, resolve_event_target};
 use crate::{
     callback_invocation::{CallbackInvocation, CallbackInvocationOutcome, CallbackInvoker},
     context_bootstrap::events::{
@@ -22,7 +23,7 @@ pub(in crate::context_bootstrap::media_queries::events::simple_event_target) fn 
 >(
     scope: &mut v8::PinScope<'s, '_>,
     args: &v8::FunctionCallbackArguments<'s>,
-    target: v8::Local<'s, v8::Object>,
+    target: ResolvedEventTarget<'s>,
     rv: &mut v8::ReturnValue<'s, v8::Value>,
 ) {
     let Some((event, event_type)) =
@@ -35,8 +36,8 @@ pub(in crate::context_bootstrap::media_queries::events::simple_event_target) fn 
         return;
     };
 
-    let dispatch_result = dispatch_simple_event_target_event(scope, target, &event_type, event);
-    rv.set(v8::Boolean::new(scope, dispatch_result).into());
+    let dispatch_result = dispatch_resolved_event(scope, target, &event_type, event, None);
+    rv.set_bool(dispatch_result.uncanceled);
 }
 
 pub(crate) fn dispatch_simple_event_target_event<'s>(
@@ -59,8 +60,26 @@ pub(crate) fn dispatch_simple_event_target_event_collecting_errors<'s>(
     target: v8::Local<'s, v8::Object>,
     event_type: &str,
     event: v8::Local<'s, v8::Object>,
+    callback_errors: Option<&mut Vec<crate::exception_reporting::V8ExceptionReport>>,
+) -> SimpleEventDispatchResult {
+    let Some(target) = resolve_event_target(scope, target) else {
+        return SimpleEventDispatchResult {
+            uncanceled: true,
+            dispatched: false,
+        };
+    };
+    dispatch_resolved_event(scope, target, event_type, event, callback_errors)
+}
+
+fn dispatch_resolved_event<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    target: ResolvedEventTarget<'s>,
+    event_type: &str,
+    event: v8::Local<'s, v8::Object>,
     mut callback_errors: Option<&mut Vec<crate::exception_reporting::V8ExceptionReport>>,
 ) -> SimpleEventDispatchResult {
+    let listener_owner = target.listener_owner;
+    let target = target.dispatch_target;
     let mut dispatched = false;
     let can_invoke =
         crate::context_bootstrap::event_target_dispatch::begin_dispatch(scope, target, event);
@@ -77,12 +96,14 @@ pub(crate) fn dispatch_simple_event_target_event_collecting_errors<'s>(
         'phases: for capture_phase in [true, false] {
             // DOM clones the listener list for each invocation phase. A listener
             // added during capture can participate in the subsequent bubble phase.
-            let listeners = simple_object_event_listeners_snapshot(scope, target, event_type);
+            let listeners =
+                simple_object_event_listeners_snapshot(scope, listener_owner, event_type);
             for listener in listeners
                 .iter()
                 .filter(|listener| listener.capture == capture_phase)
             {
-                let Some(listener) = listener.prepare_for_invocation(scope, target, event_type)
+                let Some(listener) =
+                    listener.prepare_for_invocation(scope, listener_owner, event_type)
                 else {
                     continue;
                 };

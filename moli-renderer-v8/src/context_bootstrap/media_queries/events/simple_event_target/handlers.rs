@@ -36,13 +36,13 @@ fn handler_callback_data<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     args: &v8::FunctionCallbackArguments<'s>,
 ) -> Option<(v8::Local<'s, v8::Object>, String)> {
-    let Some(target) = simple_event_target_receiver(scope, args.this()) else {
+    let Some(target) = resolve_simple_event_target(scope, args.this()) else {
         throw_type_error(scope, "Illegal invocation");
         return None;
     };
     v8::Local::<v8::String>::try_from(args.data())
         .ok()
-        .map(|property| (target, property.to_rust_string_lossy(scope)))
+        .map(|property| (target.handler_owner, property.to_rust_string_lossy(scope)))
 }
 
 /// Install explicit EventHandler accessors on object-backed Window surfaces.

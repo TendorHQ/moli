@@ -1,6 +1,6 @@
-//! A single listener list behind world-local Navigation and entry wrappers.
-//! The list retains callback realms using the ordinary EventTarget machinery;
-//! dispatch still runs once, with one cancellation/propagation state.
+//! Resolve object-backed EventTarget identities independently of realm projection.
+//! Shared wrappers retain one listener list and one dispatch state, while each
+//! wrapper keeps its own EventHandler properties and callback realms.
 
 use super::{history_runtime::native, media_queries};
 use crate::context_bootstrap::navigation_entry::wrappers as entry_wrappers;
@@ -8,6 +8,7 @@ use crate::util::{get_private_object, get_private_value, set_private_value, v8st
 
 const OWNER: &str = "__moliSharedEventTargetOwner";
 const WRAPPERS: &str = "__moliSharedEventTargetWrappers";
+const DISPATCH_TARGET: &str = "__moliEventTargetDispatchTarget";
 const HANDLERS: [(&str, &str); 5] = [
     ("onnavigate", "navigate"),
     ("onnavigatesuccess", "navigatesuccess"),
@@ -15,6 +16,48 @@ const HANDLERS: [(&str, &str); 5] = [
     ("oncurrententrychange", "currententrychange"),
     ("ondispose", "dispose"),
 ];
+
+pub(super) struct ResolvedEventTarget<'s> {
+    pub(super) listener_owner: v8::Local<'s, v8::Object>,
+    // EventHandler values belong to the native receiver's wrapper, even when
+    // its listener registry is shared with wrappers from other worlds.
+    pub(super) handler_owner: v8::Local<'s, v8::Object>,
+    // A logical target: realm projection and DOM retargeting remain separate.
+    pub(super) dispatch_target: v8::Local<'s, v8::Object>,
+}
+
+fn native_target<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    target: v8::Local<'s, v8::Object>,
+) -> Option<v8::Local<'s, v8::Object>> {
+    if target.is_proxy() {
+        moli_webapi_declare::web_api_object_target(scope, target)
+    } else {
+        Some(target)
+    }
+}
+
+pub(super) fn resolve_event_target<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    receiver: v8::Local<'s, v8::Object>,
+) -> Option<ResolvedEventTarget<'s>> {
+    let handler_owner = native_target(scope, receiver)?;
+    Some(ResolvedEventTarget {
+        listener_owner: get_private_object(scope, handler_owner, OWNER).unwrap_or(handler_owner),
+        handler_owner,
+        dispatch_target: get_private_object(scope, handler_owner, DISPATCH_TARGET)
+            .unwrap_or(receiver),
+    })
+}
+
+pub(crate) fn bind_dispatch_target<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    target: v8::Local<'s, v8::Object>,
+    dispatch_target: v8::Local<'s, v8::Object>,
+) {
+    let target = native_target(scope, target).expect("native event target binding");
+    set_private_value(scope, target, DISPATCH_TARGET, dispatch_target.into());
+}
 
 pub(super) fn is_shared_target<'s>(
     scope: &mut v8::PinScope<'s, '_>,
@@ -29,7 +72,7 @@ pub(super) fn shared_target_owner<'s>(
 ) -> v8::Local<'s, v8::Object> {
     // Native aliases share the backing registry while dispatch keeps the
     // original wrapper for callback this and Event.target.
-    let target = moli_webapi_declare::web_api_object_target(scope, target).unwrap_or(target);
+    let target = native_target(scope, target).unwrap_or(target);
     get_private_object(scope, target, OWNER).unwrap_or(target)
 }
 
