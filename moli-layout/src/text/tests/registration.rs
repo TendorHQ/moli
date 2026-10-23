@@ -453,3 +453,164 @@ fn unchanged_bytes_do_not_depend_on_blob_allocation_identity() {
         assert_eq!(source_id(services.parley_mut(), "Same"), source);
     }
 }
+
+#[test]
+fn reordered_overlapping_fonts_keep_sources_contexts_and_invalidate_selection() {
+    let mut services = DocumentLayoutServices::with_system_font_policy(SystemFontPolicy::Disabled);
+    let narrow = include_bytes!("../../../tests/fixtures/moli-ahem-narrow.ttf");
+    let wide = include_bytes!("../../../tests/fixtures/moli-ahem-wide.ttf");
+    for (slot, bytes, weight) in [
+        ("wide", wide.as_slice(), "100 900"),
+        ("narrow", narrow.as_slice(), "500 800"),
+    ] {
+        services
+            .register_web_font(WebFontRegistration::new(
+                slot,
+                WebFontFace::new("Ordered").with_css_descriptors(weight, "normal", "normal"),
+                bytes.to_vec(),
+            ))
+            .unwrap();
+    }
+    services
+        .register_web_font(registration("seed", "Seed", TEST_TTF))
+        .unwrap();
+    let original_source = source_id(services.parley_mut(), "Seed");
+    let context = std::ptr::from_ref(&services.parley_mut().font_context);
+    let layout = std::ptr::from_ref(&services.parley_mut().layout_context);
+    for (order, bytes) in [
+        (["wide", "narrow"], narrow.as_slice()),
+        (["narrow", "wide"], wide.as_slice()),
+        (["wide", "narrow"], narrow.as_slice()),
+    ] {
+        services.set_web_font_order(&[], &order.map(str::to_owned));
+        assert_eq!(
+            shape_one_character(services.parley_mut(), web_font_style("Ordered", 700.0), 'A'),
+            bytes
+        );
+        assert_eq!(source_id(services.parley_mut(), "Seed"), original_source);
+        assert_eq!(
+            std::ptr::from_ref(&services.parley_mut().font_context),
+            context
+        );
+        assert_eq!(
+            std::ptr::from_ref(&services.parley_mut().layout_context),
+            layout
+        );
+        assert_eq!(services.font_collection_rebuilds, 0);
+    }
+}
+
+#[test]
+fn batch_membership_retirement_rebuilds_once_and_preserves_other_owners() {
+    for scope in [
+        WebFontRegistrationScope::Stylesheet,
+        WebFontRegistrationScope::FontFaceSetManual,
+    ] {
+        let mut services =
+            DocumentLayoutServices::with_system_font_policy(SystemFontPolicy::Disabled);
+        for index in 0..64 {
+            services
+                .register_web_font(
+                    registration(&format!("slot-{index}"), "Shared", TEST_TTF).with_scope(scope),
+                )
+                .unwrap();
+        }
+        services
+            .register_web_font(registration("retained", "Shared", TEST_TTF).with_stylesheet_scope())
+            .unwrap();
+        services
+            .register_web_font(registration("retained", "Shared", TEST_TTF))
+            .unwrap();
+        services.parley_mut();
+        let mut slots = (0..64)
+            .map(|index| format!("slot-{index}"))
+            .collect::<Vec<_>>();
+        slots.extend(["retained".into(), "missing".into(), "slot-0".into()]);
+        let retire = |services: &mut DocumentLayoutServices| match scope {
+            WebFontRegistrationScope::Stylesheet => {
+                services.remove_stylesheet_web_fonts(slots.iter().map(String::as_str))
+            }
+            _ => services.remove_font_face_set_web_fonts(slots.iter().map(String::as_str)),
+        };
+        assert!(retire(&mut services));
+        assert_eq!(services.font_collection_rebuilds, 1);
+        assert_eq!(services.web_font_count(), 1);
+        assert_eq!(
+            shape_one_character(services.parley_mut(), web_font_style("Shared", 625.0), 'R'),
+            TEST_TTF
+        );
+        assert!(!retire(&mut services));
+        assert_eq!(services.font_collection_rebuilds, 1);
+        let source = source_id(services.parley_mut(), "Shared");
+        // Adding and retiring an independent relation must retain the source.
+        services
+            .register_web_font(registration("retained", "Shared", TEST_TTF).with_scope(scope))
+            .unwrap();
+        assert!(retire(&mut services));
+        assert_eq!(source_id(services.parley_mut(), "Shared"), source);
+        assert_eq!(services.font_collection_rebuilds, 1);
+        assert!(services.remove_web_font("retained"));
+        assert_eq!(services.font_collection_rebuilds, 2);
+        assert_eq!(services.web_font_count(), 0);
+    }
+}
+
+#[test]
+fn temporary_css_order_keeps_sources_and_restores_selection_after_an_error() {
+    let mut services = DocumentLayoutServices::with_system_font_policy(SystemFontPolicy::Disabled);
+    let narrow = include_bytes!("../../../tests/fixtures/moli-ahem-narrow.ttf");
+    let wide = include_bytes!("../../../tests/fixtures/moli-ahem-wide.ttf");
+    let face = WebFontFace::new("ScopedOrder").with_css_descriptors("100 900", "normal", "normal");
+    for (slot, bytes) in [("wide", wide.as_slice()), ("narrow", narrow.as_slice())] {
+        services
+            .register_web_font(
+                WebFontRegistration::new(slot, face.clone(), bytes.to_vec())
+                    .with_stylesheet_scope(),
+            )
+            .unwrap();
+    }
+    services
+        .register_web_font(registration("seed", "Seed", TEST_TTF))
+        .unwrap();
+    services.set_stylesheet_web_font_order(&["wide".into(), "narrow".into()]);
+    let source = source_id(services.parley_mut(), "Seed");
+    let context = std::ptr::from_ref(&services.parley_mut().font_context);
+    let result: Result<(), ()> = services.with_stylesheet_font_declarations(
+        ["narrow", "wide"].map(|slot| WebFontDeclaration {
+            slot,
+            source_key: "fixture",
+            face: &face,
+        }),
+        |temporary| {
+            assert_eq!(
+                shape_one_character(
+                    temporary.parley_mut(),
+                    web_font_style("ScopedOrder", 700.0),
+                    'A'
+                ),
+                wide
+            );
+            assert_eq!(source_id(temporary.parley_mut(), "Seed"), source);
+            assert_eq!(
+                std::ptr::from_ref(&temporary.parley_mut().font_context),
+                context
+            );
+            Err(())
+        },
+    );
+    assert!(result.is_err());
+    assert_eq!(
+        shape_one_character(
+            services.parley_mut(),
+            web_font_style("ScopedOrder", 700.0),
+            'A'
+        ),
+        narrow
+    );
+    assert_eq!(source_id(services.parley_mut(), "Seed"), source);
+    assert_eq!(
+        std::ptr::from_ref(&services.parley_mut().font_context),
+        context
+    );
+    assert_eq!(services.font_collection_rebuilds, 0);
+}

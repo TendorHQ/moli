@@ -135,14 +135,14 @@ impl DocumentWebFontState {
             .map(|font| font.registration_slot().to_owned())
             .collect::<Vec<_>>();
         let active = order.iter().collect::<BTreeSet<_>>();
-        let mut changed = false;
-        self.slots.retain(|slot, _| {
-            if active.contains(slot) {
-                return true;
-            }
-            changed |= services.remove_stylesheet_web_font(slot);
-            false
-        });
+        let removed = self
+            .slots
+            .keys()
+            .filter(|slot| !active.contains(slot))
+            .cloned()
+            .collect::<Vec<_>>();
+        self.slots.retain(|slot, _| active.contains(slot));
+        let changed = services.remove_stylesheet_web_fonts(removed.iter().map(String::as_str));
         self.loads.retain(|_, load| load.strong_count() != 0);
         self.sources.retain(|_, source| source.strong_count() != 0);
         changed | services.set_stylesheet_web_font_order(&order)

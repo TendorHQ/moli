@@ -352,7 +352,7 @@ pub(crate) fn finish_font_face_url_load<'s>(
 
 pub(super) fn sync_owners<'s>(scope: &mut v8::PinScope<'s, '_>, face: v8::Local<'s, v8::Object>) {
     for owner in super::storage::font_face_set_owner_snapshot(scope, face) {
-        sync_registration(scope, owner, face, true);
+        sync_registration(scope, owner, face);
     }
 }
 
@@ -360,7 +360,6 @@ pub(super) fn sync_registration<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     owner: v8::Local<'s, v8::Object>,
     face: v8::Local<'s, v8::Object>,
-    present: bool,
 ) {
     let Some(document) = get_private_value(scope, owner, OWNER_DOCUMENT)
         .and_then(|value| crate::native_bridge::callback_value_dom_handle(scope, value))
@@ -383,20 +382,16 @@ pub(super) fn sync_registration<'s>(
     let host = unsafe { &*host_ptr };
     let changed = host.with_font_services(document, |services| {
         let load = load.borrow();
-        if present {
-            match load.register(services, registration_scope) {
-                Ok(Some(
-                    moli_layout::WebFontRegistrationOutcome::Added
-                    | moli_layout::WebFontRegistrationOutcome::Replaced,
-                )) => true,
-                Ok(_) => false,
-                Err(error) => {
-                    tracing::warn!(%error, "failed to register FontFace");
-                    false
-                }
+        match load.register(services, registration_scope) {
+            Ok(Some(
+                moli_layout::WebFontRegistrationOutcome::Added
+                | moli_layout::WebFontRegistrationOutcome::Replaced,
+            )) => true,
+            Ok(_) => false,
+            Err(error) => {
+                tracing::warn!(%error, "failed to register FontFace");
+                false
             }
-        } else {
-            services.remove_font_face_set_web_font(load.slot())
         }
     });
     if changed {

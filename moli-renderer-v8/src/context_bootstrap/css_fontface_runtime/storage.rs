@@ -346,20 +346,35 @@ fn sync_font_face_set_owners<'s>(
             retained_slots.insert(load.borrow().slot().to_owned());
         }
     }
+    let mut removed_faces = Vec::new();
+    let mut removed_slots = Vec::new();
     for index in 0..previous.length() {
         let Some(face) = previous.get_index(scope, index) else {
             continue;
         };
         if !array_contains_value(scope, current, face) {
-            if let Ok(face) = v8::Local::<v8::Object>::try_from(face) {
-                let retained = super::state::get(scope, face)
-                    .is_some_and(|load| retained_slots.contains(load.borrow().slot()));
-                if !retained {
-                    super::loading::sync_registration(scope, owner, face, false);
-                }
+            if let Ok(face) = v8::Local::<v8::Object>::try_from(face)
+                && let Some(load) = super::state::get(scope, face)
+                && !retained_slots.contains(load.borrow().slot())
+            {
+                removed_slots.push(load.borrow().slot().to_owned());
             }
-            remove_font_face_set_owner(scope, face, owner);
+            removed_faces.push(face);
         }
+    }
+    if !removed_slots.is_empty()
+        && let Some((host_ptr, document)) = font_face_set_document_context(scope, owner)
+    {
+        // SAFETY: native font membership updates cannot call into page code.
+        let host = unsafe { &*host_ptr };
+        if host.with_font_services(document, |services| {
+            services.remove_font_face_set_web_fonts(removed_slots.iter().map(String::as_str))
+        }) {
+            host.invalidate_document_font_layout(document);
+        }
+    }
+    for face in removed_faces {
+        remove_font_face_set_owner(scope, face, owner);
     }
     for index in 0..current.length() {
         let Some(face) = current.get_index(scope, index) else {
@@ -368,7 +383,7 @@ fn sync_font_face_set_owners<'s>(
         if !array_contains_value(scope, previous, face) {
             add_font_face_set_owner(scope, face, owner);
             if let Ok(face) = v8::Local::<v8::Object>::try_from(face) {
-                super::loading::sync_registration(scope, owner, face, true);
+                super::loading::sync_registration(scope, owner, face);
                 if super::loading::status(scope, face)
                     == crate::font_loading::FontFaceStatus::Loading
                 {
