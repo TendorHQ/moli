@@ -2174,6 +2174,8 @@ mod css_keyframes_receivers;
 mod device_events;
 mod document_svg_root;
 
+mod svg_length_native_receivers;
+
 mod gamepad_interfaces;
 
 mod dom_elements;

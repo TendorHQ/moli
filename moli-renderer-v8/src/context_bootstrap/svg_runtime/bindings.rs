@@ -897,7 +897,7 @@ struct SvgSvgElementTemplateMethodsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::SVGLength, enumerable)]
+#[webapi(interface = web_api_interfaces::SVGLength, enumerable, receiver)]
 struct SvgLengthTemplateAccessorsDeclaration {
     #[webapi(
         accessor_property = "unitType",
