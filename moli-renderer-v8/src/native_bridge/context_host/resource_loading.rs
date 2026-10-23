@@ -1211,8 +1211,7 @@ impl JsContextHost {
         request_mode: moli_fetch::RequestMode,
         network_partition_key: Option<String>,
         policy_context: crate::types::SubresourcePolicyContext,
-        web_font: Option<crate::css_resource_urls::StylesheetWebFont>,
-        css_image: Option<crate::native_bridge::CssImageResourceRequestIdentity>,
+        target: crate::css_resource_urls::StylesheetSubresourceTarget,
         mut info: PendingSubresourceFetchInfo,
     ) -> Option<u64> {
         if !self.stylesheet_subresource_load_delay_is_current(binding) {
@@ -1247,8 +1246,7 @@ impl JsContextHost {
                 policy_context,
                 continuation: PendingSubresourceContinuation::StylesheetSubresource {
                     binding,
-                    web_font,
-                    css_image,
+                    target,
                 },
                 deferred_request_started: false,
             },

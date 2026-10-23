@@ -15,82 +15,110 @@ pub(crate) enum StylesheetLoadBlockingResourceKind {
     Font,
 }
 
+/// Discovered resources. A font declaration may resolve entirely via local().
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct StylesheetLoadBlockingResource {
-    request_url: Option<Url>,
-    kind: StylesheetLoadBlockingResourceKind,
-    web_font: Option<StylesheetWebFont>,
+pub(crate) enum StylesheetLoadBlockingResource {
+    Image(Url),
+    Font {
+        request_url: Option<Url>,
+        font: StylesheetWebFont,
+    },
 }
 
 impl StylesheetLoadBlockingResource {
-    fn new(request_url: Url, kind: StylesheetLoadBlockingResourceKind) -> Self {
-        Self {
-            request_url: Some(request_url),
-            kind,
-            web_font: None,
-        }
-    }
-
     pub(crate) fn image(request_url: Url) -> Self {
-        Self::new(request_url, StylesheetLoadBlockingResourceKind::Image)
+        Self::Image(request_url)
     }
 
     pub(crate) fn font(request_url: Option<Url>, web_font: StylesheetWebFont) -> Self {
-        Self {
+        Self::Font {
             request_url,
-            kind: StylesheetLoadBlockingResourceKind::Font,
-            web_font: Some(web_font),
+            font: web_font,
         }
     }
 
     pub(crate) fn request_url(&self) -> Option<&Url> {
-        self.request_url.as_ref()
-    }
-
-    pub(crate) fn with_request_url(mut self, url: Url) -> Self {
-        self.request_url = Some(url);
-        self
-    }
-
-    pub(crate) fn into_parts(self) -> (Option<Url>, Option<StylesheetWebFont>) {
-        (self.request_url, self.web_font)
+        match self {
+            Self::Image(url) => Some(url),
+            Self::Font { request_url, .. } => request_url.as_ref(),
+        }
     }
 
     pub(crate) fn web_font(&self) -> Option<&StylesheetWebFont> {
-        self.web_font.as_ref()
-    }
-
-    pub(crate) fn bind_web_font_request(mut self, request_id: u64) -> Self {
-        self.web_font = self
-            .web_font
-            .take()
-            .map(|font| font.bind_request(request_id));
-        self
+        match self {
+            Self::Image(_) => None,
+            Self::Font { font, .. } => Some(font),
+        }
     }
 
     pub(crate) fn kind(&self) -> StylesheetLoadBlockingResourceKind {
-        self.kind
+        match self {
+            Self::Image(_) => StylesheetLoadBlockingResourceKind::Image,
+            Self::Font { .. } => StylesheetLoadBlockingResourceKind::Font,
+        }
     }
 }
 
-/// Parsed `@font-face` metadata that stays attached to the exact resource
-/// request until its owner-validated completion.
+/// A selected network source, after local source resolution and request binding.
+#[derive(Clone, Debug)]
+pub(crate) struct StylesheetSubresourceRequest {
+    url: Url,
+    target: StylesheetSubresourceTarget,
+}
+
+/// The continuation retained after the request URL has moved into the network
+/// loader. Image tracking is optional; font request identity is mandatory.
+#[derive(Clone, Debug)]
+pub(crate) enum StylesheetSubresourceTarget {
+    Image(Option<crate::native_bridge::CssImageResourceRequestIdentity>),
+    Font(BoundStylesheetWebFont),
+}
+
+impl StylesheetSubresourceRequest {
+    pub(crate) fn image(
+        url: Url,
+        identity: Option<crate::native_bridge::CssImageResourceRequestIdentity>,
+    ) -> Self {
+        Self {
+            url,
+            target: StylesheetSubresourceTarget::Image(identity),
+        }
+    }
+
+    pub(crate) fn font(url: Url, font: BoundStylesheetWebFont) -> Self {
+        Self {
+            url,
+            target: StylesheetSubresourceTarget::Font(font),
+        }
+    }
+
+    pub(crate) fn url(&self) -> &Url {
+        &self.url
+    }
+
+    pub(crate) fn target(&self) -> &StylesheetSubresourceTarget {
+        &self.target
+    }
+
+    pub(crate) fn into_parts(self) -> (Url, StylesheetSubresourceTarget) {
+        (self.url, self.target)
+    }
+}
+
+/// Parsed declaration metadata, before any network source is selected.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct StylesheetWebFont {
     slot: String,
     face: WebFontFace,
     sources: Vec<moli_css_parse::CssFontSource>,
-    request_id: Option<u64>,
 }
 
 impl StylesheetWebFont {
-    pub(crate) fn bind_request(mut self, request_id: u64) -> Self {
-        self.request_id = Some(request_id);
-        self
-    }
-
-    pub(crate) fn request_id(&self) -> Option<u64> {
-        self.request_id
+    pub(crate) fn bind_request(self, request_id: u64) -> BoundStylesheetWebFont {
+        BoundStylesheetWebFont {
+            font: self,
+            request_id,
+        }
     }
 
     pub(crate) fn sources(&self) -> &[moli_css_parse::CssFontSource] {
@@ -106,28 +134,49 @@ impl StylesheetWebFont {
     }
 }
 
+/// Declaration metadata tied to one exact pending request in its Document.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BoundStylesheetWebFont {
+    font: StylesheetWebFont,
+    request_id: u64,
+}
+
+impl BoundStylesheetWebFont {
+    pub(crate) fn request_id(&self) -> u64 {
+        self.request_id
+    }
+
+    pub(crate) fn font(&self) -> &StylesheetWebFont {
+        &self.font
+    }
+
+    pub(crate) fn into_font(self) -> StylesheetWebFont {
+        self.font
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct CompletedStylesheetWebFont {
-    request: StylesheetWebFont,
+    request: BoundStylesheetWebFont,
     bytes: Option<Vec<u8>>,
 }
 
 impl CompletedStylesheetWebFont {
-    pub(crate) fn response(request: StylesheetWebFont, bytes: Vec<u8>) -> Self {
+    pub(crate) fn response(request: BoundStylesheetWebFont, bytes: Vec<u8>) -> Self {
         Self {
             request,
             bytes: Some(bytes),
         }
     }
 
-    pub(crate) fn failure(request: StylesheetWebFont) -> Self {
+    pub(crate) fn failure(request: BoundStylesheetWebFont) -> Self {
         Self {
             request,
             bytes: None,
         }
     }
 
-    pub(crate) fn into_parts(self) -> (StylesheetWebFont, Option<Vec<u8>>) {
+    pub(crate) fn into_parts(self) -> (BoundStylesheetWebFont, Option<Vec<u8>>) {
         (self.request, self.bytes)
     }
 }
@@ -163,7 +212,7 @@ fn stylesheet_web_font_resources(
 }
 
 /// Projects one already-parsed and serialized `@font-face` rule into the
-/// typed request metadata retained by the style world.
+/// declaration metadata retained by the style world.
 pub(crate) fn stylesheet_web_font_resource(
     css_text: &str,
     base_url: &Url,
@@ -241,7 +290,6 @@ fn stylesheet_web_font_resource_with_descriptor(
             slot,
             face: descriptor.into_face(),
             sources,
-            request_id: None,
         },
     )
 }
@@ -405,11 +453,9 @@ mod tests {
             ]
         );
         let web_font = resources[0]
-            .web_font
-            .as_ref()
+            .web_font()
             .expect("font resource should retain its descriptors");
         assert!(web_font.slot().starts_with("stylesheet-font:"));
-        assert_eq!(web_font.request_id(), None);
         assert_eq!(web_font.face().family_name(), "Demo");
         assert_eq!(web_font.face().weight(), Some(625.0));
         assert_eq!(web_font.face().stretch(), Some(87.5));

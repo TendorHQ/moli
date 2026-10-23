@@ -483,13 +483,22 @@ impl ScriptVm {
             web_fonts::DocumentWebFontCompletion::Stale => {
                 tracing::debug!("discarded superseded document web font response")
             }
-            web_fonts::DocumentWebFontCompletion::Retry(resource) => {
+            web_fonts::DocumentWebFontCompletion::Retry(request) => {
                 let binding = self
                     ._context_host
                     .borrow_mut()
                     .accept_current_stylesheet_subresource_load_delay_for_document(document);
-                if let Some(binding) = binding {
-                    self.start_stylesheet_subresource_fetches(vec![(binding, *resource)]);
+                if let Some(binding) = binding
+                    && let Err(error) = self.with_default_context_scope(move |scope, host_ptr| {
+                        crate::document_runtime::DocumentRuntime::start_stylesheet_subresource_requests_in_current_scope(
+                            scope, host_ptr, vec![(binding, *request)],
+                        );
+                        Ok(())
+                    })
+                {
+                    self.record_runtime_warning(format_args!(
+                        "failed to enter stylesheet subresource request scope: {error}"
+                    ));
                 }
             }
         }

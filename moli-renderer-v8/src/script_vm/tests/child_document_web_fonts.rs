@@ -1,7 +1,8 @@
 use super::*;
 use crate::{
     css_resource_urls::{
-        CompletedStylesheetWebFont, StylesheetLoadBlockingResource,
+        BoundStylesheetWebFont, CompletedStylesheetWebFont, StylesheetLoadBlockingResource,
+        StylesheetSubresourceRequest, StylesheetSubresourceTarget,
         stylesheet_load_blocking_font_resources,
     },
     protocol_types::OptionalResourceFetchMask,
@@ -19,10 +20,16 @@ fn font_resource() -> StylesheetLoadBlockingResource {
     .unwrap()
 }
 
-fn font_response(resource: &StylesheetLoadBlockingResource) -> CompletedStylesheetWebFont {
-    let (_, request) = resource.clone().into_parts();
+fn font_request(resource: &StylesheetSubresourceRequest) -> &BoundStylesheetWebFont {
+    let StylesheetSubresourceTarget::Font(request) = resource.target() else {
+        panic!("fixture must prepare a font request");
+    };
+    request
+}
+
+fn font_response(resource: &StylesheetSubresourceRequest) -> CompletedStylesheetWebFont {
     CompletedStylesheetWebFont::response(
-        request.unwrap(),
+        font_request(resource).clone(),
         include_bytes!("../../../../moli-layout/tests/fixtures/moli-ahem.woff2").to_vec(),
     )
 }
@@ -102,8 +109,8 @@ fn child_web_font_document_open_retires_registrations_and_rejects_old_owner() {
         (binding, resource)
     };
     assert_eq!(
-        resource.web_font().unwrap().request_id(),
-        replacement_resource.web_font().unwrap().request_id()
+        font_request(&resource).request_id(),
+        font_request(&replacement_resource).request_id()
     );
     let before = vm.layout_pass_observability_for_test().1;
     vm.complete_document_web_font(binding, font_response(&resource));

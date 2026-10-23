@@ -4,7 +4,9 @@ use moli_layout::{DocumentLayoutServices, FrozenLayoutTree, LayoutViewport};
 
 use super::layout_snapshot::LatestLayoutTreeCache;
 use crate::{
-    css_resource_urls::{CompletedStylesheetWebFont, StylesheetLoadBlockingResource},
+    css_resource_urls::{
+        CompletedStylesheetWebFont, StylesheetLoadBlockingResource, StylesheetSubresourceRequest,
+    },
     document_runtime::DomHandle,
     script_vm::web_fonts::{DocumentWebFontCompletion, DocumentWebFontState},
     style_engine::{StyleViewport, StylesheetResourceGeneration, StyloStyleEnvironment},
@@ -336,7 +338,7 @@ impl DocumentLayoutState {
         document: DomHandle,
         main_document: DomHandle,
         resource: StylesheetLoadBlockingResource,
-    ) -> Option<StylesheetLoadBlockingResource> {
+    ) -> Option<StylesheetSubresourceRequest> {
         // Ready faces are revisited by read-only font projections.
         self.with_web_fonts_for_document(document, main_document, |fonts, services| {
             fonts.admit(resource, services)

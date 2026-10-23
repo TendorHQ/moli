@@ -1,4 +1,5 @@
 use super::*;
+use crate::css_resource_urls::StylesheetSubresourceTarget;
 
 impl ScriptVm {
     pub(super) fn resolve_network_only_subresource_fetch(
@@ -773,40 +774,39 @@ impl ScriptVm {
                         }
                         PendingSubresourceContinuation::StylesheetSubresource {
                             binding,
-                            web_font,
-                            css_image,
+                            target,
                         } => {
-                            if let Some(identity) = css_image.as_ref() {
-                                let descriptor = crate::network_host::image_response_descriptor_from_parkable(
-                                    &observable_response,
-                                    parkable_image
-                                        .as_ref()
-                                        .expect("a CSS image response must be parkable"),
-                                );
-                                let _ = context_host
-                                    .borrow_mut()
-                                    .complete_stylesheet_css_image_response(
-                                        identity,
-                                        descriptor,
-                                        parkable_image
+                            completed_web_font = match target {
+                                StylesheetSubresourceTarget::Image(identity) => {
+                                    if let Some(identity) = identity {
+                                        let encoded = parkable_image
                                             .as_ref()
-                                            .expect("a CSS image response must be parkable")
-                                            .clone(),
-                                    );
-                            }
-                            completed_web_font = web_font.map(|font| {
-                                let terminal = if (200..=299).contains(&response_status)
-                                    && !opaque_response_blocked
-                                {
-                                    crate::css_resource_urls::CompletedStylesheetWebFont::response(
-                                        font,
-                                        observable_response.clone_body_bytes(),
-                                    )
-                                } else {
-                                    crate::css_resource_urls::CompletedStylesheetWebFont::failure(font)
-                                };
-                                (binding, terminal)
-                            });
+                                            .expect("a CSS image response must be parkable");
+                                        let descriptor = crate::network_host::image_response_descriptor_from_parkable(
+                                            &observable_response, encoded,
+                                        );
+                                        let _ = context_host
+                                            .borrow_mut()
+                                            .complete_stylesheet_css_image_response(
+                                                &identity, descriptor, encoded.clone(),
+                                            );
+                                    }
+                                    None
+                                }
+                                StylesheetSubresourceTarget::Font(font) => {
+                                    let terminal = if (200..=299).contains(&response_status)
+                                        && !opaque_response_blocked
+                                    {
+                                        crate::css_resource_urls::CompletedStylesheetWebFont::response(
+                                            font,
+                                            observable_response.clone_body_bytes(),
+                                        )
+                                    } else {
+                                        crate::css_resource_urls::CompletedStylesheetWebFont::failure(font)
+                                    };
+                                    Some((binding, terminal))
+                                }
+                            };
                             apply_stylesheet_subresource_terminal(&context_host, binding);
                         }
                         PendingSubresourceContinuation::Beacon
@@ -916,17 +916,22 @@ impl ScriptVm {
                         }
                         PendingSubresourceContinuation::StylesheetSubresource {
                             binding,
-                            web_font,
-                            css_image,
+                            target,
                         } => {
-                            if let Some(identity) = css_image.as_ref() {
-                                let _ = context_host
-                                    .borrow_mut()
-                                    .fail_stylesheet_css_image(identity);
-                            }
-                            completed_web_font = web_font.map(|font| {
-                                (binding, crate::css_resource_urls::CompletedStylesheetWebFont::failure(font))
-                            });
+                            completed_web_font = match target {
+                                StylesheetSubresourceTarget::Image(identity) => {
+                                    if let Some(identity) = identity {
+                                        let _ = context_host
+                                            .borrow_mut()
+                                            .fail_stylesheet_css_image(&identity);
+                                    }
+                                    None
+                                }
+                                StylesheetSubresourceTarget::Font(font) => Some((
+                                    binding,
+                                    crate::css_resource_urls::CompletedStylesheetWebFont::failure(font),
+                                )),
+                            };
                             apply_stylesheet_subresource_terminal(&context_host, binding);
                         }
                         PendingSubresourceContinuation::Beacon

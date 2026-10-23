@@ -87,8 +87,7 @@ pub(super) enum PendingSubresourceContinuation {
     FontFace(v8::Global<v8::Object>),
     StylesheetSubresource {
         binding: crate::frame_owner_model::StylesheetSubresourceLoadDelayBinding,
-        web_font: Option<crate::css_resource_urls::StylesheetWebFont>,
-        css_image: Option<crate::native_bridge::CssImageResourceRequestIdentity>,
+        target: crate::css_resource_urls::StylesheetSubresourceTarget,
     },
     Xhr {
         xhr: v8::Global<v8::Object>,
@@ -1796,8 +1795,7 @@ mod tests {
                 ),
                 load_delay_token: None,
             },
-            web_font: None,
-            css_image: None,
+            target: crate::css_resource_urls::StylesheetSubresourceTarget::Image(None),
         };
 
         assert!(image.delays_document_load_event());

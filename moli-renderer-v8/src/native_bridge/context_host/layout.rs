@@ -7,7 +7,9 @@ use moli_layout::{
 use super::JsContextHost;
 use super::layout_state::InferredFrameStyleViewportCacheKey;
 use crate::{
-    css_resource_urls::{CompletedStylesheetWebFont, StylesheetLoadBlockingResource},
+    css_resource_urls::{
+        CompletedStylesheetWebFont, StylesheetLoadBlockingResource, StylesheetSubresourceRequest,
+    },
     document_runtime::DomHandle,
     native_bridge::element::iframe_handle_viewport,
     script_vm::web_fonts::DocumentWebFontCompletion,
@@ -659,7 +661,7 @@ impl JsContextHost {
         &self,
         document: DomHandle,
         resource: StylesheetLoadBlockingResource,
-    ) -> Option<StylesheetLoadBlockingResource> {
+    ) -> Option<StylesheetSubresourceRequest> {
         self.document_layout_state
             .borrow_mut()
             .admit(document, self.document_handle(), resource)

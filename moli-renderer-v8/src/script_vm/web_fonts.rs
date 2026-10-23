@@ -8,7 +8,8 @@ use moli_layout::{DocumentLayoutServices, WebFontRegistrationError, WebFontRegis
 
 use crate::{
     css_resource_urls::{
-        CompletedStylesheetWebFont, StylesheetLoadBlockingResource, StylesheetWebFont,
+        CompletedStylesheetWebFont, StylesheetLoadBlockingResource, StylesheetSubresourceRequest,
+        StylesheetWebFont,
     },
     font_loading::{FontFaceLoad, FontFaceResource},
 };
@@ -39,7 +40,7 @@ pub(crate) enum DocumentWebFontCompletion {
     Registered(WebFontRegistrationOutcome),
     Invalid(WebFontRegistrationError),
     NetworkFailed,
-    Retry(Box<StylesheetLoadBlockingResource>),
+    Retry(Box<StylesheetSubresourceRequest>),
     Stale,
 }
 
@@ -108,34 +109,31 @@ impl DocumentWebFontState {
 
     fn bind_request(
         &mut self,
-        resource: StylesheetLoadBlockingResource,
+        url: url::Url,
+        font: StylesheetWebFont,
         load: FontFaceLoad,
-    ) -> StylesheetLoadBlockingResource {
+    ) -> StylesheetSubresourceRequest {
         self.next_request_id = self
             .next_request_id
             .checked_add(1)
             .expect("document web-font request identity space exhausted");
         self.pending.insert(self.next_request_id, load);
-        resource.bind_web_font_request(self.next_request_id)
+        StylesheetSubresourceRequest::font(url, font.bind_request(self.next_request_id))
     }
 
+    /// Resolve local sources and bind a request only when a network source is needed.
     pub(crate) fn admit(
         &mut self,
         resource: StylesheetLoadBlockingResource,
         services: &mut DocumentLayoutServices,
-    ) -> Option<StylesheetLoadBlockingResource> {
-        let Some(font) = resource.web_font() else {
-            return Some(resource);
+    ) -> Option<StylesheetSubresourceRequest> {
+        let font = match resource {
+            StylesheetLoadBlockingResource::Image(url) => {
+                return Some(StylesheetSubresourceRequest::image(url, None));
+            }
+            StylesheetLoadBlockingResource::Font { font, .. } => font,
         };
-        if let Some(id) = font.request_id() {
-            // A native source fallback already has its next exact request.
-            return self
-                .pending
-                .get(&id)
-                .is_some_and(|load| load.borrow().slot() == font.slot())
-                .then_some(resource);
-        }
-        let load = self.observe(font);
+        let load = self.observe(&font);
         self.slots
             .insert(font.slot().to_owned(), WebFontSlot { load: load.clone() });
         if !load.borrow_mut().begin() {
@@ -149,7 +147,7 @@ impl DocumentWebFontState {
         let next = load.borrow_mut().next_url(services);
         if let Some(url) = next {
             let url = url::Url::parse(&url).expect("CSS font sources retain resolved URLs");
-            Some(self.bind_request(resource.with_request_url(url), load))
+            Some(self.bind_request(url, font, load))
         } else {
             if let Err(error) = load.borrow().register(services) {
                 tracing::warn!(%error, "failed to register local stylesheet font");
@@ -164,13 +162,11 @@ impl DocumentWebFontState {
         services: &mut DocumentLayoutServices,
     ) -> DocumentWebFontCompletion {
         let (request, bytes) = terminal.into_parts();
-        let Some(id) = request.request_id() else {
-            return DocumentWebFontCompletion::Stale;
-        };
+        let id = request.request_id();
         if self
             .pending
             .get(&id)
-            .is_none_or(|load| load.borrow().slot() != request.slot())
+            .is_none_or(|load| load.borrow().slot() != request.font().slot())
         {
             return DocumentWebFontCompletion::Stale;
         }
@@ -182,12 +178,15 @@ impl DocumentWebFontState {
         let next = load.borrow_mut().next_url(services);
         if let Some(url) = next {
             let url = url::Url::parse(&url).expect("CSS font fallback retains its parser URL");
-            let resource = StylesheetLoadBlockingResource::font(Some(url), request);
-            return DocumentWebFontCompletion::Retry(Box::new(self.bind_request(resource, load)));
+            return DocumentWebFontCompletion::Retry(Box::new(self.bind_request(
+                url,
+                request.into_font(),
+                load,
+            )));
         }
         let active = self
             .slots
-            .get(request.slot())
+            .get(request.font().slot())
             .is_some_and(|slot| std::rc::Rc::ptr_eq(&slot.load, &load));
         if !active {
             return DocumentWebFontCompletion::Stale;
@@ -220,7 +219,9 @@ impl DocumentWebFontState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::css_resource_urls::stylesheet_load_blocking_font_resources;
+    use crate::css_resource_urls::{
+        StylesheetSubresourceTarget, stylesheet_load_blocking_font_resources,
+    };
     use crate::protocol_types::OptionalResourceFetchMask;
     use url::Url;
 
@@ -238,11 +239,13 @@ mod tests {
     }
 
     fn terminal(
-        resource: StylesheetLoadBlockingResource,
+        resource: StylesheetSubresourceRequest,
         bytes: Option<Vec<u8>>,
     ) -> CompletedStylesheetWebFont {
         let (_, request) = resource.into_parts();
-        let request = request.expect("font resource metadata");
+        let StylesheetSubresourceTarget::Font(request) = request else {
+            panic!("fixture must prepare a font request");
+        };
         match bytes {
             Some(bytes) => CompletedStylesheetWebFont::response(request, bytes),
             None => CompletedStylesheetWebFont::failure(request),
@@ -259,14 +262,10 @@ mod tests {
                 &mut services,
             )
             .unwrap();
-        let second = state
-            .admit(
-                resource("@font-face{font-family:Second;src:url(font.woff2)}"),
-                &mut services,
-            )
-            .unwrap();
+        let second_resource = resource("@font-face{font-family:Second;src:url(font.woff2)}");
+        let second = state.admit(second_resource.clone(), &mut services).unwrap();
 
-        state.retain_active_slots([&second], &mut services);
+        state.retain_active_slots([&second_resource], &mut services);
         assert!(matches!(
             state.complete(terminal(first, Some(TEST_FONT.to_vec())), &mut services),
             DocumentWebFontCompletion::Stale
@@ -323,10 +322,7 @@ mod tests {
         else {
             panic!("invalid first source should advance to its fallback");
         };
-        assert_eq!(
-            second.request_url().expect("URL fallback").as_str(),
-            "https://example.test/second.woff2"
-        );
+        assert_eq!(second.url().as_str(), "https://example.test/second.woff2");
         assert!(matches!(
             state.complete(terminal(duplicate, Some(TEST_FONT.to_vec())), &mut services),
             DocumentWebFontCompletion::Stale
