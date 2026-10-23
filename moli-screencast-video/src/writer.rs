@@ -147,7 +147,7 @@ impl VideoWriter {
             encoder,
             muxer: Some(muxer),
             output,
-            canvas: vec![255; width as usize * height as usize * 4],
+            canvas: Vec::new(),
             width,
             height,
             started,
@@ -168,26 +168,54 @@ impl VideoWriter {
             image.width <= self.width && image.height <= self.height,
             "video frame exceeds fixed canvas"
         );
-        self.canvas.fill(255);
         let x = (self.width - image.width) / 2;
         let y = (self.height - image.height) / 2;
-        for row in 0..image.height as usize {
-            for col in 0..image.width as usize {
-                let source = (row * image.width as usize + col) * 4;
-                let dest = ((row + y as usize) * self.width as usize + col + x as usize) * 4;
-                let alpha = u32::from(image.rgba[source + 3]);
-                for channel in 0..3 {
-                    self.canvas[dest + channel] = ((u32::from(image.rgba[source + channel])
-                        * alpha
-                        + 255 * (255 - alpha)
-                        + 127)
-                        / 255) as u8;
+        // A reduction lets the compiler vectorize the alpha scan. Fully opaque
+        // frames that already fit the canvas need no copy or compositing.
+        let opaque = image
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .fold(u8::MAX, |alpha, pixel| alpha & pixel[3])
+            == u8::MAX;
+        let pixels = if image.width == self.width && image.height == self.height && opaque {
+            image.rgba.as_slice()
+        } else {
+            // Only padding or transparency needs a separate RGBA canvas.
+            self.canvas
+                .resize(self.width as usize * self.height as usize * 4, 255);
+            if image.width != self.width || image.height != self.height {
+                self.canvas.fill(255);
+            }
+            for row in 0..image.height as usize {
+                let source = row * image.width as usize * 4;
+                let dest = ((row + y as usize) * self.width as usize + x as usize) * 4;
+                let source = &image.rgba[source..source + image.width as usize * 4];
+                let dest = &mut self.canvas[dest..dest + image.width as usize * 4];
+                if opaque {
+                    dest.copy_from_slice(source);
+                } else {
+                    for (source, dest) in source
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .zip(dest.as_chunks_mut::<4>().0)
+                    {
+                        let alpha = u32::from(source[3]);
+                        for channel in 0..3 {
+                            dest[channel] =
+                                ((u32::from(source[channel]) * alpha + 255 * (255 - alpha) + 127)
+                                    / 255) as u8;
+                        }
+                    }
                 }
             }
-        }
+            self.canvas.as_slice()
+        };
         yuv::rgba_to_yuv420(
             &mut self.encoder.planes,
-            &self.canvas,
+            pixels,
             self.width * 4,
             yuv::YuvRange::Limited,
             yuv::YuvStandardMatrix::Bt709,
@@ -289,6 +317,72 @@ impl VideoWriter {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn opaque_frames_avoid_scratch_and_alpha_padding_preserve_pixels() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let started = Instant::now();
+        let mut writer = VideoWriter::new(&directory.path().join("pixels.mp4"), 4, 4, started)?;
+        let colors = [
+            (4, 4, [255, 0, 0, 255]),
+            (4, 4, [255, 0, 0, 128]),
+            (2, 2, [0, 0, 255, 255]),
+            (4, 4, [0, 255, 0, 255]),
+        ];
+        for (index, (width, height, color)) in colors.into_iter().enumerate() {
+            let image = RgbaImage::try_new(width, height, color.repeat((width * height) as usize))?;
+            writer.push_frame(&image, started + Duration::from_millis(index as u64 * 100))?;
+            if index == 0 {
+                assert_eq!(
+                    writer.canvas.capacity(),
+                    0,
+                    "opaque frames borrow their original raster"
+                );
+            }
+            let rgba = match index {
+                0 => [255, 0, 0, 255].repeat(16),
+                1 => [255, 127, 127, 255].repeat(16),
+                2 => {
+                    let mut rgba = vec![255; 64];
+                    for pixel in [5, 6, 9, 10] {
+                        rgba[pixel * 4..pixel * 4 + 4].copy_from_slice(&[0, 0, 255, 255]);
+                    }
+                    rgba
+                }
+                3 => [0, 255, 0, 255].repeat(16),
+                _ => unreachable!(),
+            };
+            let mut expected =
+                yuv::YuvPlanarImageMut::alloc(4, 4, yuv::YuvChromaSubsampling::Yuv420);
+            yuv::rgba_to_yuv420(
+                &mut expected,
+                &rgba,
+                16,
+                yuv::YuvRange::Limited,
+                yuv::YuvStandardMatrix::Bt709,
+                yuv::YuvConversionMode::Balanced,
+            )?;
+            assert_eq!(
+                writer.encoder.planes.y_plane.borrow(),
+                expected.y_plane.borrow()
+            );
+            assert_eq!(
+                writer.encoder.planes.u_plane.borrow(),
+                expected.u_plane.borrow()
+            );
+            assert_eq!(
+                writer.encoder.planes.v_plane.borrow(),
+                expected.v_plane.borrow()
+            );
+        }
+        assert_eq!(
+            writer
+                .finish(started + Duration::from_millis(400))?
+                .encoded_frames,
+            4
+        );
+        Ok(())
+    }
 
     #[test]
     fn vfr_static_tail_and_odd_canvas_are_preserved() -> Result<()> {
