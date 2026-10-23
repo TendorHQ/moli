@@ -238,3 +238,47 @@ fn shared_font_faces_have_independent_selection_order_in_each_document() {
         .unwrap();
     assert_eq!(widths(&mut vm), "80,160");
 }
+
+#[test]
+fn duplicate_css_font_declarations_keep_registration_until_last_member_leaves() {
+    let (_, wide) = order_font_data();
+    for removed in [0, 1] {
+        let mut vm = order_vm();
+        vm.eval(&format!(
+            r#"
+            const style=document.createElement('style');
+            const rule='@font-face{{font-family:OrderFace;src:url(data:font/ttf;base64,{wide})}}';
+            style.textContent=rule+rule;document.head.append(style);
+            globalThis.originalFaces=[...document.fonts];
+            document.fonts.load('40px OrderFace','AAAA');
+        "#
+        ))
+        .unwrap();
+        assert_eq!(vm.eval("originalFaces.length===2&&originalFaces[0]!==originalFaces[1]&&originalFaces.every(face=>face.status==='loaded')").unwrap(), "true");
+        assert_eq!(
+            vm.eval("String(probe.getBoundingClientRect().width)")
+                .unwrap(),
+            "160"
+        );
+        assert_eq!(
+            vm.eval(&format!(
+                "document.styleSheets[0].deleteRule({removed});document.fonts.size"
+            ))
+            .unwrap(),
+            "1"
+        );
+        assert_eq!(
+            vm.eval("String(probe.getBoundingClientRect().width)")
+                .unwrap(),
+            "160",
+            "deleting either duplicate must preserve the remaining registration"
+        );
+        assert_eq!(vm.document_web_font_counts_for_test().2, 1);
+        assert_eq!(
+            vm.eval("document.styleSheets[0].deleteRule(0);document.fonts.size")
+                .unwrap(),
+            "0"
+        );
+        assert_eq!(vm.document_web_font_counts_for_test().2, 0);
+    }
+}

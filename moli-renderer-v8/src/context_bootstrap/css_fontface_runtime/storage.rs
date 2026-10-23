@@ -318,13 +318,31 @@ fn sync_font_face_set_owners<'s>(
     previous: v8::Local<'s, v8::Array>,
     current: v8::Local<'s, v8::Array>,
 ) {
+    // Distinct CSS-connected wrappers can share a resource slot. Removing one
+    // membership must not unregister the resource still used by another face.
+    let mut retained_slots = std::collections::HashSet::new();
+    for index in 0..current.length() {
+        let Some(face) = current
+            .get_index(scope, index)
+            .and_then(|value| v8::Local::<v8::Object>::try_from(value).ok())
+        else {
+            continue;
+        };
+        if let Some(load) = super::state::get(scope, face) {
+            retained_slots.insert(load.borrow().slot().to_owned());
+        }
+    }
     for index in 0..previous.length() {
         let Some(face) = previous.get_index(scope, index) else {
             continue;
         };
         if !array_contains_value(scope, current, face) {
             if let Ok(face) = v8::Local::<v8::Object>::try_from(face) {
-                super::loading::sync_registration(scope, owner, face, false);
+                let retained = super::state::get(scope, face)
+                    .is_some_and(|load| retained_slots.contains(load.borrow().slot()));
+                if !retained {
+                    super::loading::sync_registration(scope, owner, face, false);
+                }
             }
             remove_font_face_set_owner(scope, face, owner);
         }
