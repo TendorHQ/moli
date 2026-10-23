@@ -2630,10 +2630,12 @@ dependencies = [
  "moli-protocol-server",
  "moli-robots",
  "moli-test-support",
+ "mp4",
  "parking_lot",
  "regex",
  "serde_json",
  "strip-ansi-escapes",
+ "tempfile",
  "tikv-jemalloc-sys",
  "tikv-jemallocator",
  "tokio",
@@ -3203,6 +3205,7 @@ name = "moli-process-signal"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "tokio",
 ]
 
 [[package]]
