@@ -1,4 +1,5 @@
 mod beforeinput_target_validation;
+
 mod child_document_web_fonts;
 mod credential_container;
 mod credential_json_options;
@@ -7,6 +8,7 @@ mod current_pass_css_fonts;
 mod document_encodings;
 mod message_port_transfer;
 mod picture_in_picture_interfaces;
+mod touch_native_receivers;
 mod visual_viewport_receiver;
 mod writable_stream_native_receivers;
 use super::post_parse::dynamic_script_execute_is_runnable_before_dom_content_loaded;

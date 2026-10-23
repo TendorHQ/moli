@@ -29,7 +29,7 @@ const TOUCH_EVENT_CTRL_KEY_SLOT: &str = "__lmTouchEventCtrlKey";
 const TOUCH_EVENT_SHIFT_KEY_SLOT: &str = "__lmTouchEventShiftKey";
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::Touch)]
+#[webapi(interface = web_api_interfaces::Touch, receiver)]
 struct TouchPrototypeDeclaration {
     #[webapi(accessor_property, getter = touch_getter, data = callback_data_index_value(scope, 0), enumerable)]
     identifier: (),
