@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from moli_cdp_smoke.assertions import SmokeError
 from moli_cdp_smoke.groups.target_lifecycle import (
-    LifecycleProbe, assert_resources_bounded, process_resources,
+    LifecycleProbe, assert_resources_bounded, process_resources, wait_for_resources_bounded,
 )
 
 
@@ -57,3 +57,38 @@ class TargetLifecycleTests(unittest.TestCase):
              patch("moli_cdp_smoke.groups.target_lifecycle.Path.iterdir", side_effect=FileNotFoundError):
             with self.assertRaises(FileNotFoundError):
                 process_resources(1234)
+
+
+class ResourceReclamationTests(unittest.IsolatedAsyncioTestCase):
+    baseline = {"fds": 24, "eventpoll": 7, "eventfd": 4, "threads": 20}
+
+    async def poll_twice(self, predicate, label):
+        for _ in range(2):
+            if predicate():
+                return
+        raise SmokeError(f"timed out waiting for {label}")
+
+    async def test_target_destruction_can_precede_io_reclamation(self) -> None:
+        pending = dict(self.baseline, fds=40)
+        with patch("moli_cdp_smoke.groups.target_lifecycle.process_resources",
+                   side_effect=[pending, self.baseline]), \
+             patch("moli_cdp_smoke.groups.target_lifecycle.wait_until", self.poll_twice):
+            self.assertEqual(await wait_for_resources_bounded(1234, None, self.baseline), self.baseline)
+
+    async def test_persistent_leaks_still_fail_the_original_fixed_budgets(self) -> None:
+        for key, value in (("fds", 224), ("eventpoll", 10), ("eventfd", 7), ("threads", 23)):
+            with self.subTest(key=key), \
+                 patch("moli_cdp_smoke.groups.target_lifecycle.process_resources",
+                       return_value=dict(self.baseline, **{key: value})), \
+                 patch("moli_cdp_smoke.groups.target_lifecycle.wait_until", self.poll_twice):
+                with self.assertRaisesRegex(SmokeError, f"target teardown leaked {key}") as error:
+                    await wait_for_resources_bounded(1234, None, self.baseline)
+                self.assertIn("timed out", str(error.exception.__cause__))
+
+    async def test_missing_or_inaccessible_managed_process_is_not_retried(self) -> None:
+        for error in (FileNotFoundError, PermissionError):
+            with self.subTest(error=error), \
+                 patch("moli_cdp_smoke.groups.target_lifecycle.process_resources", side_effect=error) as sample:
+                with self.assertRaises(error):
+                    await wait_for_resources_bounded(1234, None, self.baseline)
+                sample.assert_called_once_with(1234, None)

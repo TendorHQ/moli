@@ -5,14 +5,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ..assertions import SmokeError, assert_equal, record
+from ..assertions import SmokeError, assert_equal, record, wait_until
 from ..raw_cdp import RawCdpClient, connect_raw_cdp
 from ..serve import BrowserProcess
 
 
-def process_resources(pid: int, profile_dir: str | None = None) -> dict[str, int] | None:
-    if not sys.platform.startswith("linux"):
-        return None
+def process_descriptors(pid: int) -> dict[int, str]:
     # Inspect only the managed server, not this client or other smoke workers.
     # A missing/inaccessible managed process is a failure, not a skipped check.
     descriptors: dict[int, str] = {}
@@ -22,6 +20,13 @@ def process_resources(pid: int, profile_dir: str | None = None) -> dict[str, int
         except FileNotFoundError:
             # A transient socket can close between directory listing/readlink.
             continue
+    return descriptors
+
+
+def process_resources(pid: int, profile_dir: str | None = None) -> dict[str, int] | None:
+    if not sys.platform.startswith("linux"):
+        return None
+    descriptors = process_descriptors(pid)
     return {
         "fds": len(descriptors),
         "profileFileFds": sum(value.startswith(profile_dir.rstrip("/") + "/")
@@ -46,6 +51,37 @@ def assert_resources_bounded(baseline: dict[str, int], current: dict[str, int]) 
             observed -= current.get("profileFileFds", 0)
         if observed > initial + allowance:
             raise SmokeError(f"target teardown leaked {key}: baseline={baseline}, current={current}")
+
+
+async def wait_for_resources_bounded(
+    pid: int, profile_dir: str | None, baseline: dict[str, int],
+) -> dict[str, int]:
+    # Target.targetDestroyed retires the target registry entry. Its IO resources
+    # can still be closing asynchronously; require reclamation within the same
+    # ten-second bound used by target commands, without relaxing any budget.
+    current: dict[str, int] | None = None
+    violation: SmokeError | None = None
+
+    def reclaimed() -> bool:
+        nonlocal current, violation
+        current = process_resources(pid, profile_dir)
+        if current is None:
+            raise RuntimeError("managed process resource sampling became unavailable")
+        try:
+            assert_resources_bounded(baseline, current)
+        except SmokeError as error:
+            violation = error
+            return False
+        return True
+
+    try:
+        await wait_until(reclaimed, "target IO resource reclamation")
+    except SmokeError as error:
+        if violation is not None:
+            raise violation from error
+        raise
+    assert current is not None
+    return current
 
 
 class LifecycleProbe:
@@ -148,6 +184,7 @@ async def run_target_lifecycle_group(
         baseline = process_resources(pid, profile_dir) if pid is not None else None
         record(results, "target_lifecycle_baseline", {
             "pid": pid, "resources": baseline,
+            "descriptors": process_descriptors(pid) if baseline is not None else None,
             "fdBudget": "non-profile-fds" if profile_dir else "all-fds",
             "fdSampling": ("external-endpoint-without-owned-pid" if pid is None else
                            "linux-proc" if baseline is not None else "unavailable-on-this-platform"),
@@ -165,7 +202,25 @@ async def run_target_lifecycle_group(
                     print(f"[moli-cdp-smoke] target-lifecycle {mode} {index + 1}/{count} {current}",
                           file=sys.stderr, flush=True)
                     if baseline is not None and current is not None:
-                        assert_resources_bounded(baseline, current)
+                        try:
+                            assert_resources_bounded(baseline, current)
+                        except SmokeError:
+                            record(results, "target_lifecycle_reclaim_pending", {
+                                "mode": mode, "closed": index + 1, "resources": current,
+                                "descriptors": process_descriptors(pid),
+                            })
+                            try:
+                                current = await wait_for_resources_bounded(pid, profile_dir, baseline)
+                            except SmokeError:
+                                record(results, "target_lifecycle_reclaim_failed", {
+                                    "mode": mode, "closed": index + 1,
+                                    "resources": process_resources(pid, profile_dir),
+                                    "descriptors": process_descriptors(pid),
+                                })
+                                raise
+                            record(results, "target_lifecycle_reclaimed", {
+                                "mode": mode, "closed": index + 1, "resources": current,
+                            })
 
             await probe.navigate(f"{fixture}/plain?after-{mode}-{count}")
             sentinel = await probe.call("Runtime.evaluate", {
