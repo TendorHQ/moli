@@ -386,7 +386,7 @@ impl DocumentRuntime {
                         ?kind,
                         owner = ?binding.owner(),
                         settled = settlement.settled(),
-                        %error,
+                        error = %format_args!("{error:#}"),
                         "stylesheet subresource failed before network scheduling"
                     );
                 }

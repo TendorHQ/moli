@@ -9,6 +9,7 @@ use crate::{
     native_bridge::{JsContextHost, OwnerDispatchScope},
     types::SubresourceRequestInitiatorType,
 };
+use anyhow::{Context, Result, ensure};
 
 #[derive(Debug)]
 pub(crate) enum StylesheetSubresourceFetchStart {
@@ -27,37 +28,38 @@ pub(crate) fn start_stylesheet_subresource_fetch(
     binding: StylesheetSubresourceLoadDelayBinding,
     resource: StylesheetLoadBlockingResource,
     css_image: Option<crate::native_bridge::CssImageResourceRequestIdentity>,
-) -> Result<StylesheetSubresourceFetchStart, String> {
-    if !host.stylesheet_subresource_load_delay_is_current(binding) {
-        return Err("stylesheet subresource document owner is stale".to_owned());
-    }
+) -> Result<StylesheetSubresourceFetchStart> {
+    ensure!(
+        host.stylesheet_subresource_load_delay_is_current(binding),
+        "stylesheet subresource document owner is stale"
+    );
     let owner = binding
         .child_handle()
         .map_or(OwnerDispatchScope::Top, OwnerDispatchScope::Child);
     let resource_loader = host
         .document_resource_loader_for_owner(binding.owner())
-        .ok_or_else(|| "stylesheet Document resource authority is unavailable".to_owned())?;
+        .context("stylesheet Document resource authority is unavailable")?;
     let environment = host
         .subresource_request_environment(&resource_loader, owner)
-        .ok_or_else(|| "stylesheet Document request environment is unavailable".to_owned())?;
+        .context("stylesheet Document request environment is unavailable")?;
     let resource_kind = resource.kind();
-    if css_image.is_some() && resource_kind != StylesheetLoadBlockingResourceKind::Image {
-        return Err("a stylesheet CSS image identity was bound to a non-image resource".to_owned());
-    }
+    ensure!(
+        css_image.is_none() || resource_kind == StylesheetLoadBlockingResourceKind::Image,
+        "a stylesheet CSS image identity was bound to a non-image resource"
+    );
     let is_web_font = resource_kind == StylesheetLoadBlockingResourceKind::Font;
     if is_web_font {
-        let web_font = resource.web_font().ok_or_else(|| {
-            "Document stylesheet font is missing parsed @font-face metadata".to_owned()
-        })?;
-        if web_font.request_id().is_none() {
-            return Err(
-                "Document stylesheet font is missing its admitted request identity".to_owned(),
-            );
-        }
+        let web_font = resource
+            .web_font()
+            .context("Document stylesheet font is missing parsed @font-face metadata")?;
+        ensure!(
+            web_font.request_id().is_some(),
+            "Document stylesheet font is missing its admitted request identity"
+        );
     }
     let (request_url, web_font) = resource.into_parts();
-    let request_url = request_url
-        .ok_or_else(|| "admitted stylesheet subresource is missing its network URL".to_owned())?;
+    let request_url =
+        request_url.context("admitted stylesheet subresource is missing its network URL")?;
     let options = match resource_kind {
         StylesheetLoadBlockingResourceKind::Image => SubresourceFetchOptions::CSS_IMAGE,
         StylesheetLoadBlockingResourceKind::Font => SubresourceFetchOptions::FONT,
@@ -150,21 +152,21 @@ pub(crate) fn start_stylesheet_subresource_fetch(
         request_url,
         options,
     )?;
-    let Some(internal_id) = host.record_async_stylesheet_subresource_fetch(
-        v8::Global::new(scope, scope.get_current_context()),
-        binding,
-        owner,
-        prepared.cancel_handle.clone(),
-        options.credentials_mode,
-        options.request_mode,
-        prepared.network_partition_key.clone(),
-        prepared.network_context.policy_context,
-        web_font,
-        css_image,
-        prepared.pending_info.clone(),
-    ) else {
-        return Err("stylesheet subresource owner changed before request binding".to_owned());
-    };
+    let internal_id = host
+        .record_async_stylesheet_subresource_fetch(
+            v8::Global::new(scope, scope.get_current_context()),
+            binding,
+            owner,
+            prepared.cancel_handle.clone(),
+            options.credentials_mode,
+            options.request_mode,
+            prepared.network_partition_key.clone(),
+            prepared.network_context.policy_context,
+            web_font,
+            css_image,
+            prepared.pending_info.clone(),
+        )
+        .context("stylesheet subresource owner changed before request binding")?;
 
     prepared.dispatch(
         host,

@@ -4,6 +4,7 @@ use crate::{
     native_bridge::{JsContextHost, WindowExecutionContextIdentity},
     types::{SubresourceRequestInitiatorType, SubresourceResourceType},
 };
+use anyhow::{Context, Result, anyhow, ensure};
 
 pub(crate) enum FontFaceFetchStart {
     Local(Vec<u8>),
@@ -56,41 +57,42 @@ pub(crate) fn start_font_face_fetch(
     face: v8::Local<'_, v8::Object>,
     request_context: Option<WindowExecutionContextIdentity>,
     source: &str,
-) -> Result<FontFaceFetchStart, String> {
+) -> Result<FontFaceFetchStart> {
     let host_ptr = crate::util::context_host_ptr_from_global_bridge(scope)
-        .ok_or_else(|| "FontFace URL loader is unavailable in this realm".to_owned())?;
+        .context("FontFace URL loader is unavailable in this realm")?;
     // SAFETY: the current live realm owns the bridge. No author callback runs
     // while the host is used except its existing CSP notification boundary.
     let host: &mut JsContextHost = unsafe { &mut *host_ptr };
     let identity = request_context
         .filter(|identity| host.window_execution_context_identity_is_current(*identity))
-        .ok_or_else(|| "FontFace creation Window is no longer available".to_owned())?;
+        .context("FontFace creation Window is no longer available")?;
     let owner = identity.dispatch_scope();
     let resource_loader = host
         .document_resource_loader_for_dispatch_scope(owner)
-        .ok_or_else(|| "Font request has no live document resource loader".to_owned())?;
+        .context("Font request has no live document resource loader")?;
     let environment = host
         .subresource_request_environment(&resource_loader, owner)
-        .ok_or_else(|| "Font request has no live document request environment".to_owned())?;
+        .context("Font request has no live document request environment")?;
     let request_url = environment
         .base_url
         .join(source)
-        .map_err(|e| e.to_string())?;
-    if !host.font_request_allowed_by_csp(
-        scope,
-        owner,
-        &environment.document_url,
-        &request_url,
-        crate::content_security_policy::ContentSecurityPolicyRedirectStatus::NoRedirect,
-    ) {
-        return Err("Font request blocked by Content Security Policy".into());
-    }
+        .context("failed to resolve FontFace source URL")?;
+    ensure!(
+        host.font_request_allowed_by_csp(
+            scope,
+            owner,
+            &environment.document_url,
+            &request_url,
+            crate::content_security_policy::ContentSecurityPolicyRedirectStatus::NoRedirect,
+        ),
+        "Font request blocked by Content Security Policy"
+    );
     if let Some(response) = local_url_response(&request_url) {
         let response: crate::types::NavigationResponse = response.into();
         let result = if (200..300).contains(&response.status) {
             Ok(FontFaceFetchStart::Local(response.body_bytes().to_vec()))
         } else {
-            Err("Font request failed".to_owned())
+            Err(anyhow!("Font request failed"))
         };
         host.record_get_subresource_network_result_with_initiator(
             environment.frame_id,

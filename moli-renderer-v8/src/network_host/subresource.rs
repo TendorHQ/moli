@@ -11,6 +11,7 @@ use crate::{
         PendingSubresourceFetchInfo, SubresourceResourceType,
     },
 };
+use anyhow::{Context, Result};
 use moli_fetch::{
     BrowserRequestMetadata, FetchCancelHandle, RequestCredentialsMode, RequestMode,
     RequestRedirectMode, RequestResourceType,
@@ -69,7 +70,7 @@ impl PreparedSubresourceFetch {
         environment: SubresourceRequestEnvironment,
         request_url: url::Url,
         options: SubresourceFetchOptions,
-    ) -> Result<Self, String> {
+    ) -> Result<Self> {
         let SubresourceRequestEnvironment {
             document_url,
             request_origin,
@@ -87,7 +88,7 @@ impl PreparedSubresourceFetch {
             options.credentials_mode,
         );
         let request = Request::new("GET", request_url.as_str(), None, Vec::new())
-            .map_err(|error| error.to_string())?
+            .context("failed to create subresource GET request")?
             .with_initiator_url(&document_url)
             .with_request_origin(request_origin.clone())
             .with_resource_type(options.request_resource_type)
