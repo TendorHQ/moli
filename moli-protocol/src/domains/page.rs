@@ -1081,6 +1081,7 @@ impl CdpConnection {
             return PageScreencastCaptureStart::Stale;
         };
         let request = RendererCaptureScreencastFrameRequest {
+            capture_video: false,
             base_background_color: self.default_background_color_for_owner(&owner_scope),
             format: match config.format() {
                 PageScreencastFormat::Png => RendererScreenshotFormat::Png,
