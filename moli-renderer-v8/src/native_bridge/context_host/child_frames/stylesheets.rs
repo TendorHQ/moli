@@ -259,7 +259,7 @@ impl JsContextHost {
                     tracing::debug!(
                         child_handle = ?completion.child_handle,
                         owner = ?completion.owner,
-                        url = %resource.request_url(),
+                        url = ?resource.request_url(),
                         kind = ?resource.kind(),
                         "skipping stylesheet subresource for stale child document owner"
                     );

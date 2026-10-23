@@ -322,3 +322,31 @@ fn css_connected_font_face_add_is_noop_and_cannot_outlive_its_rule() {
     assert_eq!(vm.eval("document.fonts.has(face)").unwrap(), "false");
     assert_eq!(vm.document_web_font_counts_for_test().2, 0);
 }
+
+#[tokio::test]
+async fn local_only_css_font_is_admitted_without_js_projection() {
+    use crate::native_bridge::document::take_owner_font_face_projection_count_for_test;
+    let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).unwrap();
+    loader.set_optional_resource_fetch_mask(crate::protocol_types::OptionalResourceFetchMask::FONT);
+    let (mut vm, _completions) = new_parsed_test_vm_with_loader_and_resource_completion_queue(
+        "https://local-only-font.test/",
+        "<!doctype html><html><head></head><body>local font</body></html>",
+        &loader,
+    );
+    vm.set_layout_policy(moli_page_types::LayoutPolicy::OnDemand);
+    take_owner_font_face_projection_count_for_test();
+    vm.eval(r#"
+        Object.defineProperty(document, 'fonts', {get() {throw new Error('unexpected document.fonts access')}});
+        const style=document.createElement('style');
+        style.textContent='@font-face{font-family:LocalOnly;src:local("MoliDefinitelyNotAFont-LocalOnly-92741")}';
+        document.head.append(style);
+    "#).unwrap();
+    vm.reconcile_document_web_fonts_for_layout();
+    // The local lookup reaches a synchronous error, with no URL request and
+    // no registration. Its native load still belongs to the declaration.
+    assert_eq!(vm.document_web_font_counts_for_test(), (1, 0, 0));
+    assert_eq!(take_owner_font_face_projection_count_for_test(), 0);
+    vm.eval("style.remove()").unwrap();
+    vm.reconcile_document_web_fonts_for_layout();
+    assert_eq!(vm.document_web_font_counts_for_test(), (0, 0, 0));
+}

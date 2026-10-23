@@ -17,7 +17,7 @@ pub(crate) enum StylesheetLoadBlockingResourceKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct StylesheetLoadBlockingResource {
-    request_url: Url,
+    request_url: Option<Url>,
     kind: StylesheetLoadBlockingResourceKind,
     web_font: Option<StylesheetWebFont>,
 }
@@ -25,7 +25,7 @@ pub(crate) struct StylesheetLoadBlockingResource {
 impl StylesheetLoadBlockingResource {
     fn new(request_url: Url, kind: StylesheetLoadBlockingResourceKind) -> Self {
         Self {
-            request_url,
+            request_url: Some(request_url),
             kind,
             web_font: None,
         }
@@ -35,7 +35,7 @@ impl StylesheetLoadBlockingResource {
         Self::new(request_url, StylesheetLoadBlockingResourceKind::Image)
     }
 
-    pub(crate) fn font(request_url: Url, web_font: StylesheetWebFont) -> Self {
+    pub(crate) fn font(request_url: Option<Url>, web_font: StylesheetWebFont) -> Self {
         Self {
             request_url,
             kind: StylesheetLoadBlockingResourceKind::Font,
@@ -43,16 +43,16 @@ impl StylesheetLoadBlockingResource {
         }
     }
 
-    pub(crate) fn request_url(&self) -> &Url {
-        &self.request_url
+    pub(crate) fn request_url(&self) -> Option<&Url> {
+        self.request_url.as_ref()
     }
 
     pub(crate) fn with_request_url(mut self, url: Url) -> Self {
-        self.request_url = url;
+        self.request_url = Some(url);
         self
     }
 
-    pub(crate) fn into_parts(self) -> (Url, Option<StylesheetWebFont>) {
+    pub(crate) fn into_parts(self) -> (Option<Url>, Option<StylesheetWebFont>) {
         (self.request_url, self.web_font)
     }
 
@@ -192,10 +192,15 @@ pub(crate) fn stylesheet_web_font_resource_with_resolved_sources(
     css_text: &str,
     sources: Vec<moli_css_parse::CssFontSource>,
 ) -> Option<StylesheetLoadBlockingResource> {
+    if sources.is_empty() {
+        return None;
+    }
+    // A font declaration can resolve entirely through local() without ever
+    // producing a URL. Admission selects a network source only if needed.
     let request_url = sources.iter().find_map(|source| match source {
         moli_css_parse::CssFontSource::Url(url) => Url::parse(url).ok(),
         moli_css_parse::CssFontSource::Local(_) => None,
-    })?;
+    });
     let descriptor = parsed_web_font_face(css_text)?;
     Some(stylesheet_web_font_resource_with_descriptor(
         css_text,
@@ -207,14 +212,14 @@ pub(crate) fn stylesheet_web_font_resource_with_resolved_sources(
 
 fn stylesheet_web_font_resource_with_descriptor(
     css_text: &str,
-    request_url: Url,
+    request_url: Option<Url>,
     descriptor: ParsedWebFontFace,
     sources: Vec<moli_css_parse::CssFontSource>,
 ) -> StylesheetLoadBlockingResource {
-    // The slot describes a declaration, not a layout generation. Two
-    // projections of the same parsed rule (the import response and the later
-    // retained style world) must converge on one slot. Conversely, identical
-    // relative declarations parsed under different stylesheet bases must not
+    // The slot identifies a shareable resource, not a layout generation or
+    // an individual declaration. The import response and retained style world
+    // must converge on one slot. Identical relative declarations parsed under
+    // different stylesheet bases must not
     // alias, so identity includes every resolved fallback, its kind and order.
     // Length-prefix strings so source boundaries cannot collide.
     let mut slot_material = Vec::new();
@@ -334,6 +339,26 @@ mod tests {
     }
 
     #[test]
+    fn local_only_declarations_do_not_require_a_network_url() {
+        let resources = stylesheet_load_blocking_font_resources(
+            r#"@font-face { font-family: LocalOnly; src: local("First"), local("Second"); }"#,
+            &base_url(),
+            OptionalResourceFetchMask::FONT,
+        );
+        assert_eq!(resources.len(), 1);
+        assert_eq!(resources[0].request_url(), None);
+        let font = resources[0].web_font().expect("local-only declaration");
+        assert_eq!(font.face().family_name(), "LocalOnly");
+        assert_eq!(
+            font.sources(),
+            [
+                moli_css_parse::CssFontSource::Local("First".into()),
+                moli_css_parse::CssFontSource::Local("Second".into()),
+            ]
+        );
+    }
+
+    #[test]
     fn selects_one_supported_source_per_font_face_and_keeps_descriptors() {
         let resources = stylesheet_load_blocking_font_resources(
             r#"
@@ -370,7 +395,7 @@ mod tests {
         assert_eq!(
             resources
                 .iter()
-                .map(|resource| resource.request_url().to_string())
+                .map(|resource| resource.request_url().expect("URL source").to_string())
                 .collect::<Vec<_>>(),
             vec![
                 "https://example.test/assets/fonts/demo.woff2",
@@ -453,8 +478,8 @@ mod tests {
         )
         .expect("the retained native rule should project its resolved font");
 
-        assert_eq!(response_projection.request_url(), &resolved);
-        assert_eq!(native_projection.request_url(), &resolved);
+        assert_eq!(response_projection.request_url(), Some(&resolved));
+        assert_eq!(native_projection.request_url(), Some(&resolved));
         assert_eq!(
             response_projection
                 .web_font()
@@ -547,7 +572,12 @@ mod tests {
         let selected = |mask| {
             stylesheet_load_blocking_font_resources(css, &base_url(), mask)
                 .into_iter()
-                .map(|resource| (resource.kind(), resource.request_url().to_string()))
+                .map(|resource| {
+                    (
+                        resource.kind(),
+                        resource.request_url().expect("URL source").to_string(),
+                    )
+                })
                 .collect::<Vec<_>>()
         };
 
@@ -596,7 +626,7 @@ mod tests {
         assert_eq!(
             resources
                 .iter()
-                .map(|resource| resource.request_url().to_string())
+                .map(|resource| resource.request_url().expect("URL source").to_string())
                 .collect::<Vec<_>>(),
             vec![
                 "https://example.test/assets/fonts/variable.woff2",

@@ -182,7 +182,7 @@ impl DocumentWebFontState {
         let next = load.borrow_mut().next_url(services);
         if let Some(url) = next {
             let url = url::Url::parse(&url).expect("CSS font fallback retains its parser URL");
-            let resource = StylesheetLoadBlockingResource::font(url, request);
+            let resource = StylesheetLoadBlockingResource::font(Some(url), request);
             return DocumentWebFontCompletion::Retry(Box::new(self.bind_request(resource, load)));
         }
         let active = self
@@ -324,7 +324,7 @@ mod tests {
             panic!("invalid first source should advance to its fallback");
         };
         assert_eq!(
-            second.request_url().as_str(),
+            second.request_url().expect("URL fallback").as_str(),
             "https://example.test/second.woff2"
         );
         assert!(matches!(

@@ -56,6 +56,8 @@ pub(crate) fn start_stylesheet_subresource_fetch(
         }
     }
     let (request_url, web_font) = resource.into_parts();
+    let request_url = request_url
+        .ok_or_else(|| "admitted stylesheet subresource is missing its network URL".to_owned())?;
     let options = match resource_kind {
         StylesheetLoadBlockingResourceKind::Image => SubresourceFetchOptions::CSS_IMAGE,
         StylesheetLoadBlockingResourceKind::Font => SubresourceFetchOptions::FONT,

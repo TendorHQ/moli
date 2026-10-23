@@ -1053,7 +1053,10 @@ style.textContent = '@font-face { font-family: First; src: url(font-a.woff2); }'
     .expect("the first observation should publish a resource manifest");
     assert_eq!(first.web_fonts().len(), 1);
     assert_eq!(
-        first.web_fonts()[0].request_url().as_str(),
+        first.web_fonts()[0]
+            .request_url()
+            .expect("URL-backed font fixture")
+            .as_str(),
         "https://style-resource-manifest.test/font-a.woff2"
     );
     let update_materializations_after_first = vm
@@ -1088,7 +1091,10 @@ style.textContent = '@font-face { font-family: First; src: url(font-a.woff2); }'
     assert_ne!(revised.generation(), first.generation());
     assert_eq!(revised.web_fonts().len(), 1);
     assert_eq!(
-        revised.web_fonts()[0].request_url().as_str(),
+        revised.web_fonts()[0]
+            .request_url()
+            .expect("URL-backed font fixture")
+            .as_str(),
         "https://style-resource-manifest.test/font-b.woff2"
     );
     assert_eq!(

@@ -235,7 +235,7 @@ impl DocumentRuntime {
                 let Some(binding) = host.accept_current_main_stylesheet_subresource_load_delay()
                 else {
                     tracing::debug!(
-                        url = %resource.request_url(),
+                        url = ?resource.request_url(),
                         kind = ?resource.kind(),
                         "skipping stylesheet subresource for stale main document owner"
                     );
@@ -314,7 +314,11 @@ impl DocumentRuntime {
                 crate::css_resource_urls::StylesheetLoadBlockingResourceKind::Image
                     if retain_css_images =>
                 {
-                    let resolved_url = resource.request_url().as_str().to_owned();
+                    let resolved_url = resource
+                        .request_url()
+                        .expect("CSS images have a URL")
+                        .as_str()
+                        .to_owned();
                     match host.admit_stylesheet_css_image(binding, resolved_url) {
                         crate::native_bridge::CssImageResourceAdmission::Fetch(identity) => {
                             admitted.push((binding, resource, Some(identity)));
@@ -332,7 +336,7 @@ impl DocumentRuntime {
         }
         let mut admitted = std::collections::VecDeque::from(admitted);
         while let Some((binding, resource, css_image)) = admitted.pop_front() {
-            let request_url = resource.request_url().clone();
+            let request_url = resource.request_url().cloned();
             let kind = resource.kind();
             let failed_css_image = css_image.clone();
             let failed_web_font = (kind
@@ -378,7 +382,7 @@ impl DocumentRuntime {
                         admitted.push_back((binding, resource, None));
                     }
                     tracing::warn!(
-                        url = %request_url,
+                        url = ?request_url,
                         ?kind,
                         owner = ?binding.owner(),
                         settled = settlement.settled(),

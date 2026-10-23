@@ -2615,7 +2615,7 @@ impl ScriptVm {
                             host.accept_current_main_stylesheet_subresource_load_delay()
                         else {
                             tracing::debug!(
-                                url = %resource.request_url(),
+                                url = ?resource.request_url(),
                                 kind = ?resource.kind(),
                                 "skipping stylesheet subresource for stale main document owner"
                             );
@@ -2851,7 +2851,10 @@ mod tests {
 
         assert_eq!(resources.len(), 1);
         assert_eq!(
-            resources[0].request_url().as_str(),
+            resources[0]
+                .request_url()
+                .expect("URL-backed font fixture")
+                .as_str(),
             "https://example.test/assets/fonts/demo.woff2"
         );
         assert_eq!(
