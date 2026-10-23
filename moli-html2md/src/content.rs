@@ -1,5 +1,4 @@
 use crate::{Dom, NodeKind};
-use std::borrow::Cow;
 
 pub(crate) fn fallback_text<D: Dom + ?Sized>(
     dom: &D,
@@ -85,13 +84,13 @@ fn excluded_from_naming<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> bool {
         || primary_role(dom, node).is_some_and(|role| role_matches(role, PRESENTATIONAL_ROLES))
 }
 
-pub(crate) fn image_label<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Cow<'_, str> {
+pub(crate) fn image_label<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> &str {
     let alt = dom.attribute(node, "alt");
     if let Some(alt) = alt.filter(|alt| !alt.is_empty()) {
-        return Cow::Borrowed(alt);
+        return alt;
     }
     if excluded_from_naming(dom, node) {
-        return Cow::Borrowed("");
+        return "";
     }
     ["aria-label", "title"]
         .into_iter()
@@ -101,6 +100,5 @@ pub(crate) fn image_label<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Cow<'_, 
                 .map(str::trim)
                 .filter(|v| !v.is_empty())
         })
-        .map(Cow::Borrowed)
-        .unwrap_or(Cow::Borrowed(""))
+        .unwrap_or_default()
 }

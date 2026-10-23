@@ -267,37 +267,29 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
                 let alt = crate::content::image_label(self.dom, node);
                 let title = self.dom.attribute(node, "title");
                 if let Some(src) = crate::media::source(self.dom, node) {
-                    self.writer().image(&alt, &src, title);
+                    self.writer().image(alt, src, title);
                 } else {
                     // A failed or absent resource must not erase its textual
                     // alternative, especially when it is a link's only label.
-                    self.writer().text(&alt);
+                    self.writer().text(alt);
                 }
                 return;
             }
             "input" => {
                 if let Some(value) = crate::form::input_text(self.dom, node) {
-                    self.writer().text(&value);
+                    self.writer().text(value);
                 }
                 return;
             }
             "textarea" => {
-                if let Some(value) = crate::form::textarea_text(self.dom, node) {
-                    self.writer().text(&value);
+                if let Some(value) = self.dom.control_value(node) {
+                    self.writer().text(value);
                 } else {
                     self.children(node, depth + 1);
                 }
                 return;
             }
-            "iframe" | "video" | "audio" => {
-                if self.media(node, tag, depth) {
-                    return;
-                }
-                if is_block(tag) {
-                    self.writer().boundary(2);
-                    self.tasks.push(Task::Boundary);
-                }
-            }
+            "iframe" | "video" | "audio" if self.media(node, tag, depth) => return,
             "code" | "pre" => {
                 self.raw.clear();
                 let end = if tag == "pre" {
@@ -371,12 +363,12 @@ impl<'a, D: Dom + ?Sized> Machine<'a, D> {
         } else {
             self.writer().text(" ");
         }
+        let label = crate::media::label(self.dom, node, tag);
         if let Some(poster) = poster {
-            let poster_label = crate::media::poster_label(self.dom, node);
-            self.writer().image(&poster_label, poster, None);
+            self.writer()
+                .image(&format!("{label} poster"), poster, None);
             self.writer().text(" ");
         }
-        let label = crate::media::label(self.dom, node, tag);
         let has_source = !urls.is_empty();
         for href in urls {
             self.serial += 1;

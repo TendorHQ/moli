@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use crate::{Dom, NodeKind};
 
 /// Private lazy-loading conventions, used only when standard sources are absent.
@@ -7,38 +5,29 @@ const LAZY_SOURCE_ATTRIBUTES: [&str; 3] = ["data-src", "data-lazy-src", "data-or
 
 /// Frozen DOMs can still carry lazy-loading placeholders. These conventional
 /// attributes declare the resource the page intends to load, not the spacer.
-pub(crate) fn source<'a, D: Dom + ?Sized>(dom: &'a D, node: D::NodeId) -> Option<Cow<'a, str>> {
+pub(crate) fn source<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Option<&str> {
     // A responsive declaration determines the rendered resource even when a
     // fallback `src` is present. Private lazy-load attributes remain fallback
     // inputs and never override a valid standard declaration.
-    if let Some(value) = dom
-        .attribute(node, "srcset")
-        .and_then(|value| largest_srcset_candidate(value, true))
-    {
-        return Some(value);
-    }
-    let src = direct_attribute(dom, node, "src", true);
-    if src.is_some() {
-        return src.map(Cow::Borrowed);
-    }
-    if let Some(value) = dom
-        .attribute(node, "data-srcset")
-        .and_then(|value| largest_srcset_candidate(value, true))
-    {
-        return Some(value);
-    }
-    LAZY_SOURCE_ATTRIBUTES
-        .into_iter()
-        .find_map(|name| direct_attribute(dom, node, name, true))
-        .map(Cow::Borrowed)
+    dom.attribute(node, "srcset")
+        .and_then(largest_srcset_candidate)
+        .or_else(|| direct_attribute(dom, node, "src", true))
+        .or_else(|| {
+            dom.attribute(node, "data-srcset")
+                .and_then(largest_srcset_candidate)
+        })
+        .or_else(|| {
+            LAZY_SOURCE_ATTRIBUTES
+                .into_iter()
+                .find_map(|name| direct_attribute(dom, node, name, true))
+        })
 }
 
-fn direct_source<D: Dom + ?Sized>(dom: &D, node: D::NodeId, image: bool) -> Option<&str> {
-    let src = direct_attribute(dom, node, "src", image);
-    src.or_else(|| {
+fn direct_source<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> Option<&str> {
+    direct_attribute(dom, node, "src", false).or_else(|| {
         LAZY_SOURCE_ATTRIBUTES
             .into_iter()
-            .find_map(|name| direct_attribute(dom, node, name, image))
+            .find_map(|name| direct_attribute(dom, node, name, false))
     })
 }
 
@@ -220,10 +209,10 @@ fn valid_positive_float(value: &str) -> Option<f64> {
         .filter(|value| value.is_finite() && *value >= 0.0)
 }
 
-fn largest_srcset_candidate(srcset: &str, image: bool) -> Option<Cow<'_, str>> {
+fn largest_srcset_candidate(srcset: &str) -> Option<&str> {
     parse_srcset(srcset)
         .into_iter()
-        .filter(|candidate| safe_url(candidate.url, image))
+        .filter(|candidate| safe_url(candidate.url, true))
         .max_by(|left, right| {
             let score = |candidate: &SrcsetCandidate<'_>| {
                 candidate
@@ -234,7 +223,7 @@ fn largest_srcset_candidate(srcset: &str, image: bool) -> Option<Cow<'_, str>> {
             };
             score(left).total_cmp(&score(right))
         })
-        .map(|candidate| Cow::Borrowed(candidate.url))
+        .map(|candidate| candidate.url)
 }
 
 pub(crate) fn safe_url(value: &str, image: bool) -> bool {
@@ -264,7 +253,7 @@ pub(crate) fn sources<'a, D: Dom + ?Sized>(
 ) -> Vec<&'a str> {
     let mut urls = Vec::new();
     let mut seen = std::collections::HashSet::new();
-    if let Some(src) = direct_source(dom, node, false) {
+    if let Some(src) = direct_source(dom, node) {
         seen.insert(src);
         urls.push(src);
     }
@@ -273,7 +262,7 @@ pub(crate) fn sources<'a, D: Dom + ?Sized>(
         while let Some(id) = child {
             child = dom.next_sibling(id);
             if dom.node_kind(id) == NodeKind::Element("source")
-                && let Some(src) = direct_source(dom, id, false)
+                && let Some(src) = direct_source(dom, id)
                 && seen.insert(src)
             {
                 urls.push(src);
@@ -305,8 +294,4 @@ pub(crate) fn safe_link_url(value: &str) -> bool {
         && !normalized.starts_with("vbscript:")
         && !normalized.starts_with("data:text/html")
         && !normalized.starts_with("data:application/xhtml+xml")
-}
-
-pub(crate) fn poster_label<D: Dom + ?Sized>(dom: &D, node: D::NodeId) -> String {
-    format!("{} poster", label(dom, node, "video"))
 }
