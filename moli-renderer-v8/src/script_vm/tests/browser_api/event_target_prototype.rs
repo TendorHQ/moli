@@ -192,3 +192,141 @@ fn event_target_prototype_methods_separate_listener_owner_from_dispatch_target()
         "[1,0]"
     );
 }
+
+#[test]
+fn event_target_native_aliases_preserve_shared_world_targets_and_handler_state() {
+    let mut vm = new_storage_test_vm("https://event-target-native-worlds.test/");
+    vm.eval(
+        r#"
+        navigation.addEventListener('navigate', event => {
+            globalThis.mainSignal = event.signal;
+        }, {once: true});
+    "#,
+    )
+    .unwrap();
+    let isolated = vm
+        .create_isolated_world("native-target-identities", false)
+        .unwrap();
+    vm.eval_in_isolated_context(
+        isolated,
+        r#"
+        navigation.addEventListener('navigate', event => {
+            globalThis.worldSignal = event.signal;
+        }, {once: true});
+    "#,
+    )
+    .unwrap();
+    vm.eval(
+        r#"
+        history.pushState({}, '', '#capture-signal');
+        globalThis.aliasTraps = 0;
+        const makeAlias = target => new Proxy(target, {
+            get() {aliasTraps++; throw new Error('get trap');},
+            getPrototypeOf() {aliasTraps++; throw new Error('prototype trap');}
+        });
+        globalThis.navigationAlias = makeAlias(navigation);
+        globalThis.signalAlias = makeAlias(mainSignal);
+        true;
+    "#,
+    )
+    .unwrap();
+    vm.with_default_context_scope_and_checkpoint_for_test(|scope, _| {
+        let global = scope.get_current_context().global(scope);
+        for name in ["navigationAlias", "signalAlias"] {
+            let value = global
+                .get(scope, crate::util::v8str(scope, name).into())
+                .unwrap();
+            let proxy = v8::Local::<v8::Proxy>::try_from(value).unwrap();
+            moli_webapi_declare::register_web_api_proxy(scope, proxy).unwrap();
+        }
+        Ok(())
+    })
+    .unwrap();
+    vm.eval(r#"
+        globalThis.mainFacts = [];
+        globalThis.mainSpecs = [
+            [navigation, navigationAlias, 'navigate', 'onnavigate',
+                Object.getOwnPropertyDescriptor(navigation, 'onnavigate')],
+            [mainSignal, signalAlias, 'abort', 'onabort',
+                Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'onabort')],
+        ];
+        globalThis.mainHandlers = mainSpecs.map(([target, alias, type, slot, descriptor]) => {
+            const handler = function(event) {
+                mainFacts.push([this === target, event.target === target,
+                    event.currentTarget === target, event instanceof CustomEvent, event.pageOnly === 42]);
+            };
+            descriptor.set.call(alias, handler);
+            if (descriptor.get.call(alias) !== handler || descriptor.get.call(target) !== handler)
+                throw Error(type + ': alias handler owner');
+            return handler;
+        });
+        true;
+    "#).unwrap();
+    vm.eval_in_isolated_context(isolated, r#"
+        globalThis.worldFacts = [];
+        globalThis.worldEvents = [];
+        globalThis.worldSpecs = [[navigation, 'navigate', 'onnavigate'], [worldSignal, 'abort', 'onabort']];
+        globalThis.worldHandlers = worldSpecs.map(([target, type, slot]) => {
+            const record = function(event) {
+                worldEvents.push(event);
+                worldFacts.push([this === target, event.target === target, event.currentTarget === target,
+                    event.composedPath()[0] === target, event instanceof CustomEvent,
+                    event.pageOnly === undefined, event.detail === 7]);
+            };
+            target[slot] = record;
+            target.addEventListener(type, function(event) {
+                record.call(this, event);
+                event.preventDefault();
+            }, {once: true});
+            return record;
+        });
+        true;
+    "#).unwrap();
+    assert_eq!(vm.eval(r#"JSON.stringify(mainSpecs.map(([target, alias, type]) => {
+        const event = new CustomEvent(type, {detail: 7, cancelable: true});
+        event.pageOnly = 42;
+        return [EventTarget.prototype.dispatchEvent.call(alias, event), event.defaultPrevented,
+            event.target === target, event.currentTarget === null, event.composedPath().length === 0];
+    }))"#).unwrap(), "[[false,true,true,true,true],[false,true,true,true,true]]");
+    assert_eq!(vm.eval_in_isolated_context(isolated, r#"String(
+        worldFacts.length === 4 && worldFacts.every(row => row.every(Boolean)) &&
+        worldEvents.every(event => event.defaultPrevented && event.currentTarget === null &&
+            event.composedPath().length === 0) && worldSpecs.every(([target, type, slot], index) => {
+                if (target[slot] !== worldHandlers[index]) return false;
+                target[slot] = null;
+                return target[slot] === null;
+            })
+    )"#).unwrap(), "true");
+    assert_eq!(vm.eval(r#"String(mainSpecs.every(([target, alias, type, slot, descriptor], index) => {
+        if (descriptor.get.call(alias) !== mainHandlers[index] || target[slot] !== mainHandlers[index])
+            return false;
+        const event = new CustomEvent(type, {detail: 7, cancelable: true});
+        event.pageOnly = 42;
+        return EventTarget.prototype.dispatchEvent.call(alias, event) && !event.defaultPrevented;
+    }) && mainFacts.length === 4 && mainFacts.every(row => row.every(Boolean)) && aliasTraps === 0)"#).unwrap(), "true");
+    assert_eq!(
+        vm.eval_in_isolated_context(isolated, "String(worldFacts.length === 4)")
+            .unwrap(),
+        "true"
+    );
+    assert_eq!(
+        vm.eval(
+            r#"(() => {
+        if (!document.documentElement) document.appendChild(document.createElement('html'));
+        if (!document.body) document.documentElement.appendChild(document.createElement('body'));
+        const frame = document.body.appendChild(document.createElement('iframe'));
+        const facts = [];
+        const listener = frame.contentWindow.Function('expected', 'facts', `return function(event) {
+            facts.push(this === expected, event.target === expected,
+                event.currentTarget === expected, event.composedPath()[0] === expected);
+        }`)(navigation, facts);
+        navigation.addEventListener('foreign-probe', listener, {once: true});
+        EventTarget.prototype.dispatchEvent.call(navigationAlias, new Event('foreign-probe'));
+        frame.remove();
+        return JSON.stringify(facts);
+    })()"#
+        )
+        .unwrap(),
+        "[true,true,true,true]"
+    );
+}

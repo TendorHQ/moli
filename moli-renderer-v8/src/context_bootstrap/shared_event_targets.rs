@@ -63,6 +63,9 @@ pub(super) fn is_shared_target<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     target: v8::Local<'s, v8::Object>,
 ) -> bool {
+    let Some(target) = native_target(scope, target) else {
+        return false;
+    };
     get_private_object(scope, target, OWNER).is_some()
 }
 
@@ -112,8 +115,12 @@ pub(super) fn target_in_realm<'s>(
     if let Some(node) = node_target_in_realm(scope, target, context) {
         return node;
     }
+    let receiver = target;
+    let target = native_target(scope, target).unwrap_or(target);
     let Some(owner) = get_private_object(scope, target, OWNER) else {
-        return target;
+        // Ordinary native aliases retain their own public identity. Shared
+        // platform objects instead project the native receiver's world wrapper.
+        return receiver;
     };
     if crate::web_api_interfaces::AbortSignal::is_instance(scope, owner) {
         return super::platform_object_worlds::in_realm(scope, owner.into(), context)
@@ -236,9 +243,9 @@ fn handler_getter<'s>(
 ) {
     let index = args.data().int32_value(scope).unwrap_or(-1) as usize;
     if let Some((slot, _)) = HANDLERS.get(index) {
-        rv.set(
-            get_private_value(scope, args.this(), slot).unwrap_or_else(|| v8::null(scope).into()),
-        );
+        let target = resolve_event_target(scope, args.this())
+            .map_or(args.this(), |target| target.handler_owner);
+        rv.set(get_private_value(scope, target, slot).unwrap_or_else(|| v8::null(scope).into()));
     }
 }
 
@@ -251,6 +258,7 @@ fn handler_setter<'s>(
     let Some((slot, event_type)) = HANDLERS.get(index) else {
         return;
     };
-    let target = args.this();
+    let target =
+        resolve_event_target(scope, args.this()).map_or(args.this(), |target| target.handler_owner);
     media_queries::simple_object_event_set_handler(scope, target, event_type, slot, args.get(0));
 }
