@@ -2165,6 +2165,9 @@ mod canvas_arguments;
 mod canvas_fill_rect;
 mod canvas_paths;
 mod canvas_transform_snapshots;
+
+mod input_value_native_receivers;
+
 mod canvas_webgl;
 mod child_dynamic_inline_scripts;
 mod credential_interface_exposure_interfaces;
