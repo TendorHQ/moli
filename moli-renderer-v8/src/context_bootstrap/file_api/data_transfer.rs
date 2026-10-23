@@ -83,7 +83,7 @@ struct DataTransferShellDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::DataTransfer)]
+#[webapi(interface = web_api_interfaces::DataTransfer, receiver)]
 struct DataTransferPrototypeAccessorsDeclaration {
     #[webapi(accessor_property, getter = data_transfer_files_getter, enumerable)]
     files: (),
@@ -125,7 +125,7 @@ struct DataTransferItemListObjectDeclaration<'s> {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::DataTransferItemList)]
+#[webapi(interface = web_api_interfaces::DataTransferItemList, receiver)]
 struct DataTransferItemListPrototypeAccessorsDeclaration {
     #[webapi(accessor_property, getter = data_transfer_item_list_length_getter, enumerable)]
     length: (),
@@ -167,7 +167,7 @@ struct DataTransferStringItemObjectDeclaration<'item_type, 'data> {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::DataTransferItem)]
+#[webapi(interface = web_api_interfaces::DataTransferItem, receiver)]
 struct DataTransferItemPrototypeAccessorsDeclaration {
     #[webapi(accessor_property, getter = data_transfer_item_kind_getter, enumerable)]
     kind: (),

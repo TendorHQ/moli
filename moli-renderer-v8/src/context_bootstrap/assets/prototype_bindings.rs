@@ -214,7 +214,7 @@ struct WorkerTemplateMethodsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::DataTransfer, enumerable)]
+#[webapi(interface = web_api_interfaces::DataTransfer, enumerable, receiver)]
 struct DataTransferTemplateMethodsDeclaration {
     #[webapi(
         method = "getData",
@@ -239,7 +239,7 @@ struct DataTransferTemplateMethodsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::DataTransferItem, enumerable)]
+#[webapi(interface = web_api_interfaces::DataTransferItem, enumerable, receiver)]
 struct DataTransferItemTemplateMethodsDeclaration {
     #[webapi(
         method = "getAsFile",
@@ -264,7 +264,7 @@ struct DataTransferItemTemplateMethodsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::DataTransferItemList, enumerable)]
+#[webapi(interface = web_api_interfaces::DataTransferItemList, enumerable, receiver)]
 struct DataTransferItemListTemplateMethodsDeclaration {
     #[webapi(
         intrinsic_data_property = v8::Intrinsic::ArrayProtoValues,
