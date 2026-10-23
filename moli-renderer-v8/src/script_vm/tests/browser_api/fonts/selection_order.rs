@@ -282,3 +282,43 @@ fn duplicate_css_font_declarations_keep_registration_until_last_member_leaves() 
         assert_eq!(vm.document_web_font_counts_for_test().2, 0);
     }
 }
+
+#[test]
+fn css_connected_font_face_add_is_noop_and_cannot_outlive_its_rule() {
+    let mut vm = order_vm();
+    let (_, wide) = order_font_data();
+    vm.eval(&format!(r#"
+        const style=document.createElement('style');
+        style.textContent='@font-face{{font-family:OrderFace;src:url(data:font/ttf;base64,{wide})}}';
+        document.head.append(style);globalThis.face=[...document.fonts][0];
+        face.load();
+    "#)).unwrap();
+    assert_eq!(
+        vm.eval("document.fonts.add(face)===document.fonts")
+            .unwrap(),
+        "true"
+    );
+    assert_eq!(
+        vm.eval("[...document.fonts].filter(value=>value===face).length")
+            .unwrap(),
+        "1"
+    );
+    assert_eq!(vm.eval("document.fonts.delete(face)").unwrap(), "false");
+    assert_eq!(
+        vm.eval("document.fonts.clear();document.fonts.size")
+            .unwrap(),
+        "1"
+    );
+    assert_eq!(
+        vm.eval("document.fonts.add(face)===document.fonts")
+            .unwrap(),
+        "true"
+    );
+    assert_eq!(
+        vm.eval("document.styleSheets[0].deleteRule(0);document.fonts.size")
+            .unwrap(),
+        "0"
+    );
+    assert_eq!(vm.eval("document.fonts.has(face)").unwrap(), "false");
+    assert_eq!(vm.document_web_font_counts_for_test().2, 0);
+}
