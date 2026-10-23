@@ -69,15 +69,50 @@ fn font_selection_capabilities(attributes: Attributes) -> WebFontCapabilities {
     )
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum WebFontPriorityGroup {
+    Stylesheet,
+    Manual,
+}
+
+/// Manual faces outrank CSS-connected faces; later positions win in each group.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct WebFontPriority {
+    group: WebFontPriorityGroup,
+    position: usize,
+}
+
+impl WebFontPriority {
+    const fn stylesheet(position: usize) -> Self {
+        Self {
+            group: WebFontPriorityGroup::Stylesheet,
+            position,
+        }
+    }
+
+    const fn manual(position: usize) -> Self {
+        Self {
+            group: WebFontPriorityGroup::Manual,
+            position,
+        }
+    }
+}
+
+type WebFontOrder = BTreeMap<String, WebFontPriority>;
+
 #[derive(Clone, Debug)]
 struct SegmentedWebFontFace {
     source_slot: String,
     internal_family_name: String,
-    source_priority: (bool, usize),
+    source_priority: WebFontPriority,
     unicode_ranges: Vec<WebFontUnicodeRange>,
 }
 
 impl SegmentedWebFontFace {
+    fn priority_key(&self) -> (WebFontPriority, &str) {
+        (self.source_priority, &self.source_slot)
+    }
+
     fn contains(&self, character: char) -> bool {
         self.unicode_ranges.is_empty()
             || self
@@ -300,10 +335,7 @@ impl ParleyDocumentServices {
                 })
                 .flat_map(|group| &group.faces)
                 .collect::<Vec<_>>();
-            faces.sort_by(|first, second| {
-                (first.source_priority, first.source_slot.as_str())
-                    .cmp(&(second.source_priority, second.source_slot.as_str()))
-            });
+            faces.sort_by(|first, second| first.priority_key().cmp(&second.priority_key()));
             let default_uses_latin_metrics =
                 character.is_none() && faces.iter().any(|face| face.contains('x'));
             resolved.extend(
@@ -845,6 +877,18 @@ struct RegisteredWebFont {
     membership: WebFontMembership,
 }
 
+impl RegisteredWebFont {
+    fn priority(&self, slot: &str, order: &WebFontOrder) -> WebFontPriority {
+        order.get(slot).copied().unwrap_or_else(|| {
+            if self.membership.is_stylesheet_only() {
+                WebFontPriority::stylesheet(usize::MAX)
+            } else {
+                WebFontPriority::manual(usize::MAX)
+            }
+        })
+    }
+}
+
 /// Lazily initialized text resources reused by successive layout demands for
 /// one committed Document.
 ///
@@ -860,7 +904,7 @@ pub struct DocumentLayoutServices {
     web_fonts: BTreeMap<String, RegisteredWebFont>,
     // Resource slots retain identity across removals and shared FontFaces.
     // Selection priority belongs to this Document's current FontFaceSet.
-    web_font_order: BTreeMap<String, (bool, usize)>,
+    web_font_order: WebFontOrder,
     has_font_face_set_order: bool,
     pub(crate) text_layout_passes: u64,
     #[cfg(test)]
@@ -871,7 +915,7 @@ pub struct DocumentLayoutServices {
 /// Physical Fontique families and both text contexts remain untouched.
 struct ScopedWebFontOrder<'a> {
     services: &'a mut DocumentLayoutServices,
-    previous: BTreeMap<String, (bool, usize)>,
+    previous: WebFontOrder,
 }
 
 impl Drop for ScopedWebFontOrder<'_> {
@@ -947,12 +991,12 @@ impl DocumentLayoutServices {
         let order = stylesheet
             .iter()
             .enumerate()
-            .map(|(index, slot)| (slot.clone(), (false, index)))
+            .map(|(index, slot)| (slot.clone(), WebFontPriority::stylesheet(index)))
             .chain(
                 manual
                     .iter()
                     .enumerate()
-                    .map(|(index, slot)| (slot.clone(), (true, index))),
+                    .map(|(index, slot)| (slot.clone(), WebFontPriority::manual(index))),
             )
             .collect::<BTreeMap<_, _>>();
         self.update_web_font_order(order)
@@ -968,12 +1012,12 @@ impl DocumentLayoutServices {
         let order = stylesheet
             .iter()
             .enumerate()
-            .map(|(index, slot)| (slot.clone(), (false, index)))
+            .map(|(index, slot)| (slot.clone(), WebFontPriority::stylesheet(index)))
             .collect();
         self.update_web_font_order(order)
     }
 
-    fn update_web_font_order(&mut self, order: BTreeMap<String, (bool, usize)>) -> bool {
+    fn update_web_font_order(&mut self, order: WebFontOrder) -> bool {
         if self.web_font_order == order {
             return false;
         }
@@ -1003,21 +1047,12 @@ impl DocumentLayoutServices {
         for family in parley.web_font_families.values_mut() {
             for group in &mut family.groups {
                 for face in &mut group.faces {
-                    face.source_priority = self
-                        .web_font_order
-                        .get(&face.source_slot)
-                        .copied()
-                        .unwrap_or((
-                            !self.web_fonts[&face.source_slot]
-                                .membership
-                                .is_stylesheet_only(),
-                            usize::MAX,
-                        ));
+                    face.source_priority = self.web_fonts[&face.source_slot]
+                        .priority(&face.source_slot, &self.web_font_order);
                 }
-                group.faces.sort_by(|first, second| {
-                    (first.source_priority, first.source_slot.as_str())
-                        .cmp(&(second.source_priority, second.source_slot.as_str()))
-                });
+                group
+                    .faces
+                    .sort_by(|first, second| first.priority_key().cmp(&second.priority_key()));
             }
         }
     }
@@ -1211,10 +1246,13 @@ impl DocumentLayoutServices {
         let mut active = std::collections::BTreeSet::new();
         let mut additions = Vec::new();
         let mut order = self.web_font_order.clone();
-        order.retain(|_, (manual, _)| *manual);
+        order.retain(|_, priority| priority.group == WebFontPriorityGroup::Manual);
         for (index, declaration) in declarations.into_iter().enumerate() {
             active.insert(declaration.slot);
-            order.insert(declaration.slot.to_owned(), (false, index));
+            order.insert(
+                declaration.slot.to_owned(),
+                WebFontPriority::stylesheet(index),
+            );
             if self.web_fonts.contains_key(declaration.slot) {
                 continue;
             }
@@ -1246,7 +1284,7 @@ impl DocumentLayoutServices {
         &mut self,
         is_active: impl Fn(&str) -> bool,
         additions: Vec<(String, RegisteredWebFont)>,
-        order: BTreeMap<String, (bool, usize)>,
+        order: WebFontOrder,
         consume: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let excluded = self
@@ -1324,22 +1362,17 @@ impl DocumentLayoutServices {
 
 fn ordered_web_fonts<'a>(
     fonts: &'a BTreeMap<String, RegisteredWebFont>,
-    order: &BTreeMap<String, (bool, usize)>,
+    order: &WebFontOrder,
 ) -> Vec<(&'a String, &'a RegisteredWebFont)> {
     let mut fonts = fonts.iter().collect::<Vec<_>>();
-    fonts.sort_by_key(|(slot, font)| {
-        order
-            .get(*slot)
-            .copied()
-            .unwrap_or((!font.membership.is_stylesheet_only(), usize::MAX))
-    });
+    fonts.sort_by_key(|(slot, font)| font.priority(slot, order));
     fonts
 }
 
 fn build_parley_services(
     system_font_policy: SystemFontPolicy,
     web_fonts: &BTreeMap<String, RegisteredWebFont>,
-    web_font_order: &BTreeMap<String, (bool, usize)>,
+    web_font_order: &WebFontOrder,
 ) -> ParleyDocumentServices {
     let mut collection = Collection::new(CollectionOptions {
         shared: false,
@@ -1377,7 +1410,7 @@ impl ParleyDocumentServices {
         &mut self,
         slot: &str,
         font: &RegisteredWebFont,
-        web_font_order: &BTreeMap<String, (bool, usize)>,
+        web_font_order: &WebFontOrder,
     ) -> Result<(), WebFontRegistrationError> {
         let blob = font.sfnt_bytes.clone();
         // Unlike an enumerated index, a stable slot never renames existing
@@ -1397,10 +1430,7 @@ impl ParleyDocumentServices {
         // second, public family alias would let Fontique's broader name matching
         // bypass a rejected CSS family and select that face during fallback.
 
-        let source_priority = web_font_order
-            .get(slot)
-            .copied()
-            .unwrap_or((!font.membership.is_stylesheet_only(), usize::MAX));
+        let source_priority = font.priority(slot, web_font_order);
         let family = self
             .web_font_families
             .entry(font.face.family_name_key().to_owned())
@@ -1427,9 +1457,10 @@ impl ParleyDocumentServices {
                         index
                     });
                 let group = &mut family.groups[group_index];
-                if let Err(index) = group.faces.binary_search_by(|face| {
-                    (face.source_priority, face.source_slot.as_str()).cmp(&(source_priority, slot))
-                }) {
+                if let Err(index) = group
+                    .faces
+                    .binary_search_by(|face| face.priority_key().cmp(&(source_priority, slot)))
+                {
                     group.faces.insert(
                         index,
                         SegmentedWebFontFace {
