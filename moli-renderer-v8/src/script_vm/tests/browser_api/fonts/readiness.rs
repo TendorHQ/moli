@@ -308,8 +308,16 @@ async fn assert_loaded_promise_lifetime(mode: &str) {
         // FontFace.load(), which installs a separate strong request root.
         vm.refresh_layout_snapshot_for_test(moli_layout::LayoutViewport::new(800, 600, 1.0))
             .unwrap();
-        let query_promise = if mode.contains("query") {
+        let query_promise = if mode.contains("query-then") {
+            "document.fonts.load('16px Lifetime','A').then(faces => faces)"
+        } else if mode.contains("query-await") {
+            "(async () => await document.fonts.load('16px Lifetime','A'))()"
+        } else if mode.contains("query") {
             "document.fonts.load('16px Lifetime','A')"
+        } else if mode.contains("loaded-then") {
+            "face.loaded.then(face => face)"
+        } else if mode.contains("loaded-await") {
+            "(async () => await face.loaded)()"
         } else {
             "face.loaded"
         };
@@ -356,6 +364,38 @@ async fn assert_loaded_promise_lifetime(mode: &str) {
             .pending_subresource_request_count(),
         1
     );
+    let pending_contexts = vm
+        ._context_host
+        .borrow()
+        .pending_font_face_execution_contexts_for_test();
+    assert_eq!(
+        pending_contexts.len(),
+        1,
+        "{mode}: native load must root its face"
+    );
+    let execution_context = pending_contexts[0];
+    let retired = mode.contains("retire-");
+    if retired {
+        let mut host = vm._context_host.borrow_mut();
+        if mode.ends_with("retire-realm") {
+            host.retire_window_realm_resources(execution_context.realm_token());
+        } else if mode.ends_with("retire-owner") {
+            assert!(host.retire_window_execution_context(execution_context.owner()));
+        } else if mode.ends_with("retire-context") {
+            assert_eq!(
+                host.retire_window_execution_contexts_for_context_token(
+                    execution_context.realm_token()
+                ),
+                1
+            );
+        } else {
+            panic!("unknown retirement mode {mode}");
+        }
+        assert!(
+            host.pending_font_face_execution_contexts_for_test()
+                .is_empty()
+        );
+    }
     // Every vm.eval HandleScope above has exited. Clear WeakRef's job-local
     // keepalive before forcing full GC so the witness cannot root the face.
     if mode != "css-removed-no-gc" {
@@ -370,11 +410,14 @@ async fn assert_loaded_promise_lifetime(mode: &str) {
     }
     assert_eq!(
         vm.eval("faceWitness.deref()===undefined").unwrap(),
-        "false",
-        "a retained .loaded promise must keep the loading wrapper alive"
+        if retired { "true" } else { "false" },
+        "{mode}: active loads must keep settlement endpoints alive, retired Windows must release them"
     );
     gates.remove("lifetime.woff2").unwrap().send(()).unwrap();
     server.await.unwrap();
+    if retired {
+        return;
+    }
     assert!(
         tokio::time::timeout(
             Duration::from_secs(2),
@@ -395,6 +438,13 @@ async fn assert_loaded_promise_lifetime(mode: &str) {
             .pending_subresource_request_count(),
         0
     );
+    assert!(
+        vm._context_host
+            .borrow()
+            .pending_font_face_execution_contexts_for_test()
+            .is_empty(),
+        "{mode}: terminal loads must release their native roots"
+    );
     let results = vm.eval("JSON.stringify(promiseResults)").unwrap();
     assert_eq!(
         results,
@@ -403,7 +453,7 @@ async fn assert_loaded_promise_lifetime(mode: &str) {
         } else {
             r#"[["Lifetime","loaded"]]"#
         },
-        "{mode}: retaining .loaded must preserve its settlement endpoint"
+        "{mode}: retaining the promise chain must preserve its settlement endpoint"
     );
     // A fulfilled promise necessarily retains its FontFace result. A rejected
     // promise must release the wrapper even while that promise remains live.
@@ -440,6 +490,61 @@ async fn css_removed_query_promise_survives_gc() {
 #[tokio::test]
 async fn css_removed_rejected_query_promise_releases_wrapper_after_gc() {
     assert_loaded_promise_lifetime("css-removed-query-error").await;
+}
+
+#[tokio::test]
+async fn css_removed_query_then_promise_survives_gc() {
+    assert_loaded_promise_lifetime("css-removed-query-then-gc").await;
+}
+
+#[tokio::test]
+async fn css_removed_rejected_query_then_promise_releases_wrapper_after_gc() {
+    assert_loaded_promise_lifetime("css-removed-query-then-error").await;
+}
+
+#[tokio::test]
+async fn css_removed_query_await_promise_survives_gc() {
+    assert_loaded_promise_lifetime("css-removed-query-await-gc").await;
+}
+
+#[tokio::test]
+async fn css_removed_rejected_query_await_promise_releases_wrapper_after_gc() {
+    assert_loaded_promise_lifetime("css-removed-query-await-error").await;
+}
+
+#[tokio::test]
+async fn css_removed_loaded_then_promise_survives_gc() {
+    assert_loaded_promise_lifetime("css-removed-loaded-then-gc").await;
+}
+
+#[tokio::test]
+async fn css_removed_rejected_loaded_then_promise_releases_wrapper_after_gc() {
+    assert_loaded_promise_lifetime("css-removed-loaded-then-error").await;
+}
+
+#[tokio::test]
+async fn css_removed_loaded_await_promise_survives_gc() {
+    assert_loaded_promise_lifetime("css-removed-loaded-await-gc").await;
+}
+
+#[tokio::test]
+async fn css_removed_rejected_loaded_await_promise_releases_wrapper_after_gc() {
+    assert_loaded_promise_lifetime("css-removed-loaded-await-error").await;
+}
+
+#[tokio::test]
+async fn css_removed_query_chain_releases_wrapper_on_realm_retirement() {
+    assert_loaded_promise_lifetime("css-removed-query-then-retire-realm").await;
+}
+
+#[tokio::test]
+async fn css_removed_query_chain_releases_wrapper_on_owner_retirement() {
+    assert_loaded_promise_lifetime("css-removed-query-await-retire-owner").await;
+}
+
+#[tokio::test]
+async fn css_removed_query_chain_releases_wrapper_on_context_retirement() {
+    assert_loaded_promise_lifetime("css-removed-query-then-retire-context").await;
 }
 
 #[tokio::test]

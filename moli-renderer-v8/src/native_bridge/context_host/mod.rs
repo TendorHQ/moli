@@ -147,6 +147,7 @@ mod security_policy;
 mod selection_records;
 mod service_workers;
 pub(crate) use service_workers::ServiceWorkerWindowOwner;
+mod font_face_loads;
 mod shared_workers;
 mod signal_bridge;
 mod storage_events;
@@ -942,6 +943,7 @@ pub(crate) struct JsContextHost {
     next_image_decode_id: u64,
     pending_image_decode_requests: HashMap<ImageDecodeRequestId, PendingImageDecodeRequest>,
     resource_timing_buffers: SharedResourceTimingBufferRegistry,
+    pending_font_face_loads: HashMap<u64, font_face_loads::PendingFontFaceLoad>,
     next_webcrypto_task_id: crate::page_task_queue::RendererPageWebCryptoTaskId,
     pending_webcrypto_tasks: HashMap<
         crate::page_task_queue::RendererPageWebCryptoTaskId,

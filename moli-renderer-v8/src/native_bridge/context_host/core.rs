@@ -468,6 +468,7 @@ impl JsContextHost {
             next_image_decode_id: 1,
             pending_image_decode_requests: HashMap::new(),
             resource_timing_buffers: SharedResourceTimingBufferRegistry::new(),
+            pending_font_face_loads: HashMap::new(),
             next_webcrypto_task_id: crate::page_task_queue::RendererPageWebCryptoTaskId::first(),
             pending_webcrypto_tasks: HashMap::new(),
             opfs_owner_state: None,

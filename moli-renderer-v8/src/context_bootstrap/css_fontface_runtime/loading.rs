@@ -24,9 +24,9 @@ pub(super) fn load_matching_faces<'s>(
         return promise;
     }
     let state = v8::Object::new(scope);
-    // Reactions retain their state from the input promises, but the returned
-    // promise must also retain it when a CSS face leaves document.fonts.
-    // This heap edge keeps the settlement endpoints alive without a Global.
+    // Keep the direct promise's state in the JS heap as well. Native pending
+    // font loads root each face until completion or Window retirement, so a
+    // downstream .then()/await promise need not retain this original promise.
     set_private_value(scope, promise.into(), QUERY_STATE, state.into());
     set_private_value(scope, state, QUERY_RESOLVER, resolver.into());
     set_private_value(scope, state, QUERY_FACES, faces.into());
@@ -199,10 +199,9 @@ pub(super) fn initialize_resolver<'s>(
     request_context: Option<crate::native_bridge::WindowExecutionContextIdentity>,
 ) {
     set_private_value(scope, face, RESOLVER, resolver.into());
-    // A retained pending .loaded promise must retain its settlement endpoint,
-    // including CSS-started loads with no explicit JS network request root.
-    // Keep this edge in the JS heap so an otherwise unreachable cycle remains
-    // collectible; no isolate-wide Global may keep a retired document alive.
+    // A retained pending .loaded promise also retains its settlement endpoint.
+    // Loading faces have a Window-owned native root, released on completion
+    // or retirement; unloaded JS-only cycles remain collectible.
     set_private_value(
         scope,
         resolver.get_promise(scope).into(),
@@ -216,6 +215,9 @@ pub(super) fn initialize_resolver<'s>(
 /// Only the observer layer creates JS errors, settles promises and dispatches
 /// events. Native CSS completions update the same resource without touching V8.
 fn publish_state<'s>(scope: &mut v8::PinScope<'s, '_>, face: v8::Local<'s, v8::Object>) {
+    // Synchronize before running any reentrant loading handler, including when
+    // rebinding replaced the resource without changing its published status.
+    super::state::sync_loading_root(scope, face);
     let Some((previous, load)) = super::state::take_change(scope, face) else {
         return;
     };

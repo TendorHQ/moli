@@ -107,6 +107,41 @@ pub(super) fn request_context<'s>(
         .request_context
 }
 
+/// Native loading operations retain the wrapper, independently of which
+/// promise in a .then()/await chain page code keeps alive. Retired Windows
+/// cannot acquire new roots, and terminal resources release existing roots.
+pub(super) fn sync_loading_root<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    face: v8::Local<'s, v8::Object>,
+) {
+    let Some(id) = id(scope, face) else {
+        return;
+    };
+    let Some((loading, request_context)) = scope.get_slot::<Store>().and_then(|store| {
+        let store = store.borrow();
+        let observer = store.entries.get(&id)?;
+        Some((
+            observer.load.borrow().status() == FontFaceStatus::Loading,
+            observer.request_context,
+        ))
+    }) else {
+        return;
+    };
+    let Some(context) = face.get_creation_context(scope) else {
+        return;
+    };
+    let scope = &mut v8::ContextScope::new(scope, context);
+    let Some(host_ptr) = crate::util::context_host_ptr_from_global_bridge(scope) else {
+        return;
+    };
+    let host = unsafe { &mut *host_ptr };
+    if let (true, Some(identity)) = (loading, request_context) {
+        host.retain_pending_font_face_load(scope, id, identity, face);
+    } else {
+        host.release_pending_font_face_load(id);
+    }
+}
+
 pub(super) fn bind<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     face: v8::Local<'s, v8::Object>,
