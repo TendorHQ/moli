@@ -79,6 +79,26 @@ pub enum CssFontFamily {
     Generic(style::values::computed::font::GenericFontFamily),
 }
 
+/// A CSS font-family lookup key matching Blink's case-folding hash: Unicode
+/// simple folding of UTF-16 code units, without normalization or locale tailoring.
+/// This is separate from platform local() full-name lookup.
+pub fn font_family_name_key(name: &str) -> String {
+    if name.is_ascii() {
+        return name.to_ascii_lowercase();
+    }
+    name.chars()
+        .map(|character| {
+            // Blink hashes each UTF-16 code unit; surrogate pairs do not fold.
+            if character.len_utf16() == 2 {
+                return character;
+            }
+            unicode_case_mapping::case_folded(character)
+                .and_then(|folded| char::from_u32(folded.get()))
+                .unwrap_or(character)
+        })
+        .collect()
+}
+
 #[derive(Clone, Debug)]
 pub struct CssFontShorthand {
     pub family_css: String,
@@ -213,6 +233,38 @@ fn is_css_wide_keyword(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn font_name_keys_follow_chromium_case_folding_without_expansion_or_normalization() {
+        use super::font_family_name_key;
+        for (a, b) in [
+            ("Äpfel", "äpfel"),
+            ("Σπίτι", "σπίτι"),
+            ("ΟΣ", "ος"),
+            ("K", "k"),
+            ("ẞ", "ß"),
+            ("µ", "Μ"),
+        ] {
+            assert_eq!(
+                font_family_name_key(a),
+                font_family_name_key(b),
+                "{a} / {b}"
+            );
+        }
+        for (a, b) in [
+            ("Straße", "STRASSE"),
+            ("Å", "A\u{030a}"),
+            ("İ", "i"),
+            ("İ", "i\u{0307}"),
+            ("𐐀", "𐐨"),
+        ] {
+            assert_ne!(
+                font_family_name_key(a),
+                font_family_name_key(b),
+                "{a} / {b}"
+            );
+        }
+    }
+
     #[test]
     fn font_sources_preserve_local_names_and_supported_url_fallback_order() {
         use super::*;

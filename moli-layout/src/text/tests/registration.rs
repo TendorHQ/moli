@@ -60,11 +60,12 @@ fn owned_sfnt_payload_is_retained_without_copying_its_buffer() {
         shape_one_character(services.parley_mut(), web_font_style("Owned", 400.0), 'R'),
         TEST_TTF
     );
-    let font = services
-        .parley_mut()
+    let parley = services.parley_mut();
+    let family = resolved_registered_family_name(parley, "Owned").unwrap();
+    let font = parley
         .font_context
         .collection
-        .family_by_name("Owned")
+        .family_by_name(&family)
         .unwrap();
     assert_eq!(font.fonts()[0].load(None).unwrap().id(), blob_id);
 }
@@ -89,10 +90,11 @@ fn owned_and_borrowed_validation_have_the_same_acceptance() {
 }
 
 fn source_id(services: &mut ParleyDocumentServices, family: &str) -> parley::fontique::SourceId {
+    let family = resolved_registered_family_name(services, family).unwrap();
     services
         .font_context
         .collection
-        .family_by_name(family)
+        .family_by_name(&family)
         .unwrap()
         .fonts()[0]
         .source()
@@ -175,14 +177,19 @@ fn arriving_font_invalidates_a_previously_cached_missing_font_and_metrics() {
             TEST_TTF.to_vec(),
         ))
         .unwrap();
+    assert!(services.parley_mut().inline_font_metrics_cache.is_empty());
     assert_eq!(
         shape_one_character(services.parley_mut(), style.clone(), 'R'),
         TEST_TTF
     );
+    let mut resolved = style;
+    services
+        .parley_mut()
+        .resolve_font_families(&mut resolved, None);
     assert!(
         services
             .parley_mut()
-            .inline_font_metrics(&style, None)
+            .inline_font_metrics(&resolved, None)
             .is_some()
     );
 }

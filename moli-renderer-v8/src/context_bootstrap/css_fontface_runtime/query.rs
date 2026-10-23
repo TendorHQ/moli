@@ -42,7 +42,9 @@ pub(super) fn font_face_set_matching_faces_array<'s>(
         let ranges = super::loading::string_slot(scope, face_object, FONT_FACE_UNICODE_RANGE_SLOT);
         candidates.push(Candidate {
             face,
-            family: moli_css_parse::unquote_css_string(&family),
+            family: moli_css_parse::font_family_name_key(&moli_css_parse::unquote_css_string(
+                &family,
+            )),
             selection: selection::Selection::new(&weight, &stretch, &style),
             ranges: crate::css_resource_urls::parse_font_unicode_ranges(&ranges)
                 .unwrap_or_default(),
@@ -54,9 +56,10 @@ pub(super) fn font_face_set_matching_faces_array<'s>(
         let moli_css_parse::CssFontFamily::Named(family) = family else {
             continue;
         };
+        let family = moli_css_parse::font_family_name_key(&family);
         let family_faces = candidates
             .iter()
-            .filter(|face| family.eq_ignore_ascii_case(&face.family))
+            .filter(|face| family == face.family)
             .collect::<Vec<_>>();
         let Some(best) = family_faces
             .iter()

@@ -11,7 +11,9 @@ use std::{
     sync::Arc,
 };
 
-use moli_css_parse::{FontSelectionCapabilities as WebFontCapabilities, FontSelectionRange};
+use moli_css_parse::{
+    FontSelectionCapabilities as WebFontCapabilities, FontSelectionRange, font_family_name_key,
+};
 use moli_system_fonts::SystemFontFamilyResolver;
 use parley::{
     FontContext, FontFamily, FontFamilyName, LayoutContext, TextStyle,
@@ -218,7 +220,7 @@ impl ParleyDocumentServices {
                 return false;
             };
             self.web_font_families
-                .get(&normalized_web_font_family_name(name))
+                .get(&font_family_name_key(name))
                 .is_some_and(|family| {
                     family.groups.iter().any(|group| {
                         group
@@ -271,7 +273,7 @@ impl ParleyDocumentServices {
                 resolved.push(family);
                 continue;
             };
-            let family_key = normalized_web_font_family_name(name);
+            let family_key = font_family_name_key(name);
             if !self.web_font_families.contains_key(&family_key) {
                 resolved.push(family);
                 continue;
@@ -1086,17 +1088,6 @@ impl ParleyDocumentServices {
         web_font_order: &BTreeMap<String, (bool, usize)>,
     ) -> Result<(), WebFontRegistrationError> {
         let blob = font.sfnt_bytes.clone();
-        let selector_fonts = self.font_context.collection.register_fonts(
-            blob.clone(),
-            Some(
-                font.face
-                    .fontique_override_for_family(font.face.family_name()),
-            ),
-        );
-        if selector_fonts.is_empty() {
-            return Err(WebFontRegistrationError::UnsupportedPayload);
-        }
-
         // Unlike an enumerated index, a stable slot never renames existing
         // families when an earlier-sorting resource finishes later.
         let internal_family_name = format!("\0moli-web-font:{slot}");
@@ -1107,10 +1098,12 @@ impl ParleyDocumentServices {
                     .fontique_override_for_family(&internal_family_name),
             ),
         );
-        assert!(
-            !internal_fonts.is_empty(),
-            "the same font with a nonempty alias must register"
-        );
+        if internal_fonts.is_empty() {
+            return Err(WebFontRegistrationError::UnsupportedPayload);
+        }
+        // CSS matching belongs to the document registry below. Registering a
+        // second, public family alias would let Fontique's broader name matching
+        // bypass a rejected CSS family and select that face during fallback.
 
         let source_priority = web_font_order
             .get(slot)
@@ -1118,9 +1111,9 @@ impl ParleyDocumentServices {
             .unwrap_or((!font.stylesheet, usize::MAX));
         let family = self
             .web_font_families
-            .entry(normalized_web_font_family_name(font.face.family_name()))
+            .entry(font_family_name_key(font.face.family_name()))
             .or_default();
-        for (_, fonts) in selector_fonts {
+        for (_, fonts) in internal_fonts {
             for selector_font in fonts {
                 let capabilities = font.face.capabilities.unwrap_or_else(|| {
                     font_selection_capabilities(Attributes::new(
@@ -1170,10 +1163,6 @@ impl ParleyDocumentServices {
             resolver.invalidate_substitutions();
         }
     }
-}
-
-fn normalized_web_font_family_name(name: &str) -> String {
-    name.chars().flat_map(char::to_lowercase).collect()
 }
 
 fn validate_sfnt_table_bounds(sfnt_bytes: &[u8]) -> Result<(), WebFontRegistrationError> {
@@ -1462,7 +1451,7 @@ mod tests {
                 TEST_TTF.to_vec(),
             ))
             .unwrap();
-        let style = TextStyle {
+        let mut style = TextStyle {
             font_family: FontFamily::List(std::borrow::Cow::Owned(vec![
                 FontFamilyName::Named(std::borrow::Cow::Borrowed("Moli CJK")),
                 FontFamilyName::Named(std::borrow::Cow::Borrowed("Moli Latin")),
@@ -1470,6 +1459,7 @@ mod tests {
             ..TextStyle::default()
         };
         let parley = services.parley_mut();
+        parley.resolve_font_families(&mut style, None);
 
         assert!(parley.inline_font_metrics(&style, None).is_none());
         assert!(
@@ -1701,13 +1691,30 @@ mod tests {
         )
     }
 
+    fn resolved_registered_family_name(
+        parley: &mut ParleyDocumentServices,
+        family: &str,
+    ) -> Option<String> {
+        let mut style = TextStyle {
+            font_family: FontFamily::Single(FontFamilyName::Named(Cow::Owned(family.to_owned()))),
+            ..TextStyle::default()
+        };
+        parley.resolve_segmented_web_font_families(&mut style, None);
+        let FontFamily::List(families) = style.font_family else {
+            return None;
+        };
+        families.iter().find_map(|family| match family {
+            FontFamilyName::Named(name) => Some(name.to_string()),
+            _ => None,
+        })
+    }
+
     fn has_family(services: &mut DocumentLayoutServices, family: &str) -> bool {
-        services
-            .parley_mut()
-            .font_context
-            .collection
-            .family_id(family)
-            .is_some()
+        let parley = services.parley_mut();
+        let Some(family) = resolved_registered_family_name(parley, family) else {
+            return false;
+        };
+        parley.font_context.collection.family_id(&family).is_some()
     }
 
     #[test]

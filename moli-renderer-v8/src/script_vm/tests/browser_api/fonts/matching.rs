@@ -259,3 +259,93 @@ fn font_query_generic_families_do_not_match_named_font_faces() {
         assert_eq!(vm.eval("face.status").unwrap(), "error");
     }
 }
+
+#[test]
+fn font_query_matches_chromium_unicode_case_folding() {
+    for (family, query, matches) in [
+        ("Äpfel", "äpfel", true),
+        ("Σπίτι", "σπίτι", true),
+        ("ΟΣ", "ος", true),
+        ("K", "k", true),
+        ("ẞ", "ß", true),
+        ("µ", "Μ", true),
+        ("Straße", "STRASSE", false),
+        ("Å", "A\u{030a}", false),
+        ("İ", "i", false),
+        ("İ", "i\u{0307}", false),
+        ("𐐀", "𐐨", false),
+    ] {
+        let mut vm = new_storage_test_vm("https://unicode-font-family.test/");
+        vm.eval(&format!(
+            r#"
+            globalThis.face=new FontFace('{family}','url(data:font/ttf;base64,AA==)');
+            face.loaded.catch(()=>{{}});document.fonts.add(face);
+            globalThis.result=[];
+        "#
+        ))
+        .unwrap();
+        let font = format!("16px \"{query}\"");
+        assert_eq!(
+            vm.eval(&format!("document.fonts.check('{font}','A')"))
+                .unwrap(),
+            (!matches).to_string(),
+            "{family} / {query}"
+        );
+        vm.eval(&format!("document.fonts.load('{font}','A').then(faces=>result.push(faces.length),error=>result.push(error.name))")).unwrap();
+        assert_eq!(
+            vm.eval("JSON.stringify(result)").unwrap(),
+            if matches {
+                r#"["NetworkError"]"#
+            } else {
+                "[0]"
+            },
+            "{family} / {query}"
+        );
+        assert_eq!(
+            vm.eval("face.status").unwrap(),
+            if matches { "error" } else { "unloaded" }
+        );
+    }
+}
+
+#[test]
+fn unicode_font_family_queries_and_layout_use_the_same_matching_key() {
+    let (narrow, wide) = super::selection_order::order_font_data();
+    for (family, query, matches) in [
+        ("Äpfel", "äpfel", true),
+        ("Σπίτι", "σπίτι", true),
+        ("ΟΣ", "ος", true),
+        ("K", "k", true),
+        ("ẞ", "ß", true),
+        ("µ", "Μ", true),
+        ("Straße", "STRASSE", false),
+        ("Å", "A\u{030a}", false),
+        ("İ", "i", false),
+        ("𐐀", "𐐨", false),
+    ] {
+        let mut vm = super::selection_order::order_vm();
+        vm.eval(&format!(
+            r#"
+            const bytes=data=>Uint8Array.from(atob(data),c=>c.charCodeAt(0));
+            globalThis.target=new FontFace('{family}',bytes('{wide}'));
+            document.fonts.add(target);
+            document.fonts.add(new FontFace('FallbackFixture',bytes('{narrow}')));
+            probe.style.fontFamily='"{query}", FallbackFixture';
+            globalThis.matches=false;
+            document.fonts.load('40px "{query}"','A').then(faces=>{{matches=faces[0]===target}});
+        "#
+        ))
+        .unwrap();
+        assert_eq!(
+            vm.eval("matches").unwrap(),
+            matches.to_string(),
+            "{family} / {query}"
+        );
+        assert_eq!(
+            vm.eval("String(probe.getBoundingClientRect().width)")
+                .unwrap(),
+            if matches { "160" } else { "80" },
+            "{family} / {query}"
+        );
+    }
+}
