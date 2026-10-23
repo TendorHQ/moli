@@ -71,10 +71,18 @@ pub fn legacy_variations_font_format(format: &str) -> Option<&str> {
         .filter(|format| matches!(*format, "woff" | "woff2" | "truetype" | "opentype"))
 }
 
+/// A decoded family name or a generic selected by the CSS parser. Quoting a
+/// generic keyword makes it a named family rather than a generic fallback.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CssFontFamily {
+    Named(String),
+    Generic(style::values::computed::font::GenericFontFamily),
+}
+
 #[derive(Clone, Debug)]
 pub struct CssFontShorthand {
     pub family_css: String,
-    pub families: Vec<String>,
+    pub families: Vec<CssFontFamily>,
     pub size: String,
     pub style: String,
     pub weight: String,
@@ -85,8 +93,10 @@ pub struct CssFontShorthand {
 /// multi-word families and fallback lists. No guessed last-whitespace token.
 pub fn parse_font_shorthand(value: &str) -> Option<CssFontShorthand> {
     use style::{
+        parser::Parse,
         properties::{PropertyId, parse_property_declaration_list},
         stylesheets::CssRuleType,
+        values::computed::font::SingleFontFamily,
     };
     use style_traits::CssStringWriter;
     if crate::escape_top_level_semicolons(value) != value
@@ -111,11 +121,12 @@ pub fn parse_font_shorthand(value: &str) -> Option<CssFontShorthand> {
         }
         let families = Parser::new(&family_css)
             .parse_comma_separated(|p| {
-                let mut parts = Vec::new();
-                while !p.is_exhausted() {
-                    parts.push(p.expect_ident_or_string()?.to_string());
-                }
-                Ok::<_, cssparser::ParseError<()>>(parts.join(" "))
+                SingleFontFamily::parse(context, p).map(|family| match family {
+                    SingleFontFamily::FamilyName(name) => {
+                        CssFontFamily::Named(name.name.to_string())
+                    }
+                    SingleFontFamily::Generic(generic) => CssFontFamily::Generic(generic),
+                })
             })
             .ok()?;
         Some(CssFontShorthand {
@@ -240,11 +251,42 @@ mod tests {
     }
 
     #[test]
+    fn font_shorthand_distinguishes_quoted_and_escaped_generic_keywords() {
+        use super::{CssFontFamily, parse_font_shorthand};
+        use style::values::computed::font::GenericFontFamily;
+        for keyword in ["serif", "SeRiF", r"s\65 rif"] {
+            let font = parse_font_shorthand(&format!("16px {keyword}")).unwrap();
+            assert_eq!(
+                font.families,
+                [CssFontFamily::Generic(GenericFontFamily::Serif)]
+            );
+        }
+        for name in [r#""serif""#, r#""s\65 rif""#, "Named serif"] {
+            let font = parse_font_shorthand(&format!("16px {name}")).unwrap();
+            let expected = if name == "Named serif" {
+                "Named serif"
+            } else {
+                "serif"
+            };
+            assert_eq!(font.families, [CssFontFamily::Named(expected.into())]);
+        }
+    }
+
+    #[test]
     fn font_shorthand_uses_stylo_validation_and_keeps_all_families() {
         let font =
             super::parse_font_shorthand("italic bold 10.5px/1.2 \"A B\", Another Face, serif")
                 .unwrap();
-        assert_eq!(font.families, ["A B", "Another Face", "serif"]);
+        assert_eq!(
+            font.families,
+            [
+                super::CssFontFamily::Named("A B".into()),
+                super::CssFontFamily::Named("Another Face".into()),
+                super::CssFontFamily::Generic(
+                    style::values::computed::font::GenericFontFamily::Serif
+                ),
+            ]
+        );
         assert_eq!(font.size, "10.5px");
         assert_eq!(font.style, "italic");
         for invalid in [

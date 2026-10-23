@@ -228,3 +228,34 @@ fn font_set_queries_match_unicode_scalars_and_preserve_family_list_order() {
         "[true,false,2,true,true]"
     );
 }
+
+#[test]
+fn font_query_generic_families_do_not_match_named_font_faces() {
+    for generic in ["serif", "sans-serif", "monospace", "system-ui"] {
+        let mut vm = new_storage_test_vm("https://font-matching.test/");
+        vm.eval(&format!(r#"
+            globalThis.face=new FontFace('{generic}','url(data:font/ttf;base64,AA==)');
+            face.loaded.catch(()=>{{}});document.fonts.add(face);
+            globalThis.results=[];
+            document.fonts.load('16px {generic}','A').then(faces=>results.push(faces.length),error=>results.push(error.name));
+        "#)).unwrap();
+        assert_eq!(
+            vm.eval(&format!("document.fonts.check('16px {generic}','A')"))
+                .unwrap(),
+            "true",
+            "{generic}"
+        );
+        assert_eq!(
+            vm.eval("JSON.stringify(results)").unwrap(),
+            "[0]",
+            "{generic}"
+        );
+        assert_eq!(vm.eval("face.status").unwrap(), "unloaded", "{generic}");
+        vm.eval(&format!(r#"document.fonts.load('16px "{generic}"','A').then(faces=>results.push(faces.length),error=>results.push(error.name))"#)).unwrap();
+        assert_eq!(
+            vm.eval("JSON.stringify(results)").unwrap(),
+            r#"[0,"NetworkError"]"#
+        );
+        assert_eq!(vm.eval("face.status").unwrap(), "error");
+    }
+}

@@ -21,9 +21,10 @@ pub use color::{
 };
 pub use declaration::{CssDeclaration, DeclarationParseOptions, parse_declaration_list};
 pub use font_face::{
-    CssFontFace, CssFontShorthand, CssFontSource, font_load_query_contains_css_wide_keyword,
-    font_load_query_family, font_load_query_is_valid, legacy_variations_font_format,
-    normalize_font_face_src, parse_font_face_sources, parse_font_faces, parse_font_shorthand,
+    CssFontFace, CssFontFamily, CssFontShorthand, CssFontSource,
+    font_load_query_contains_css_wide_keyword, font_load_query_family, font_load_query_is_valid,
+    legacy_variations_font_format, normalize_font_face_src, parse_font_face_sources,
+    parse_font_faces, parse_font_shorthand,
 };
 pub use font_palette::{
     CssFontPaletteValuesProperty, parse_font_palette_values_property_with_stylo,
