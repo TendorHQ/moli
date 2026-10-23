@@ -2161,6 +2161,9 @@ mod bitmap_rendering_context_interface_interfaces;
 mod blob_response_headers;
 mod browser_api;
 mod cache_interfaces;
+
+mod dom_token_list_native_receivers;
+
 mod canvas_arguments;
 mod canvas_fill_rect;
 mod canvas_paths;
