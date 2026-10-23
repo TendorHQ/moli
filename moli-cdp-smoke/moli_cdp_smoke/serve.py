@@ -165,6 +165,9 @@ async def start_browser(port: int = 0, *, extra_args: tuple[str, ...] = ()) -> B
     command = [
         str(binary), "--headless=new", "--no-sandbox", "--disable-dev-shm-usage",
         "--disable-back-forward-cache",
+        # Keep profile services from adding unrelated network descriptors during
+        # local-fixture resource accounting (also used by Playwright's launcher).
+        "--disable-background-networking", "--disable-component-update", "--disable-sync",
         "--no-first-run", "--no-default-browser-check", "--remote-allow-origins=*",
         "--remote-debugging-address=127.0.0.1", f"--remote-debugging-port={port}",
         f"--user-data-dir={profile}", *extra_args, "about:blank",
