@@ -672,8 +672,29 @@ impl WebFontFace {
 pub struct WebFontRegistration {
     slot: String,
     face: WebFontFace,
-    bytes: Vec<u8>,
+    payload: WebFontPayload,
     stylesheet: bool,
+}
+
+#[derive(Clone, Debug)]
+enum WebFontPayload {
+    Encoded(Vec<u8>),
+    Validated(FontFaceData),
+}
+
+impl WebFontPayload {
+    fn bytes(&self) -> &[u8] {
+        match self {
+            Self::Encoded(bytes) => bytes,
+            Self::Validated(data) => data.bytes(),
+        }
+    }
+}
+
+impl PartialEq for WebFontPayload {
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes() == other.bytes()
+    }
 }
 
 impl WebFontRegistration {
@@ -681,7 +702,18 @@ impl WebFontRegistration {
         Self {
             slot: slot.into(),
             face,
-            bytes,
+            payload: WebFontPayload::Encoded(bytes),
+            stylesheet: false,
+        }
+    }
+
+    /// Retains already validated font data without copying or decoding its
+    /// payload again. Descriptors are still validated for this registration.
+    pub fn from_font_data(slot: impl Into<String>, face: WebFontFace, data: FontFaceData) -> Self {
+        Self {
+            slot: slot.into(),
+            face,
+            payload: WebFontPayload::Validated(data),
             stylesheet: false,
         }
     }
@@ -702,7 +734,7 @@ impl WebFontRegistration {
     }
 
     pub fn bytes(&self) -> &[u8] {
-        &self.bytes
+        self.payload.bytes()
     }
 }
 
@@ -894,7 +926,10 @@ impl DocumentLayoutServices {
             return Err(WebFontRegistrationError::EmptySlot);
         }
         registration.face.validate()?;
-        let sfnt_bytes = decode_web_font_bytes(registration.bytes)?;
+        let (sfnt_bytes, validated) = match registration.payload {
+            WebFontPayload::Encoded(bytes) => (decode_web_font_bytes(bytes)?, false),
+            WebFontPayload::Validated(data) => (data.bytes, true),
+        };
         let font = RegisteredWebFont {
             face: registration.face,
             sfnt_bytes,
@@ -920,13 +955,17 @@ impl DocumentLayoutServices {
         if outcome == WebFontRegistrationOutcome::Added
             && let Some(parley) = self.parley.as_mut()
         {
-            validate_sfnt_table_bounds(font.sfnt_bytes.as_ref())?;
+            if !validated {
+                validate_sfnt_table_bounds(font.sfnt_bytes.as_ref())?;
+            }
             parley.register_web_font(&registration.slot, &font, &self.web_font_order)?;
             self.web_fonts.insert(registration.slot, font);
             parley.invalidate_font_selection();
             return Ok(outcome);
         }
-        validate_registered_font(&font.face, font.sfnt_bytes.clone())?;
+        if !validated {
+            validate_registered_font(&font.face, font.sfnt_bytes.clone())?;
+        }
         self.web_fonts.insert(registration.slot, font);
         if self.parley.is_some() {
             // Replacement still needs a rebuild: Fontique can unregister by

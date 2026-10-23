@@ -89,6 +89,34 @@ fn owned_and_borrowed_validation_have_the_same_acceptance() {
     }
 }
 
+#[test]
+fn validated_font_data_keeps_its_blob_through_registration_and_layout() {
+    let data = FontFaceData::from_bytes(TEST_WOFF2).unwrap();
+    let original_buffer = data.bytes().as_ptr();
+    let blob_id = data.bytes.id();
+    let mut services = DocumentLayoutServices::with_system_font_policy(SystemFontPolicy::Disabled);
+    services
+        .register_web_font(WebFontRegistration::from_font_data(
+            "validated",
+            WebFontFace::new("Validated"),
+            data,
+        ))
+        .unwrap();
+    assert_eq!(services.web_fonts["validated"].sfnt_bytes.id(), blob_id);
+    assert_eq!(
+        services.web_fonts["validated"].sfnt_bytes.as_ref().as_ptr(),
+        original_buffer
+    );
+    let parley = services.parley_mut();
+    let family = resolved_registered_family_name(parley, "Validated").unwrap();
+    let font = parley
+        .font_context
+        .collection
+        .family_by_name(&family)
+        .unwrap();
+    assert_eq!(font.fonts()[0].load(None).unwrap().id(), blob_id);
+}
+
 fn source_id(services: &mut ParleyDocumentServices, family: &str) -> parley::fontique::SourceId {
     let family = resolved_registered_family_name(services, family).unwrap();
     services

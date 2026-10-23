@@ -181,10 +181,10 @@ impl FontFaceResource {
         let LoadState::Loaded(data) = &self.state else {
             return Ok(None);
         };
-        let mut registration = WebFontRegistration::new(
+        let mut registration = WebFontRegistration::from_font_data(
             self.slot.clone(),
             self.descriptor.clone(),
-            data.bytes().to_vec(),
+            data.clone(),
         );
         if self.stylesheet {
             registration = registration.with_stylesheet_scope();
