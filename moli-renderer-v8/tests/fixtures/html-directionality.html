@@ -1,0 +1,135 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; font: 0/0 sans-serif; }
+  .check { display: block; width: 100px; height: 10px; border: 0; padding: 0; margin: 0; }
+  .check:dir(ltr) { color: rgb(4, 5, 6); }
+  .check:dir(rtl) { color: rgb(1, 2, 3); }
+  .marker { width: 20px; height: 10px; background: #1f7f3f; }
+</style>
+<body>
+<script>
+  let directionPhase = 0;
+  const directionChecks = [], directionMutations = [];
+  const state = (html, css = html, bidi = 'isolate') => [html, css, bidi,
+    html === 'rtl' ? 'rgb(1, 2, 3)' : 'rgb(4, 5, 6)'];
+  function check(id, element, states, parent = document.body) {
+    element.classList.add('check');
+    parent.append(element);
+    directionChecks.push({id, element, states});
+    return element;
+  }
+  function fixed(id, tag, attributes, expected, parent = document.body) {
+    const element = document.createElement(tag);
+    for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, value);
+    return check(id, element, [expected, expected, expected], parent);
+  }
+  for (const [value, expected] of [['rtl','rtl'], ['LTR','ltr'], ['RtL','rtl']]) {
+    fixed('explicit-'+value, 'div', {dir:value}, state(expected));
+  }
+  const cssParent = document.createElement('div');
+  cssParent.setAttribute('dir', 'rtl');
+  cssParent.style.direction = 'ltr';
+  document.body.append(cssParent);
+  for (const value of ['', 'bad', ' ltr', 'ltr ']) {
+    fixed('invalid-'+JSON.stringify(value), 'div', {dir:value}, state('rtl','ltr'), cssParent);
+  }
+  fixed('css-overrides-dir', 'div', {dir:'rtl', style:'direction:ltr;unicode-bidi:normal'}, state('rtl','ltr','normal'));
+  fixed('css-does-not-change-html-dir', 'div', {style:'direction:rtl'}, state('ltr','rtl'));
+  const namespaced = fixed('namespaced-dir', 'div', {}, state('rtl','ltr'), cssParent);
+  namespaced.setAttributeNS('urn:test','dir','ltr');
+  const foreign = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  foreign.setAttribute('dir','ltr');
+  check('foreign-dir', foreign, [state('rtl','ltr','normal'),state('rtl','ltr','normal'),state('rtl','ltr','normal')], cssParent);
+
+  for (const [id, text, expected] of [
+    ['neutral','123 .!?','ltr'], ['arabic-digits','\u0661\u0662','ltr'],
+    ['hebrew-mark','\u05b0A','ltr'], ['arabic-mark','\u064bA','ltr'],
+    ['lrm','\u200e\u05d0','ltr'], ['rlm','\u200fA','rtl'],
+    ['alm','\u061cA','rtl'], ['embedding','\u202bA\u202c','ltr'],
+    ['adlam','\u{1e900}A','rtl'], ['arabic','اA','rtl'],
+  ]) {
+    const element = fixed('unicode-'+id, 'div', {dir:'auto'}, state(expected));
+    element.textContent = text;
+  }
+  for (const tag of ['script','style','textarea','bdi','span']) {
+    for (const foreign of [false,true]) {
+      const root = fixed('excluded-'+tag+'-'+foreign, 'div', {dir:'auto'}, state(foreign ? 'rtl' : 'ltr'));
+      const child = foreign ? document.createElementNS('http://www.w3.org/2000/svg',tag) : document.createElement(tag);
+      if (tag === 'script') child.setAttribute('type','application/json');
+      if (tag === 'span') child.setAttribute('dir','ltr');
+      child.textContent = '\u05d0';
+      root.append(child, document.createTextNode('A'));
+    }
+  }
+  for (const [tag, dir, bidi] of [['div','auto','isolate'], ['bdi',null,'isolate'],
+      ['bdi','invalid','isolate'], ['bdo','auto','isolate-override'], ['pre','auto','plaintext']]) {
+    const element = document.createElement(tag);
+    if (dir !== null) element.setAttribute('dir',dir);
+    element.textContent = 'A';
+    check('auto-'+tag+'-'+dir, element, [state('ltr','ltr',bidi),state('rtl','rtl',bidi),state('ltr','ltr',bidi)]);
+    directionMutations.push(phase => { element.firstChild.data = phase === 1 ? '\u05d0' : '123'; });
+  }
+  for (const type of ['text','search','tel','url','email','password','hidden','button','number','textarea']) {
+    const input = document.createElement(type === 'textarea' ? 'textarea' : 'input');
+    if (type !== 'textarea') input.setAttribute('type',type);
+    input.setAttribute('dir','auto');
+    input.value = '\u05d0';
+    const bidi = ['search','tel','url','email','textarea'].includes(type) ? 'plaintext' : 'isolate';
+    check('input-'+type, input, [state(type === 'number' ? 'ltr' : 'rtl',type === 'number' ? 'ltr' : 'rtl',bidi),state('ltr','ltr',bidi),state('ltr','ltr',bidi)]);
+    directionMutations.push(phase => { input.value = phase === 1 ? 'A' : '123'; });
+  }
+  const ancestor = document.createElement('div');
+  ancestor.setAttribute('dir','auto');
+  const inner = document.createElement('span');
+  inner.textContent = 'A';
+  ancestor.append(inner);
+  check('auto-ancestor', ancestor, [state('ltr'),state('rtl'),state('ltr')]);
+  check('inherited-descendant', document.createElement('span'), [state('ltr','ltr','normal'),state('rtl','rtl','normal'),state('ltr','ltr','normal')], ancestor);
+  directionMutations.push(phase => { inner.firstChild.data = phase === 1 ? '\u05d0' : 'A'; });
+
+  const owner = document.createElement('div');
+  const shadow = owner.attachShadow({mode:'open'});
+  const style = document.createElement('style');
+  style.textContent = '.check:dir(ltr){color:rgb(4,5,6)} .check:dir(rtl){color:rgb(1,2,3)}';
+  shadow.append(style);
+  const slot = document.createElement('slot');
+  slot.setAttribute('dir','auto');
+  shadow.append(slot);
+  const assigned = document.createElement('span');
+  assigned.textContent = '\u05d0';
+  owner.append(assigned);
+  document.body.append(owner);
+  check('auto-slot', slot, [state('rtl'),state('ltr'),state('ltr')], shadow);
+  check('assigned-inherits-css-not-html', assigned, [state('ltr','rtl','normal'),state('ltr','ltr','normal'),state('ltr','ltr','normal')], owner);
+  directionMutations.push(phase => { assigned.firstChild.data = phase === 1 ? 'A' : '123'; });
+
+  for (const display of ['block','flex','grid']) {
+    const element = document.createElement('div');
+    element.setAttribute('dir','rtl');
+    element.style.cssText = `display:${display};width:100px;height:10px;grid-template-columns:20px`;
+    const marker = document.createElement('div');
+    marker.className = 'marker';
+    element.append(marker);
+    const entry = {id:'geometry-'+display, element, marker, states:[state('rtl'),state('ltr'),state('ltr')], x:[80,0,0]};
+    check(entry.id, element, entry.states);
+    Object.assign(directionChecks[directionChecks.length-1], {marker, x:entry.x});
+    directionMutations.push(phase => { if (phase === 1) element.setAttribute('dir','ltr'); else element.removeAttribute('dir'); });
+  }
+  function setDirectionPhase(phase) {
+    directionPhase = phase;
+    if (phase !== 0) for (const mutate of directionMutations) mutate(phase);
+  }
+  function collectDirectionChecks() {
+    return directionChecks.map(({id,element,states,marker,x}) => {
+      const style = getComputedStyle(element);
+      const actual = [element.matches(':dir(rtl)') ? 'rtl' : 'ltr',style.direction,style.unicodeBidi,style.color];
+      const expected = [...states[directionPhase]];
+      if (marker) {
+        actual.push(marker.getBoundingClientRect().x-element.getBoundingClientRect().x);
+        expected.push(x[directionPhase]);
+      }
+      return {id,actual,expected};
+    });
+  }
+</script>

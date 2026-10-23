@@ -1,6 +1,101 @@
 use super::*;
 
 #[test]
+fn html_direction_transitions_invalidate_relational_dependents_without_clearing_unrelated_style() {
+    let mut host = test_host();
+    let document = host.document_handle();
+    let html = host.create_element("html");
+    let body = host.create_element("body");
+    assert!(host.append_child(document, html));
+    assert!(host.append_child(html, body));
+    let source = host.create_element("div");
+    let flag = host.create_element("span");
+    let text = host.create_text_node("A");
+    let target = host.create_element("div");
+    let unrelated = host.create_element("aside");
+    for (node, id) in [(source, "source"), (flag, "flag"), (target, "target")] {
+        assert!(host.set_attribute(node, "id", id));
+    }
+    assert!(host.set_attribute(source, "dir", "auto"));
+    assert!(host.append_child(body, source));
+    assert!(host.append_child(source, flag));
+    assert!(host.append_child(source, text));
+    assert!(host.append_child(body, target));
+    assert!(host.append_child(body, unrelated));
+    let mut engine = MoliStyleEngine::new();
+    let document_url = url::Url::parse("https://example.test/").unwrap();
+    let sheet = StyloStylesheetSource::new(
+        "#source {direction:ltr} #target {color:green} #source:has(#flag:dir(rtl)) + #target {color:red}".to_owned(),
+        document_url.clone(),
+    );
+    engine.set_document_adopted_style_sheet_sources(document, vec![sheet.clone()]);
+    let mut inputs = FullStyleWorldSnapshot::default();
+    inputs.document_stylesheet_sources.push(sheet);
+    for node in [source, flag, target, unrelated] {
+        assert!(
+            engine
+                .computed_style_property_value(
+                    &host,
+                    &document_url,
+                    node,
+                    "color",
+                    None,
+                    &inputs,
+                    None
+                )
+                .is_some()
+        );
+    }
+    assert!(
+        engine.computed_style_cache_contains_handle_for_document_for_test(document, unrelated),
+        "warm unrelated cache"
+    );
+    let effects = host.set_text_content_effects(text, "א");
+    let media = crate::protocol_types::EmulatedMediaOverrides::default();
+    engine.invalidate_for_mutations(
+        &host,
+        &StyleMutationEffect::from_dom_mutation_effects(&host, &effects),
+        &media,
+    );
+    assert!(
+        engine.computed_style_cache_contains_handle_for_document_for_test(document, unrelated),
+        "after character mutation queue"
+    );
+    engine.invalidate_for_directionality_changes(&host, &effects, &media, StyleViewport::default());
+    assert!(
+        engine.computed_style_cache_contains_handle_for_document_for_test(document, unrelated),
+        "after direction mutation queue"
+    );
+    engine.drain_pending_style_invalidations_for_document_for_test(&host, document);
+    assert!(!engine.computed_style_cache_contains_handle_for_document_for_test(document, target));
+    assert!(engine.computed_style_cache_contains_handle_for_document_for_test(document, unrelated));
+    assert_eq!(
+        engine.computed_style_property_value(
+            &host,
+            &document_url,
+            target,
+            "color",
+            None,
+            &inputs,
+            None
+        ),
+        Some("rgb(255, 0, 0)".into())
+    );
+    assert_eq!(
+        engine.computed_style_property_value(
+            &host,
+            &document_url,
+            flag,
+            "direction",
+            None,
+            &inputs,
+            None
+        ),
+        Some("ltr".into())
+    );
+}
+
+#[test]
 fn no_source_no_cache_mutations_do_not_queue_retained_invalidation_work() {
     let mut host = test_host();
     let document = host.document_handle();

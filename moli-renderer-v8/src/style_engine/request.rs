@@ -20,6 +20,9 @@ pub(super) struct RetainedSourceDependencyRequestPlan {
 pub(super) enum RetainedSourceDependencyRequestContext<'a> {
     None,
     Attribute,
+    /// A state-keyed query with the actual pre-mutation element state. Unlike
+    /// structural probes, it completely describes what changed for matching.
+    ElementStateSnapshot,
     CurrentElement {
         host: &'a DomHost,
     },
@@ -113,12 +116,13 @@ impl RetainedSourceDependencyRequestContext<'_> {
     /// Whether an active source reporting zero matching dependencies proves
     /// that this request has no style effect.
     ///
-    /// Direct keyed attribute/class/id mutations have enough source-local
-    /// dependency information for that proof. Structural, relative, state,
-    /// and slot requests keep their safety roots because a zero match can also
+    /// Direct keyed attribute/class/id mutations and complete element-state
+    /// snapshots have enough source-local dependency information for that
+    /// proof. Structural, unsnapshotted state, and slot requests keep their
+    /// safety roots because a zero match can also
     /// mean that the retained query did not cover the mutation boundary.
     pub(super) fn zero_matched_dependency_result_is_exact(&self) -> bool {
-        matches!(self, Self::Attribute)
+        matches!(self, Self::Attribute | Self::ElementStateSnapshot)
     }
 
     fn dependency_fallback_context(
@@ -126,7 +130,7 @@ impl RetainedSourceDependencyRequestContext<'_> {
         query: &RetainedStyleInvalidationQuery,
     ) -> Option<StyloDependencyInvalidationFallbackContext> {
         match self {
-            Self::None => None,
+            Self::None | Self::ElementStateSnapshot => None,
             Self::Attribute => Some(StyloDependencyInvalidationFallbackContext::default()),
             Self::CurrentElement { host } => {
                 Some(current_element_dependency_fallback_context(host, query))

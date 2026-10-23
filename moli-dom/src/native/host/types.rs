@@ -147,6 +147,10 @@ pub(super) struct ShadowSlotNameIndex {
 #[derive(Debug, Clone)]
 pub struct DomHost {
     pub(super) dom: NativeDom,
+    /// Conservative capability bit, like Blink's HasDirAttribute. Once a dir
+    /// attribute or bdi has appeared, mutations may need semantic snapshots.
+    /// It stores no direction value and is never used by direction queries.
+    pub(super) directionality_may_vary: Cell<bool>,
     pub(super) dom_version: Cell<u64>,
     pub(super) query_version: Cell<u64>,
     pub(super) shadow_root_binding_version: Cell<u64>,

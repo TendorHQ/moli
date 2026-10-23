@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use super::super::DomHandle;
 
+mod directionality;
 mod observer;
 mod script;
 mod slot;
@@ -9,10 +10,14 @@ mod style;
 mod stylesheet;
 mod tree;
 
+pub use directionality::DomDirectionalityChange;
 pub use observer::{DomMutationRecord, DomMutationRecordBatch, DomMutationRecordKind};
 pub use script::{DomScriptMutationEffects, ScriptPrepareTrigger, ScriptPrepareTriggerKind};
 pub use slot::{DomSlotAssignmentChange, DomSlotMutationEffects};
-pub use style::{DomAttributeMutation, DomChildListMutation, DomStyleInvalidationInputs};
+pub use style::{
+    DomAttributeMutation, DomCharacterDataMutation, DomChildListMutation,
+    DomStyleInvalidationInputs,
+};
 pub use stylesheet::{
     DomStylesheetOwnerChange, DomStylesheetOwnerChangeKind, DomStylesheetOwnerTransitions,
     DomStylesheetOwnerTreeScopes,
@@ -25,6 +30,7 @@ pub use tree::DomTreeMutationEffects;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DomMutationEffects {
     changed: bool,
+    directionality: directionality::DirectionalityChanges,
     tree: DomTreeMutationEffects,
     scripts: DomScriptMutationEffects,
     slots: DomSlotMutationEffects,
@@ -64,7 +70,7 @@ impl DomAttributeMutationOutcome {
 }
 
 impl DomMutationEffects {
-    pub(super) fn changed() -> Self {
+    pub(in crate::native::host) fn changed() -> Self {
         Self {
             changed: true,
             ..Self::default()
@@ -188,6 +194,7 @@ impl DomMutationEffects {
 
     pub fn merge(&mut self, other: Self) {
         self.changed |= other.changed;
+        self.directionality.merge(other.directionality);
         self.tree.merge(other.tree);
         self.scripts.merge(other.scripts);
         self.slots.merge(other.slots);

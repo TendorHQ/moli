@@ -1,0 +1,80 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  html,body { margin:0; padding:0; font:0/0 sans-serif; }
+  #group { direction:ltr !important; }
+  .witness { width:20px; height:10px; background:rgb(0,128,0); }
+  #group:has(.flag:dir(rtl)) + #outer,
+  .flag:dir(rtl) + #sibling,
+  #form:has(input:dir(rtl):valid) > #control-witness {
+    width:40px; background:rgb(255,0,0);
+  }
+</style>
+<div id="group" dir="auto"><span id="source">א</span><span class="flag" id="flag"></span><div class="witness" id="sibling"></div></div>
+<div class="witness" id="outer"></div>
+<div id="form"><input id="control" dir="auto" required value="א"><div class="witness" id="control-witness"></div></div>
+<div id="owner"></div>
+<script>
+  let directionInvalidationPhase = 0;
+  const root = owner.attachShadow({mode:'open',slotAssignment:'manual'});
+  root.innerHTML = `<style>
+    .indicator { display:block; width:20px; height:10px; background:rgb(0,128,0) }
+    slot:dir(rtl) + .indicator { width:40px; background:rgb(255,0,0) }
+  </style><slot dir="auto" id="a"><span>A</span></slot><div class="indicator" id="ia"></div><slot dir="auto" id="b"><span>B</span></slot><div class="indicator" id="ib"></div>`;
+  const a = root.getElementById('a'), b = root.getElementById('b');
+  const ia = root.getElementById('ia'), ib = root.getElementById('ib');
+  const assigned = document.createElement('span');
+  assigned.textContent = 'א';
+  owner.append(assigned);
+  a.assign(assigned);
+
+  function setDirectionInvalidationPhase(phase) {
+    directionInvalidationPhase = phase;
+    if (phase === 1) {
+      source.firstChild.data = 'A';
+      assigned.firstChild.data = 'A';
+      control.type = 'number';
+    }
+    if (phase === 2) {
+      source.firstChild.data = 'א'; source.dir = 'rtl';
+      assigned.firstChild.data = 'א'; b.assign(assigned);
+      control.type = 'text'; control.value = 'A';
+    }
+    if (phase === 3) {
+      source.removeAttribute('dir'); b.assign(); control.value = 'א';
+    }
+    if (phase === 4) {
+      source.textContent = '١٢٣'; a.assign(assigned); control.value = '';
+    }
+    if (phase === 5) {
+      const fragment = document.createDocumentFragment();
+      const strong = document.createElement('span'); strong.textContent = 'א';
+      fragment.append(strong); group.append(fragment);
+      assigned.dir = 'ltr'; control.value = 'א';
+    }
+  }
+
+  function collectDirectionInvalidationChecks(geometry) {
+    const phase = directionInvalidationPhase;
+    const groupRtl = [true,false,false,true,false,true][phase];
+    const aRtl = [true,false,false,false,true,false][phase];
+    const bRtl = [false,false,true,false,false,false][phase];
+    const controlRtl = [true,false,false,true,false,true][phase];
+    const valid = [true,false,true,true,false,true][phase];
+    const checks = [];
+    function check(id, actual, expected) { checks.push({id,actual,expected}); }
+    // Read consumers first: their dependency root must not need a warm-up read.
+    for (const [id,element,rtl] of [['outer',outer,groupRtl],['sibling',sibling,groupRtl],['form',document.getElementById('control-witness'),controlRtl&&valid],['slot-a-sibling',ia,aRtl],['slot-b-sibling',ib,bRtl]]) {
+      check(id+'-style',getComputedStyle(element).backgroundColor,rtl?'rgb(255, 0, 0)':'rgb(0, 128, 0)');
+      if (geometry) check(id+'-geometry',[element.getBoundingClientRect().width,element.getBoundingClientRect().height],[rtl?40:20,10]);
+    }
+    if (phase !== 3) check('assigned-css-direction',getComputedStyle(assigned).direction,(phase===2?bRtl:aRtl)?'rtl':'ltr');
+    check('assigned-html-direction',assigned.matches(':dir(rtl)'),false);
+    check('inherited-html-direction',flag.matches(':dir(rtl)'),groupRtl);
+    check('author-css-overrides-hint',getComputedStyle(flag).direction,'ltr');
+    check('slot-a-css',getComputedStyle(a).direction,aRtl?'rtl':'ltr');
+    check('slot-b-css',getComputedStyle(b).direction,bRtl?'rtl':'ltr');
+    check('control-state',[control.matches(':dir(rtl)'),control.validity.valid,getComputedStyle(control).direction],[controlRtl,valid,controlRtl?'rtl':'ltr']);
+    return checks;
+  }
+</script>

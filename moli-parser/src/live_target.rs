@@ -1410,7 +1410,8 @@ impl ParserDomMutationConsumer for TestMutationEffectCollector<'_> {
     ) {
         // SAFETY: tests keep the borrowed DomHost pointer alive and route the
         // parser pump through this collector for the duration of the step.
-        unsafe { &mut *self.host }.add_attrs_if_missing_for_parser(node_id, attrs);
+        self.effects
+            .merge(unsafe { &mut *self.host }.add_attrs_if_missing_for_parser(node_id, attrs));
     }
 
     fn create_text_node(&mut self, document_handle: NativeNodeId, text: String) -> NativeNodeId {
@@ -1470,13 +1471,21 @@ impl ParserDomMutationConsumer for TestMutationEffectCollector<'_> {
     fn prepend_text_to_text_node(&mut self, node_id: NativeNodeId, text: String) {
         // SAFETY: tests keep the borrowed DomHost pointer alive and route the
         // parser pump through this collector for the duration of the step.
-        prepend_text_to_text_node_in_host(unsafe { &mut *self.host }, node_id, text);
+        self.effects.merge(prepend_text_to_text_node_in_host(
+            unsafe { &mut *self.host },
+            node_id,
+            text,
+        ));
     }
 
     fn append_text_to_text_node(&mut self, node_id: NativeNodeId, text: String) {
         // SAFETY: tests keep the borrowed DomHost pointer alive and route the
         // parser pump through this collector for the duration of the step.
-        append_text_to_text_node_in_host(unsafe { &mut *self.host }, node_id, text);
+        self.effects.merge(append_text_to_text_node_in_host(
+            unsafe { &mut *self.host },
+            node_id,
+            text,
+        ));
     }
 
     fn push_parse_error(&mut self, error: String) {
@@ -1538,26 +1547,20 @@ impl ParserMutationEffectConsumer for TestMutationEffectCollector<'_> {
     }
 }
 
-fn prepend_text_to_text_node_in_host(host: &mut DomHost, node_id: NativeNodeId, text: String) {
-    if let Some(text_node) = host
-        .node_mut(node_id)
-        .and_then(|node| node.data_mut().as_text_mut())
-    {
-        let mut merged = text;
-        merged.push_str(text_node.data());
-        text_node.set_data(merged);
-    }
+fn prepend_text_to_text_node_in_host(
+    host: &mut DomHost,
+    node_id: NativeNodeId,
+    text: String,
+) -> DomMutationEffects {
+    host.prepend_text_for_parser(node_id, text)
 }
 
-fn append_text_to_text_node_in_host(host: &mut DomHost, node_id: NativeNodeId, text: String) {
-    if let Some(text_node) = host
-        .node_mut(node_id)
-        .and_then(|node| node.data_mut().as_text_mut())
-    {
-        let mut merged = text_node.data().to_owned();
-        merged.push_str(&text);
-        text_node.set_data(merged);
-    }
+fn append_text_to_text_node_in_host(
+    host: &mut DomHost,
+    node_id: NativeNodeId,
+    text: String,
+) -> DomMutationEffects {
+    host.append_text_for_parser(node_id, &text)
 }
 
 #[cfg(test)]
@@ -1769,7 +1772,8 @@ impl ParserDomMutationConsumer for TestReadTrackingCollector<'_> {
     ) {
         // SAFETY: tests keep the borrowed DomHost pointer alive and route the
         // parser pump through this collector for the duration of the step.
-        unsafe { &mut *self.host }.add_attrs_if_missing_for_parser(node_id, attrs);
+        self.effects
+            .merge(unsafe { &mut *self.host }.add_attrs_if_missing_for_parser(node_id, attrs));
     }
 
     fn create_text_node(&mut self, document_handle: NativeNodeId, text: String) -> NativeNodeId {
@@ -1829,13 +1833,21 @@ impl ParserDomMutationConsumer for TestReadTrackingCollector<'_> {
     fn prepend_text_to_text_node(&mut self, node_id: NativeNodeId, text: String) {
         // SAFETY: tests keep the borrowed DomHost pointer alive and route the
         // parser pump through this collector for the duration of the step.
-        prepend_text_to_text_node_in_host(unsafe { &mut *self.host }, node_id, text);
+        self.effects.merge(prepend_text_to_text_node_in_host(
+            unsafe { &mut *self.host },
+            node_id,
+            text,
+        ));
     }
 
     fn append_text_to_text_node(&mut self, node_id: NativeNodeId, text: String) {
         // SAFETY: tests keep the borrowed DomHost pointer alive and route the
         // parser pump through this collector for the duration of the step.
-        append_text_to_text_node_in_host(unsafe { &mut *self.host }, node_id, text);
+        self.effects.merge(append_text_to_text_node_in_host(
+            unsafe { &mut *self.host },
+            node_id,
+            text,
+        ));
     }
 
     fn push_parse_error(&mut self, error: String) {

@@ -5,6 +5,7 @@
 
 mod cssom_selector;
 mod detached_stylo;
+#[cfg(test)]
 mod directionality;
 mod error;
 mod stylo;
@@ -15,9 +16,11 @@ pub use detached_stylo::{
     DetachedStyloSelectorHost, detached_stylo_selector_matches,
     detached_stylo_selector_matches_if_uses_defined_pseudo, detached_stylo_selector_query_all,
 };
-pub use directionality::{CssDirection, first_strong_text_direction, html_directionality};
 pub use error::{SelectorError, SelectorErrorKind};
 pub use moli_dom as dom;
+pub use moli_dom::directionality::{
+    HtmlDirection, first_strong_text_direction, html_directionality,
+};
 pub use stylo::{
     MoliInvalidationResult, MoliInvalidationResultBuilder, MoliInvalidationSourceResultsSink,
     MoliStyleMutationElementSnapshot, MoliStyleMutationSnapshot,

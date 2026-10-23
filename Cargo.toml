@@ -88,7 +88,7 @@ license = "MIT OR Apache-2.0"
 
 [patch.crates-io]
 # Keep inline boundaries, out-of-flow items and line-edge whitespace in paragraph layout.
-parley = { git = "https://github.com/ldm0/parley", rev = "9e1fffaf84437cda87fa1fc726a61f9e091b9563" }
+parley = { path = "/home/donoughliu/code/parley-worktrees/layout-inline-bidi-analysis/parley" }
 xml5ever = { path = "vendor/xml5ever-0.39.0" }
 curl = { git = "https://github.com/ldm0/curl-rust", branch = "moli" }
 curl-sys = { git = "https://github.com/ldm0/curl-rust", branch = "moli" }

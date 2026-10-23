@@ -2051,10 +2051,12 @@ impl JsContextHost {
         self.clear_text_control_change_pending(handle);
         let old_state = self.retained_current_element_state(handle);
         let container_old_states = self.retained_old_states_for_validity_container_change(handle);
-        let changed =
+        let effects =
             unsafe { DocumentRuntime::set_input_value(&mut *self.runtime, handle, value) };
+        let changed = effects.did_change();
         if changed {
             self.note_input_value_state_style_activity(handle, old_state, &container_old_states);
+            self.note_directionality_style_activity(&effects);
         }
         changed
     }
@@ -2068,11 +2070,13 @@ impl JsContextHost {
         self.clear_text_control_change_pending(handle);
         let old_state = self.retained_current_element_state(handle);
         let container_old_states = self.retained_old_states_for_validity_container_change(handle);
-        let changed = unsafe {
+        let effects = unsafe {
             DocumentRuntime::set_input_value_with_dirty(&mut *self.runtime, handle, value, dirty)
         };
+        let changed = effects.did_change();
         if changed {
             self.note_input_value_state_style_activity(handle, old_state, &container_old_states);
+            self.note_directionality_style_activity(&effects);
         }
         changed
     }
@@ -2084,11 +2088,13 @@ impl JsContextHost {
     ) -> bool {
         let old_state = self.retained_current_element_state(handle);
         let container_old_states = self.retained_old_states_for_validity_container_change(handle);
-        let changed = unsafe {
+        let effects = unsafe {
             DocumentRuntime::set_input_value_from_user_edit(&mut *self.runtime, handle, value)
         };
+        let changed = effects.did_change();
         if changed {
             self.note_input_value_state_style_activity(handle, old_state, &container_old_states);
+            self.note_directionality_style_activity(&effects);
         }
         changed
     }
@@ -2222,6 +2228,24 @@ impl JsContextHost {
         let emulated_media = self.emulated_media().clone();
         let viewport = self.style_viewport();
         self.style_engine.invalidate_for_mutations_with_viewport(
+            unsafe { &*dom_host },
+            effects,
+            &emulated_media,
+            viewport,
+        );
+    }
+
+    pub(crate) fn note_directionality_style_activity(
+        &mut self,
+        effects: &moli_dom::native::DomMutationEffects,
+    ) {
+        if effects.directionality_changes().next().is_none() {
+            return;
+        }
+        let dom_host = self.dom_host() as *const _;
+        let emulated_media = self.emulated_media().clone();
+        let viewport = self.style_viewport();
+        self.style_engine.invalidate_for_directionality_changes(
             unsafe { &*dom_host },
             effects,
             &emulated_media,

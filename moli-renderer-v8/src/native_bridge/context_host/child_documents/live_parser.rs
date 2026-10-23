@@ -74,6 +74,17 @@ impl<'a, 'scope, 'pin> ChildFrameLiveParserOwner<'a, 'scope, 'pin> {
 
     fn sync_child_parser_side_effects(&mut self, effects: Option<&DomMutationEffects>) {
         if effects.is_none_or(|effects| effects.did_change()) {
+            if let Some(effects) = effects {
+                let style_effects =
+                    crate::style_engine::StyleMutationEffect::from_dom_mutation_effects(
+                        self.host.dom_host(),
+                        effects,
+                    );
+                if !style_effects.is_empty() {
+                    self.host.note_style_mutation_effects(&style_effects);
+                }
+                self.host.note_directionality_style_activity(effects);
+            }
             self.host
                 .sync_owner_style_sheet_texts_for_document_tree_scopes(self.child_document_handle);
             self.host
@@ -290,9 +301,13 @@ impl ParserDomMutationConsumer for ChildFrameLiveParserOwner<'_, '_, '_> {
     }
 
     fn add_attrs_if_missing_for_parser(&mut self, node_id: DomHandle, attrs: Vec<Attribute>) {
-        self.host
+        let effects = self
+            .host
             .dom_host_mut()
             .add_attrs_if_missing_for_parser(node_id, attrs);
+        if effects.did_change() {
+            self.consume_parser_mutation_effects(effects);
+        }
     }
 
     fn create_text_node(&mut self, document_handle: DomHandle, text: String) -> DomHandle {
@@ -340,28 +355,22 @@ impl ParserDomMutationConsumer for ChildFrameLiveParserOwner<'_, '_, '_> {
     }
 
     fn prepend_text_to_text_node(&mut self, node_id: DomHandle, text: String) {
-        if let Some(text_node) = self
+        let effects = self
             .host
             .dom_host_mut()
-            .node_mut(node_id)
-            .and_then(|node| node.data_mut().as_text_mut())
-        {
-            let mut merged = text;
-            merged.push_str(text_node.data());
-            text_node.set_data(merged);
+            .prepend_text_for_parser(node_id, text);
+        if effects.did_change() {
+            self.consume_parser_mutation_effects(effects);
         }
     }
 
     fn append_text_to_text_node(&mut self, node_id: DomHandle, text: String) {
-        if let Some(text_node) = self
+        let effects = self
             .host
             .dom_host_mut()
-            .node_mut(node_id)
-            .and_then(|node| node.data_mut().as_text_mut())
-        {
-            let mut merged = text_node.data().to_owned();
-            merged.push_str(&text);
-            text_node.set_data(merged);
+            .append_text_for_parser(node_id, &text);
+        if effects.did_change() {
+            self.consume_parser_mutation_effects(effects);
         }
     }
 

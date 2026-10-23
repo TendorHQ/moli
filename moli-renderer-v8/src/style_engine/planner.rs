@@ -198,6 +198,9 @@ fn retained_source_dependency_request_context_for_pending_cause<'a>(
         {
             RetainedSourceDependencyRequestContext::SlotAssignment(effects)
         }
+        PendingStyleInvalidationCause::StateChange {
+            old_state: Some(_), ..
+        } => RetainedSourceDependencyRequestContext::ElementStateSnapshot,
         PendingStyleInvalidationCause::CustomStateChange { .. } => {
             RetainedSourceDependencyRequestContext::CurrentElement { host }
         }

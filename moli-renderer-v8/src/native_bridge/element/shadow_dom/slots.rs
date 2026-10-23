@@ -180,26 +180,18 @@ pub(in crate::native_bridge) fn slot_assign_callback<'s>(
         }
         handles.push(handle);
     }
-    let slot_assignment_changes = unsafe { &mut *runtime_ptr }
+    let effects = unsafe { &mut *runtime_ptr }
         .dom_host_mut()
         .assign_nodes_to_slot(slot_handle, handles);
     let runtime = unsafe { &mut *runtime_ptr };
-    let changed_slots = slot_assignment_changes
-        .iter()
-        .map(|change| change.slot())
-        .collect::<Vec<_>>();
+    let changed_slots = effects.slots().changed_slots();
     if !changed_slots.is_empty() {
-        let style_effects = slot_assignment_changes
-            .iter()
-            .map(|change| StyleMutationEffect::SlotAssignment {
-                slot: change.slot(),
-                previous_assigned_nodes: Some(change.previous_assigned_nodes().to_vec()),
-                assigned_nodes: Some(change.assigned_nodes().to_vec()),
-            })
-            .collect::<Vec<_>>();
+        let style_effects =
+            StyleMutationEffect::from_dom_mutation_effects(runtime.dom_host(), &effects);
         runtime.note_style_mutation_effects(&style_effects);
+        runtime.note_directionality_style_activity(&effects);
     }
-    runtime.queue_slotchange_events(scope, &changed_slots);
+    runtime.queue_slotchange_events(scope, changed_slots);
     rv.set_undefined();
 }
 

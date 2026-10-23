@@ -23,7 +23,6 @@ use crate::{
     },
 };
 use cssparser::{Parser, ParserInput, Token, serialize_identifier, serialize_string};
-use moli_selector::html_directionality;
 use std::collections::{HashMap, HashSet};
 use style::{properties::ComputedValues, servo_arc::Arc as ServoArc, stylesheets::CssRuleType};
 
@@ -2346,9 +2345,6 @@ fn computed_style_property_value_after_style_update(
     } else {
         StyleResolutionContext::independent(context)
     };
-    if property == "direction" {
-        return computed_direction_with_resolution(runtime, handle, resolution);
-    }
     if matches!(property, "left" | "right" | "top" | "bottom")
         && let Some(midpoint) =
             active_css_animation_midpoint_px_with_resolution(runtime, handle, property, resolution)
@@ -5830,37 +5826,12 @@ fn physical_inset_logical_source(
     if !writing_mode.is_empty() && writing_mode != "horizontal-tb" {
         return None;
     }
-    let direction = computed_direction(runtime, handle);
+    let direction = raw_stylo_computed_style_value(runtime, handle, "direction");
     match (property, direction.as_str()) {
         ("left", "rtl") | ("right", "ltr") => Some("inset-inline-end"),
         ("left", _) | ("right", _) => Some("inset-inline-start"),
         _ => None,
     }
-}
-
-fn computed_direction(runtime: &JsContextHost, handle: DomHandle) -> String {
-    let read = ComputedStyleRead::new(runtime, handle);
-    computed_direction_with_resolution(runtime, handle, read.resolution_context())
-}
-
-fn computed_direction_with_resolution(
-    runtime: &JsContextHost,
-    handle: DomHandle,
-    resolution: StyleResolutionContext<'_>,
-) -> String {
-    if let Some(entry) = inline_style_entry_for_inline_style(runtime, handle, "direction") {
-        let value = entry.value.to_ascii_lowercase();
-        if matches!(value.as_str(), "ltr" | "rtl") {
-            return value;
-        }
-    }
-    let direction = resolution.raw_property(runtime, handle, "direction");
-    if direction.eq_ignore_ascii_case("rtl") {
-        return "rtl".to_owned();
-    }
-    html_directionality(runtime.dom_host(), handle)
-        .as_str()
-        .to_owned()
 }
 
 fn raw_stylo_computed_style_value(
@@ -6192,7 +6163,7 @@ fn inset_uses_start_static_position(
         StyleMode::Computed,
         "writing-mode",
     );
-    let direction = computed_direction(runtime, containing_block);
+    let direction = raw_stylo_computed_style_value(runtime, containing_block, "direction");
     let writing_mode = if writing_mode.is_empty() {
         "horizontal-tb"
     } else {

@@ -49,8 +49,13 @@ impl DomHost {
     }
 
     pub fn from_dom(dom: NativeDom) -> Self {
+        let directionality_may_vary = dom
+            .nodes()
+            .filter_map(Node::as_element)
+            .any(super::directionality::has_directionality_source);
         let mut host = Self {
             dom,
+            directionality_may_vary: Cell::new(directionality_may_vary),
             dom_version: Cell::new(0),
             query_version: Cell::new(0),
             shadow_root_binding_version: Cell::new(0),
@@ -2450,9 +2455,9 @@ impl DomHost {
         &self,
         slot_handle: DomHandle,
         nodes: Vec<DomHandle>,
-    ) -> Vec<DomSlotAssignmentChange> {
+    ) -> DomMutationEffects {
         if !self.is_html_element_named(slot_handle, "slot") {
-            return Vec::new();
+            return DomMutationEffects::default();
         }
         let deduped = nodes.into_iter().collect::<IndexSet<_>>();
         let mut impacted_slots = IndexSet::from([slot_handle]);
@@ -2468,6 +2473,10 @@ impl DomHost {
             .iter()
             .map(|&slot| (slot, self.assigned_nodes_for_slot_with_options(slot, false)))
             .collect::<Vec<_>>();
+        let directionality = super::directionality::DirectionalitySnapshot::for_slots(
+            self,
+            impacted_slots.iter().copied(),
+        );
 
         let mut assignments = self.manual_slot_assignments.borrow_mut();
         for assigned in assignments.values_mut() {
@@ -2488,10 +2497,23 @@ impl DomHost {
             .iter()
             .map(DomSlotAssignmentChange::slot)
             .collect::<Vec<_>>();
-        self.slots_in_tree_order(&changed_slots)
-            .into_iter()
-            .filter_map(|slot| changes.iter().find(|change| change.slot() == slot).cloned())
-            .collect()
+        let mut effects = DomMutationEffects::default();
+        for slot in self.slots_in_tree_order(&changed_slots) {
+            let change = changes
+                .iter()
+                .find(|change| change.slot() == slot)
+                .expect("changed slot");
+            effects.mark_slot_assignment_change(
+                slot,
+                change.previous_assigned_nodes().to_vec(),
+                change.assigned_nodes().to_vec(),
+            );
+        }
+        if effects.did_change() {
+            self.record_mutation(MutationScope::QueryState);
+        }
+        directionality.finish(self, &mut effects);
+        effects
     }
 
     pub fn slots_in_tree_order(&self, slots: &[DomHandle]) -> Vec<DomHandle> {

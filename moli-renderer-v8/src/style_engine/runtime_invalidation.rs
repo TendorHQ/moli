@@ -4,7 +4,9 @@ use dom::ElementState as StyloElementState;
 use moli_selector::StyloStyleSourceScope as StyleSourceScope;
 
 use crate::{
-    document_runtime::DomHandle, dom::native::DomHost, protocol_types::EmulatedMediaOverrides,
+    document_runtime::DomHandle,
+    dom::native::{DomHost, Node},
+    protocol_types::EmulatedMediaOverrides,
 };
 
 #[cfg(test)]
@@ -28,6 +30,61 @@ use super::{
 const IMMEDIATE_STRUCTURAL_MUTATION_EFFECT_LIMIT: usize = 256;
 
 impl MoliStyleEngine {
+    pub(crate) fn invalidate_for_directionality_changes(
+        &mut self,
+        host: &DomHost,
+        effects: &moli_dom::native::DomMutationEffects,
+        emulated_media: &EmulatedMediaOverrides,
+        viewport: StyleViewport,
+    ) {
+        for change in effects.directionality_changes() {
+            let Some(world) = self.owner_document_world(host, change.target()) else {
+                continue;
+            };
+            if !world_has_style_state(self, &world) {
+                continue;
+            }
+            let Some(current) = self.retained_current_element_state(host, change.target()) else {
+                continue;
+            };
+            let direction_states = StyloElementState::LTR | StyloElementState::RTL;
+            let previous = (current - direction_states)
+                | match change.before() {
+                    moli_dom::directionality::HtmlDirection::Ltr => StyloElementState::LTR,
+                    moli_dom::directionality::HtmlDirection::Rtl => StyloElementState::RTL,
+                };
+            // The native mutation supplies the actual previous direction.
+            // Other independently changed states retain their own snapshots.
+            self.invalidate_for_element_state_change_with_old_state_and_viewport(
+                host,
+                change.target(),
+                direction_states,
+                Some(previous),
+                emulated_media,
+                viewport,
+            );
+            // Only auto direction (including implicit bdi) supplies a hint
+            // whose value depends on these semantics. Inherited :dir changes
+            // use selector invalidation above; they need no second subtree
+            // invalidation for an inherited or author-overridden CSS direction.
+            if host
+                .node(change.target())
+                .and_then(Node::as_element)
+                .is_some_and(|element| {
+                    use moli_dom::directionality::HtmlDir;
+                    match HtmlDir::for_element(element) {
+                        HtmlDir::Auto => true,
+                        HtmlDir::Undefined => element.is_html_element("bdi"),
+                        HtmlDir::Explicit(_) => false,
+                    }
+                })
+            {
+                self.invalidation_cleanup_for_world(&world)
+                    .invalidate_subtrees(host, [change.target()]);
+            }
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn invalidate_for_mutations(
         &mut self,
@@ -75,6 +132,18 @@ impl MoliStyleEngine {
             no_cached_style_us += no_cached_style_started
                 .map(|started| started.elapsed().as_micros())
                 .unwrap_or_default();
+            // Presentation hints are not selector dependencies. A dir attribute
+            // can change cascade input even when resolved HTML direction stays
+            // the same (or author CSS overrides it). Keep the precise attribute
+            // selector invalidator, and mark the local hint owner separately.
+            let hint_roots = document_effects.iter().filter_map(|effect| match effect {
+                StyleMutationEffect::Attribute { element, name, .. } if name == "dir" => {
+                    Some(*element)
+                }
+                _ => None,
+            });
+            self.invalidation_cleanup_for_world(&world)
+                .invalidate_subtrees(host, hint_roots);
             if should_defer_structural_mutations(&document_effects) {
                 let deferred_started = profile_enabled.then(std::time::Instant::now);
                 world.document_state.bump_target_context_epoch();

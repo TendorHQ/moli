@@ -1,187 +1,6 @@
-//! HTML directionality is DOM semantics, independent of computed CSS direction
-//! and flattened layout ancestry. This is the shared source for `:dir()` and
-//! consumers such as form submission and presentation hints.
-
-use crate::dom::{
-    NodeId,
-    native::{DomHost, Element, Node},
-};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CssDirection {
-    Ltr,
-    Rtl,
-}
-
-impl CssDirection {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Ltr => "ltr",
-            Self::Rtl => "rtl",
-        }
-    }
-}
-
-pub fn first_strong_text_direction(value: &str) -> Option<CssDirection> {
-    value
-        .chars()
-        .find_map(|ch| match unicode_bidi::bidi_class(ch) {
-            unicode_bidi::BidiClass::L => Some(CssDirection::Ltr),
-            unicode_bidi::BidiClass::R | unicode_bidi::BidiClass::AL => Some(CssDirection::Rtl),
-            _ => None,
-        })
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum HtmlDir {
-    Undefined,
-    Explicit(CssDirection),
-    Auto,
-}
-
-impl HtmlDir {
-    pub(crate) fn for_element(element: &Element) -> Self {
-        if element.namespace() != "http://www.w3.org/1999/xhtml" {
-            return Self::Undefined;
-        }
-        match element.attribute_ns("", "dir") {
-            Some(value) if value.eq_ignore_ascii_case("ltr") => Self::Explicit(CssDirection::Ltr),
-            Some(value) if value.eq_ignore_ascii_case("rtl") => Self::Explicit(CssDirection::Rtl),
-            Some(value) if value.eq_ignore_ascii_case("auto") => Self::Auto,
-            _ => Self::Undefined,
-        }
-    }
-}
-
-// A slot encountered during a contained-text scan contributes its shadow
-// host's *direction*, not its fallback text. Carry that dependency back to
-// the outer walk so nested shadow trees never require recursive resolution.
-enum AutoDirectionality {
-    Text(Option<CssDirection>),
-    ShadowHost(NodeId),
-}
-
-/// Resolve HTML directionality without consulting CSS or the layout tree.
-pub fn html_directionality(host: &DomHost, handle: NodeId) -> CssDirection {
-    let mut current = Some(handle);
-    while let Some(handle) = current {
-        if let Some(element) = host.node(handle).and_then(Node::as_element) {
-            let dir = HtmlDir::for_element(element);
-            if let HtmlDir::Explicit(direction) = dir {
-                return direction;
-            }
-            if dir == HtmlDir::Auto || element.is_html_element("bdi") {
-                match auto_directionality(host, handle, element) {
-                    AutoDirectionality::Text(direction) => {
-                        return direction.unwrap_or(CssDirection::Ltr);
-                    }
-                    AutoDirectionality::ShadowHost(host) => {
-                        current = Some(host);
-                        continue;
-                    }
-                }
-            }
-            if element.is_html_input() && element.input_type() == "tel" {
-                return CssDirection::Ltr;
-            }
-        }
-        current = host
-            .parent_node(handle)
-            .or_else(|| host.shadow_root_host(handle));
-    }
-    CssDirection::Ltr
-}
-
-fn auto_directionality(host: &DomHost, root: NodeId, element: &Element) -> AutoDirectionality {
-    if element.is_html_textarea()
-        || (element.is_html_input() && input_uses_value_for_auto_direction(&element.input_type()))
-    {
-        let value = if element.is_html_textarea() && !element.input_value_dirty() {
-            host.dom().direct_text_content(root).unwrap_or_default()
-        } else {
-            element.input_value()
-        };
-        return AutoDirectionality::Text(first_strong_text_direction(&value));
-    }
-
-    if element.is_html_element("slot") && host.containing_shadow_root(root).is_some() {
-        let assigned = host.assigned_nodes_for_slot_with_options(root, false);
-        if !assigned.is_empty() {
-            for child in assigned {
-                let Some(node) = host.node(child) else {
-                    continue;
-                };
-                let direction = if let Some(text) = node.as_text() {
-                    AutoDirectionality::Text(first_strong_text_direction(text.data()))
-                } else if node
-                    .as_element()
-                    .is_some_and(|element| !excludes_auto_text(element))
-                {
-                    contained_text_directionality(host, child)
-                } else {
-                    continue;
-                };
-                if !matches!(direction, AutoDirectionality::Text(None)) {
-                    return direction;
-                }
-            }
-            return AutoDirectionality::Text(None);
-        }
-    }
-    contained_text_directionality(host, root)
-}
-
-fn contained_text_directionality(host: &DomHost, root: NodeId) -> AutoDirectionality {
-    let mut stack = host.child_handles_reversed(root).collect::<Vec<_>>();
-    while let Some(handle) = stack.pop() {
-        let Some(node) = host.node(handle) else {
-            continue;
-        };
-        if let Some(text) = node.as_text() {
-            if let Some(direction) = first_strong_text_direction(text.data()) {
-                return AutoDirectionality::Text(Some(direction));
-            }
-            continue;
-        }
-        let Some(element) = node.as_element() else {
-            continue;
-        };
-        if excludes_auto_text(element) {
-            continue;
-        }
-        if element.is_html_element("slot")
-            && let Some(shadow_root) = host.containing_shadow_root(handle)
-            && let Some(shadow_host) = host.shadow_root_host(shadow_root)
-        {
-            return AutoDirectionality::ShadowHost(shadow_host);
-        }
-        stack.extend(host.child_handles_reversed(handle));
-    }
-    AutoDirectionality::Text(None)
-}
-
-fn excludes_auto_text(element: &Element) -> bool {
-    ["bdi", "script", "style", "textarea"]
-        .iter()
-        .any(|name| element.is_html_element(name))
-        || HtmlDir::for_element(element) != HtmlDir::Undefined
-}
-
-fn input_uses_value_for_auto_direction(input_type: &str) -> bool {
-    matches!(
-        input_type,
-        "hidden"
-            | "text"
-            | "search"
-            | "tel"
-            | "url"
-            | "email"
-            | "password"
-            | "submit"
-            | "reset"
-            | "button"
-    )
-}
+use crate::{HtmlDirection, first_strong_text_direction, html_directionality};
+use moli_dom::NodeId;
+use moli_dom::native::DomHost;
 
 #[cfg(test)]
 mod tests {
@@ -195,16 +14,16 @@ mod tests {
             ("123 .!?", None),
             ("\u{0661}\u{0662}\u{0663}", None),
             ("\u{05b0}\u{064b}", None),
-            ("\u{0661}A", Some(CssDirection::Ltr)),
-            ("\u{05b0}A", Some(CssDirection::Ltr)),
-            ("\u{064b}\u{05d0}", Some(CssDirection::Rtl)),
-            ("\u{200e}\u{05d0}", Some(CssDirection::Ltr)),
-            ("\u{200f}A", Some(CssDirection::Rtl)),
-            ("\u{061c}A", Some(CssDirection::Rtl)),
-            ("\u{202b}A\u{202c}", Some(CssDirection::Ltr)),
-            ("\u{1e900}A", Some(CssDirection::Rtl)),
-            ("123 \u{05d0}A", Some(CssDirection::Rtl)),
-            ("123 A\u{05d0}", Some(CssDirection::Ltr)),
+            ("\u{0661}A", Some(HtmlDirection::Ltr)),
+            ("\u{05b0}A", Some(HtmlDirection::Ltr)),
+            ("\u{064b}\u{05d0}", Some(HtmlDirection::Rtl)),
+            ("\u{200e}\u{05d0}", Some(HtmlDirection::Ltr)),
+            ("\u{200f}A", Some(HtmlDirection::Rtl)),
+            ("\u{061c}A", Some(HtmlDirection::Rtl)),
+            ("\u{202b}A\u{202c}", Some(HtmlDirection::Ltr)),
+            ("\u{1e900}A", Some(HtmlDirection::Rtl)),
+            ("123 \u{05d0}A", Some(HtmlDirection::Rtl)),
+            ("123 A\u{05d0}", Some(HtmlDirection::Ltr)),
         ] {
             assert_eq!(first_strong_text_direction(text), expected, "{text:?}");
         }
@@ -218,9 +37,9 @@ mod tests {
         host
     }
 
-    fn assert_direction(host: &DomHost, node: NodeId, expected: CssDirection) {
+    fn assert_direction(host: &DomHost, node: NodeId, expected: HtmlDirection) {
         assert_eq!(html_directionality(host, node), expected);
-        for direction in [CssDirection::Ltr, CssDirection::Rtl] {
+        for direction in [HtmlDirection::Ltr, HtmlDirection::Rtl] {
             assert_eq!(
                 QueryEngine
                     .matches_host(host, node, &format!(":dir({})", direction.as_str()))
@@ -249,9 +68,9 @@ mod tests {
                     &host,
                     root,
                     if namespace.ends_with("xhtml") {
-                        CssDirection::Ltr
+                        HtmlDirection::Ltr
                     } else {
-                        CssDirection::Rtl
+                        HtmlDirection::Rtl
                     },
                 );
             }
@@ -268,17 +87,17 @@ mod tests {
             .unwrap();
         assert!(host.set_attribute(svg, "dir", "ltr"));
         assert!(host.append_child(parent, svg));
-        assert_direction(&host, svg, CssDirection::Rtl);
+        assert_direction(&host, svg, HtmlDirection::Rtl);
         let child = host.create_element("span");
         assert!(host.set_attribute_ns(child, Some("urn:test"), None, "dir", "ltr"));
         assert!(host.append_child(parent, child));
-        assert_direction(&host, child, CssDirection::Rtl);
+        assert_direction(&host, child, HtmlDirection::Rtl);
         for value in ["", "unknown", " ltr", "ltr "] {
             assert!(host.set_attribute_ns(child, None, None, "dir", value));
-            assert_direction(&host, child, CssDirection::Rtl);
+            assert_direction(&host, child, HtmlDirection::Rtl);
         }
         assert!(host.set_attribute_ns(child, None, None, "dir", "LtR"));
-        assert_direction(&host, child, CssDirection::Ltr);
+        assert_direction(&host, child, HtmlDirection::Ltr);
     }
 
     #[test]
@@ -287,20 +106,20 @@ mod tests {
         let textarea = host.create_element("textarea");
         assert!(host.set_attribute(textarea, "dir", "auto"));
         assert!(host.set_text_content(textarea, "\u{05d0}"));
-        assert_direction(&host, textarea, CssDirection::Rtl);
+        assert_direction(&host, textarea, HtmlDirection::Rtl);
         assert!(host.set_input_value(textarea, "A"));
-        assert_direction(&host, textarea, CssDirection::Ltr);
+        assert_direction(&host, textarea, HtmlDirection::Ltr);
         assert!(host.set_input_value(textarea, "\u{1e900}"));
-        assert_direction(&host, textarea, CssDirection::Rtl);
+        assert_direction(&host, textarea, HtmlDirection::Rtl);
         assert!(host.set_input_value(textarea, "\u{0661}\u{05b0}"));
-        assert_direction(&host, textarea, CssDirection::Ltr);
+        assert_direction(&host, textarea, HtmlDirection::Ltr);
         assert!(host.set_input_value_with_dirty(textarea, "", false));
-        assert_direction(&host, textarea, CssDirection::Rtl);
+        assert_direction(&host, textarea, HtmlDirection::Rtl);
         assert!(host.set_text_content(textarea, ""));
         let descendant = host.create_element("span");
         assert!(host.set_text_content(descendant, "\u{05d0}"));
         assert!(host.append_child(textarea, descendant));
-        assert_direction(&host, textarea, CssDirection::Ltr);
+        assert_direction(&host, textarea, HtmlDirection::Ltr);
     }
 
     #[test]
@@ -312,22 +131,22 @@ mod tests {
         assert!(host.set_attribute(slot, "dir", "auto"));
         assert!(host.set_text_content(slot, "\u{05d0}"));
         assert!(host.append_child(shadow, slot));
-        assert_direction(&host, slot, CssDirection::Rtl);
+        assert_direction(&host, slot, HtmlDirection::Rtl);
 
         let assigned = host.create_element("span");
         assert!(host.set_text_content(assigned, "A"));
         assert!(host.append_child(owner, assigned));
-        assert_direction(&host, slot, CssDirection::Ltr);
+        assert_direction(&host, slot, HtmlDirection::Ltr);
         assert!(host.set_text_content(assigned, "\u{05d0}"));
-        assert_direction(&host, slot, CssDirection::Rtl);
+        assert_direction(&host, slot, HtmlDirection::Rtl);
         assert!(host.set_attribute(assigned, "dir", "rtl"));
         // A nonempty assignment list of excluded nodes does not expose fallback.
-        assert_direction(&host, slot, CssDirection::Ltr);
+        assert_direction(&host, slot, HtmlDirection::Ltr);
         assert!(host.set_attribute(assigned, "slot", "other"));
-        assert_direction(&host, slot, CssDirection::Rtl);
+        assert_direction(&host, slot, HtmlDirection::Rtl);
         let text = host.create_text_node("A");
         assert!(host.append_child(owner, text));
-        assert_direction(&host, slot, CssDirection::Ltr);
+        assert_direction(&host, slot, HtmlDirection::Ltr);
     }
 
     #[test]
@@ -342,14 +161,14 @@ mod tests {
         let slot = host.create_element("slot");
         assert!(host.set_text_content(slot, "A"));
         assert!(host.append_child(container, slot));
-        assert_direction(&host, container, CssDirection::Rtl);
+        assert_direction(&host, container, HtmlDirection::Rtl);
         assert!(host.set_attribute(owner, "dir", "ltr"));
         assert!(host.set_text_content(slot, "\u{05d0}"));
-        assert_direction(&host, container, CssDirection::Ltr);
+        assert_direction(&host, container, HtmlDirection::Ltr);
         assert!(host.set_attribute(slot, "dir", "rtl"));
         let text = host.create_text_node("\u{05d0}");
         assert!(host.append_child(container, text));
-        assert_direction(&host, container, CssDirection::Rtl);
+        assert_direction(&host, container, HtmlDirection::Rtl);
     }
 
     #[test]
@@ -364,13 +183,13 @@ mod tests {
         assert!(host.append_child(shadow, slot));
         let assigned = host.create_element("span");
         assert!(host.append_child(owner, assigned));
-        assert_direction(&host, assigned, CssDirection::Ltr);
+        assert_direction(&host, assigned, HtmlDirection::Ltr);
         let shadow_child = host.create_element("span");
         assert!(host.append_child(shadow, shadow_child));
-        assert_direction(&host, shadow_child, CssDirection::Ltr);
+        assert_direction(&host, shadow_child, HtmlDirection::Ltr);
         assert!(host.set_attribute(owner, "dir", "rtl"));
-        assert_direction(&host, assigned, CssDirection::Rtl);
-        assert_direction(&host, shadow_child, CssDirection::Rtl);
+        assert_direction(&host, assigned, HtmlDirection::Rtl);
+        assert_direction(&host, shadow_child, HtmlDirection::Rtl);
     }
 
     #[test]
@@ -380,12 +199,12 @@ mod tests {
         assert!(host.set_attribute(parent, "dir", "rtl"));
         let bdi = host.create_element("bdi");
         assert!(host.append_child(parent, bdi));
-        assert_direction(&host, bdi, CssDirection::Ltr);
+        assert_direction(&host, bdi, HtmlDirection::Ltr);
         assert!(host.set_attribute(bdi, "dir", "invalid"));
         assert!(host.set_text_content(bdi, "\u{200f}A"));
-        assert_direction(&host, bdi, CssDirection::Rtl);
+        assert_direction(&host, bdi, HtmlDirection::Rtl);
         assert!(host.set_attribute(bdi, "dir", "ltr"));
-        assert_direction(&host, bdi, CssDirection::Ltr);
+        assert_direction(&host, bdi, HtmlDirection::Ltr);
 
         for kind in [
             "hidden", "text", "search", "tel", "url", "email", "password", "submit", "reset",
@@ -398,23 +217,23 @@ mod tests {
                 &host,
                 input,
                 if kind == "tel" {
-                    CssDirection::Ltr
+                    HtmlDirection::Ltr
                 } else {
-                    CssDirection::Rtl
+                    HtmlDirection::Rtl
                 },
             );
             assert!(host.set_attribute(input, "dir", "auto"));
             assert!(host.set_input_value(input, "\u{200f}A"));
-            assert_direction(&host, input, CssDirection::Rtl);
+            assert_direction(&host, input, HtmlDirection::Rtl);
             assert!(host.set_input_value(input, "\u{0661}A"));
-            assert_direction(&host, input, CssDirection::Ltr);
+            assert_direction(&host, input, HtmlDirection::Ltr);
         }
         let number = host.create_element("input");
         assert!(host.set_attribute(number, "type", "number"));
         assert!(host.set_attribute(number, "dir", "auto"));
         assert!(host.append_child(parent, number));
         assert!(host.set_input_value(number, "123"));
-        assert_direction(&host, number, CssDirection::Ltr);
+        assert_direction(&host, number, HtmlDirection::Ltr);
     }
 
     #[test]
@@ -433,8 +252,8 @@ mod tests {
             assert!(host.append_child(next, slot));
             owner = next;
         }
-        assert_direction(&host, owner, CssDirection::Rtl);
+        assert_direction(&host, owner, HtmlDirection::Rtl);
         assert!(host.set_attribute(root, "dir", "ltr"));
-        assert_direction(&host, owner, CssDirection::Ltr);
+        assert_direction(&host, owner, HtmlDirection::Ltr);
     }
 }

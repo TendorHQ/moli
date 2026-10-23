@@ -1,6 +1,6 @@
 use std::{ptr::NonNull, vec};
 
-use crate::CssDirection;
+use crate::HtmlDirection;
 use app_units::Au;
 use dom::ElementState;
 use euclid::default::Size2D;
@@ -661,8 +661,8 @@ impl SelectorsElement for QueryElement<'_> {
             NonTSPseudoClass::Default => self.matches_default_pseudo(),
             NonTSPseudoClass::Lang(lang) => self.match_element_lang(None, lang),
             NonTSPseudoClass::Dir(direction) => match direction.as_horizontal_direction() {
-                Some(HorizontalDirection::Ltr) => self.resolved_direction() == CssDirection::Ltr,
-                Some(HorizontalDirection::Rtl) => self.resolved_direction() == CssDirection::Rtl,
+                Some(HorizontalDirection::Ltr) => self.resolved_direction() == HtmlDirection::Ltr,
+                Some(HorizontalDirection::Rtl) => self.resolved_direction() == HtmlDirection::Rtl,
                 None => false,
             },
             NonTSPseudoClass::CustomState(state) => self.has_custom_state(&state.0),

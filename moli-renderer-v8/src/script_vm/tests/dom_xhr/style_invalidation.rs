@@ -1139,7 +1139,7 @@ fn structural_sibling_character_data_invalidation_refreshes_later_cache() {
     assert_eq!(after, "rgb(1, 2, 3)|rgb(4, 5, 6)|rgb(7, 8, 9)");
 }
 #[test]
-fn has_selector_character_data_mutation_invalidates_ancestor_dependent_styles() {
+fn has_selector_character_data_invalidates_only_selector_relevant_transitions() {
     let mut vm = new_storage_test_vm("https://has-character-data-style-cache.test/");
     let document = vm.document_handle_for_test();
 
@@ -1154,6 +1154,7 @@ fn has_selector_character_data_mutation_invalidates_ancestor_dependent_styles() 
   style.textContent = [
     '#outside { color: rgb(1, 2, 3); }',
     'body:has(#target) #outside { background-color: rgb(4, 5, 6); }',
+    'body:has(#target:empty) #outside { background-color: rgb(7, 8, 9); }',
   ].join('\n');
   head.appendChild(style);
 
@@ -1167,13 +1168,13 @@ fn has_selector_character_data_mutation_invalidates_ancestor_dependent_styles() 
 
   globalThis.__hasCharacterDataText = text;
   globalThis.__hasCharacterDataOutside = outside;
-  return getComputedStyle(outside).color;
+  return [getComputedStyle(outside).color, getComputedStyle(outside).backgroundColor].join('|');
 })()
 "#,
         )
         .expect("has selector character data setup should evaluate");
 
-    assert_eq!(setup, "rgb(1, 2, 3)");
+    assert_eq!(setup, "rgb(1, 2, 3)|rgb(4, 5, 6)");
     assert_eq!(
         vm.computed_style_cache_entry_count_for_document_for_test(document),
         1
@@ -1189,8 +1190,37 @@ fn has_selector_character_data_mutation_invalidates_ancestor_dependent_styles() 
         .drain_pending_style_invalidations_for_document_for_test(document);
     assert_eq!(
         vm.computed_style_cache_entry_count_for_document_for_test(document),
-        0
+        1,
+        "replacing nonempty text changes neither :has(#target) nor :has(#target:empty)"
     );
+    assert_eq!(
+        vm.eval("getComputedStyle(__hasCharacterDataOutside).backgroundColor")
+            .unwrap(),
+        "rgb(4, 5, 6)"
+    );
+
+    // Empty/nonempty transitions must still invalidate the ancestor subject,
+    // including whitespace-only text, which prevents :empty from matching.
+    for (text, expected) in [("", "rgb(7, 8, 9)"), (" ", "rgb(4, 5, 6)")] {
+        vm.eval(&format!(
+            "__hasCharacterDataText.data = {}",
+            serde_json::to_string(text).unwrap()
+        ))
+        .unwrap();
+        vm._context_host
+            .borrow()
+            .drain_pending_style_invalidations_for_document_for_test(document);
+        assert_eq!(
+            vm.computed_style_cache_entry_count_for_document_for_test(document),
+            0,
+            "text changed to {text:?}"
+        );
+        assert_eq!(
+            vm.eval("getComputedStyle(__hasCharacterDataOutside).backgroundColor")
+                .unwrap(),
+            expected
+        );
+    }
 }
 #[test]
 fn manual_slot_assignment_invalidates_host_subtree_style_cache() {

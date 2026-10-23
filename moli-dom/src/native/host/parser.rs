@@ -220,13 +220,52 @@ impl DomHost {
         &mut self,
         node_id: DomHandle,
         attrs: Vec<crate::dom::native::Attribute>,
-    ) {
+    ) -> DomMutationEffects {
+        // Initial token attributes belong to an unexposed parser node. But
+        // HTML's duplicate html/body tags repair an already connected element:
+        // their writes must publish the same semantic effects as DOM APIs.
+        if self.is_connected(node_id) {
+            let mut effects = DomMutationEffects::default();
+            for attribute in attrs {
+                let missing =
+                    self.node(node_id)
+                        .and_then(Node::as_element)
+                        .is_some_and(|element| {
+                            !element.attributes().iter().any(|existing| {
+                                existing.namespace() == attribute.namespace()
+                                    && existing.local_name() == attribute.local_name()
+                                    && existing.prefix() == attribute.prefix()
+                            })
+                        });
+                if missing {
+                    effects.merge(
+                        self.set_attribute_ns_mutation_outcome(
+                            node_id,
+                            Some(attribute.namespace()),
+                            attribute.prefix(),
+                            attribute.local_name(),
+                            attribute.value(),
+                        )
+                        .into_effects(),
+                    );
+                }
+            }
+            if self
+                .node_mut(node_id)
+                .and_then(|node| node.data_mut().as_element_mut())
+                .is_some_and(Element::mark_undefined_custom_element_candidate_from_identity)
+            {
+                self.record_mutation(MutationScope::QueryState);
+                effects.merge(DomMutationEffects::changed());
+            }
+            return effects;
+        }
         let is_base_element = self.is_html_element_named(node_id, "base");
         let Some(element) = self
             .node_mut(node_id)
             .and_then(|node| node.data_mut().as_element_mut())
         else {
-            return;
+            return DomMutationEffects::default();
         };
 
         let mut changed = false;
@@ -256,8 +295,14 @@ impl DomHost {
             }
         }
         changed |= element.mark_undefined_custom_element_candidate_from_identity();
+        let has_directionality_source = super::directionality::has_directionality_source(element);
 
         if changed {
+            // Token attributes bypass the public setters during detached
+            // construction; later text mutations must still track direction.
+            if has_directionality_source {
+                self.directionality_may_vary.set(true);
+            }
             if named_index_changed {
                 // Parser attribute repair bypasses the public setAttribute
                 // helpers, so publish any newly introduced named candidate here.
@@ -268,6 +313,47 @@ impl DomHost {
             }
             self.record_mutation(MutationScope::QueryState);
         }
+        DomMutationEffects::default()
+    }
+
+    pub fn prepend_text_for_parser(
+        &mut self,
+        node_id: DomHandle,
+        mut text: String,
+    ) -> DomMutationEffects {
+        self.update_text_for_parser(node_id, |previous| {
+            text.push_str(previous);
+            text
+        })
+    }
+
+    pub fn append_text_for_parser(&mut self, node_id: DomHandle, text: &str) -> DomMutationEffects {
+        self.update_text_for_parser(node_id, |previous| {
+            let mut merged = previous.to_owned();
+            merged.push_str(text);
+            merged
+        })
+    }
+
+    fn update_text_for_parser(
+        &mut self,
+        node_id: DomHandle,
+        update: impl FnOnce(&str) -> String,
+    ) -> DomMutationEffects {
+        let Some(previous) = self.node(node_id).and_then(Node::as_text) else {
+            return DomMutationEffects::default();
+        };
+        let merged = update(previous.data());
+        if self.is_connected(node_id) {
+            return self.set_text_content_effects(node_id, &merged);
+        }
+        // Detached parser fragments publish effects when inserted, not for
+        // every tokenizer text splice while their initial tree is being built.
+        self.node_mut(node_id)
+            .and_then(|node| node.data_mut().as_text_mut())
+            .expect("parser text node")
+            .set_data(merged);
+        DomMutationEffects::default()
     }
 }
 

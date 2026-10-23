@@ -6,7 +6,7 @@ use super::{DomHandle, DomMutationEffects};
 pub struct DomStyleInvalidationInputs {
     pub(super) attribute_mutations: Vec<DomAttributeMutation>,
     pub(super) child_list_mutations: Vec<DomChildListMutation>,
-    pub(super) character_data_mutations: Vec<DomHandle>,
+    pub(super) character_data_mutations: Vec<DomCharacterDataMutation>,
 }
 
 impl DomStyleInvalidationInputs {
@@ -18,13 +18,19 @@ impl DomStyleInvalidationInputs {
         &self.child_list_mutations
     }
 
-    pub fn character_data_mutations(&self) -> &[DomHandle] {
+    pub fn character_data_mutations(&self) -> &[DomCharacterDataMutation] {
         &self.character_data_mutations
     }
 
-    fn mark_character_data_mutation(&mut self, target: DomHandle) {
-        if !self.character_data_mutations.contains(&target) {
-            self.character_data_mutations.push(target);
+    fn push_character_data_mutation(&mut self, mutation: DomCharacterDataMutation) {
+        if let Some(previous) = self
+            .character_data_mutations
+            .iter_mut()
+            .find(|previous| previous.target == mutation.target)
+        {
+            previous.new_is_empty = mutation.new_is_empty;
+        } else {
+            self.character_data_mutations.push(mutation);
         }
     }
 
@@ -44,12 +50,33 @@ impl DomStyleInvalidationInputs {
         for mutation in other.attribute_mutations {
             self.push_attribute_mutation(mutation);
         }
-        for target in other.character_data_mutations {
-            self.mark_character_data_mutation(target);
+        for mutation in other.character_data_mutations {
+            self.push_character_data_mutation(mutation);
         }
         for mutation in other.child_list_mutations {
             self.push_child_list_mutation(mutation);
         }
+    }
+}
+
+/// A text/CDATA write and its selector-relevant content transition. Retain
+/// every changed target for script notifications, but only an emptiness
+/// transition can change structural selectors such as `:empty`. HTML
+/// directionality and stylesheet source text have separate effect owners.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DomCharacterDataMutation {
+    target: DomHandle,
+    old_is_empty: bool,
+    new_is_empty: bool,
+}
+
+impl DomCharacterDataMutation {
+    pub fn target(&self) -> DomHandle {
+        self.target
+    }
+
+    pub fn emptiness_changed(&self) -> bool {
+        self.old_is_empty != self.new_is_empty
     }
 }
 
@@ -159,9 +186,16 @@ impl DomMutationEffects {
     pub(in crate::native::host::mutation) fn mark_style_character_data_mutation(
         &mut self,
         target: DomHandle,
+        old_is_empty: bool,
+        new_is_empty: bool,
     ) {
         self.changed = true;
-        self.style.mark_character_data_mutation(target);
+        self.style
+            .push_character_data_mutation(DomCharacterDataMutation {
+                target,
+                old_is_empty,
+                new_is_empty,
+            });
     }
 
     pub(in crate::native::host::mutation) fn mark_style_child_list_mutation(
@@ -188,5 +222,56 @@ impl DomMutationEffects {
 
     pub(super) fn push_style_child_list_mutation(&mut self, mutation: DomChildListMutation) {
         self.style.push_child_list_mutation(mutation);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::native::{DomHost, NativeDom};
+
+    #[test]
+    fn character_data_retains_writes_but_distinguishes_selector_content_transitions() {
+        let mut host = DomHost::from_dom(NativeDom::new_html(
+            url::Url::parse("https://text.test/").unwrap(),
+        ));
+        for node in [host.create_text_node("A"), host.create_cdata_section("A")] {
+            for (value, emptiness_changed) in [("א", false), ("", true), (" ", true), ("B", false)]
+            {
+                let effects = host.set_text_content_effects(node, value);
+                assert!(effects.did_change());
+                let mutations = effects.style().character_data_mutations();
+                assert_eq!(mutations.len(), 1);
+                assert_eq!(mutations[0].target(), node);
+                assert_eq!(mutations[0].emptiness_changed(), emptiness_changed);
+                assert!(!host.set_text_content_effects(node, value).did_change());
+            }
+        }
+    }
+
+    #[test]
+    fn merged_character_data_keeps_first_and_last_emptiness_without_losing_the_write() {
+        let mut host = DomHost::from_dom(NativeDom::new_html(
+            url::Url::parse("https://text.test/").unwrap(),
+        ));
+        let first = host.create_text_node("A");
+        let second = host.create_text_node("");
+        let mut effects = host.set_text_content_effects(first, "");
+        effects.merge(host.set_text_content_effects(second, "B"));
+        effects.merge(host.set_text_content_effects(first, "א"));
+        let mutations = effects.style().character_data_mutations();
+        assert_eq!(mutations.len(), 2);
+        assert_eq!(mutations[0].target(), first);
+        assert!(!mutations[0].emptiness_changed());
+        assert_eq!(mutations[1].target(), second);
+        assert!(mutations[1].emptiness_changed());
+        effects.merge(host.set_text_content_effects(second, ""));
+        assert!(effects.did_change());
+        assert!(
+            effects
+                .style()
+                .character_data_mutations()
+                .iter()
+                .all(|m| !m.emptiness_changed())
+        );
     }
 }

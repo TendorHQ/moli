@@ -138,8 +138,12 @@ impl StyleMutationEffect {
                 assigned_nodes: None,
             });
         }
-        for &node in effects.style().character_data_mutations() {
-            style_effects.insert(Self::CharacterData { node });
+        for mutation in effects.style().character_data_mutations() {
+            if mutation.emptiness_changed() {
+                style_effects.insert(Self::CharacterData {
+                    node: mutation.target(),
+                });
+            }
         }
         for mutation in effects.style().child_list_mutations() {
             style_effects.insert(Self::ChildList {
@@ -212,7 +216,7 @@ impl StyleAttributeImpact {
     pub(crate) fn for_attribute_name(name: &str) -> Self {
         let name = name.to_ascii_lowercase();
         match name.as_str() {
-            "style" | "class" | "id" => Self::ComputedStyle,
+            "style" | "class" | "id" | "dir" => Self::ComputedStyle,
             "hidden" | "width" | "height" | "cols" | "rows" | "size" | "value" | "border"
             | "slot" | "align" => Self::LayoutMetric,
             "cellpadding" => Self::DescendantComputedStyle,

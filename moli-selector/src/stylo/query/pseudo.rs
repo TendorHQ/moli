@@ -1,4 +1,4 @@
-use crate::{CssDirection, html_directionality};
+use crate::{HtmlDirection, html_directionality};
 use dom::{ElementState, HEADING_LEVEL_OFFSET};
 
 use crate::{
@@ -95,8 +95,8 @@ impl<'a> QueryElement<'a> {
             }
         }
         match self.resolved_direction() {
-            CssDirection::Ltr => state |= ElementState::LTR,
-            CssDirection::Rtl => state |= ElementState::RTL,
+            HtmlDirection::Ltr => state |= ElementState::LTR,
+            HtmlDirection::Rtl => state |= ElementState::RTL,
         }
         state
     }
@@ -117,7 +117,7 @@ impl<'a> QueryElement<'a> {
             .unwrap_or_else(ElementState::empty)
     }
 
-    pub(in crate::stylo) fn resolved_direction(self) -> CssDirection {
+    pub(in crate::stylo) fn resolved_direction(self) -> HtmlDirection {
         html_directionality(self.host, self.handle)
     }
 

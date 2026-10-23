@@ -85,7 +85,10 @@ mod tests {
         assert_eq!(host.flat_tree_parent(nested_owner), None);
         assert_eq!(host.flat_tree_children(first), vec![fallback]);
         assert_eq!(
-            host.assign_nodes_to_slot(first, vec![nested_owner]).len(),
+            host.assign_nodes_to_slot(first, vec![nested_owner])
+                .slots()
+                .assignment_changes()
+                .len(),
             1
         );
         assert_eq!(host.flat_tree_children(first), vec![nested_owner]);
@@ -97,7 +100,10 @@ mod tests {
         assert_eq!(host.flat_tree_parent(text), Some(nested_slot));
         // Assignment changes the outer edge, not the nested inheritance chain.
         assert_eq!(
-            host.assign_nodes_to_slot(second, vec![nested_owner]).len(),
+            host.assign_nodes_to_slot(second, vec![nested_owner])
+                .slots()
+                .assignment_changes()
+                .len(),
             2
         );
         assert_eq!(host.flat_tree_parent(nested_owner), Some(second));
@@ -105,7 +111,13 @@ mod tests {
         assert_eq!(host.flat_tree_children(first), vec![fallback]);
         assert_eq!(host.flat_tree_parent(fallback), Some(first));
         assert_eq!(host.flat_tree_parent(text), Some(nested_slot));
-        assert_eq!(host.assign_nodes_to_slot(second, vec![]).len(), 1);
+        assert_eq!(
+            host.assign_nodes_to_slot(second, vec![])
+                .slots()
+                .assignment_changes()
+                .len(),
+            1
+        );
         assert_eq!(host.flat_tree_parent(nested_owner), None);
         assert!(host.flat_tree_children(second).is_empty());
         // The DOM relation does not follow either assignment.

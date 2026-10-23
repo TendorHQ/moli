@@ -19,12 +19,12 @@ pub use element::{
 use host::StylesheetCandidateRegistries;
 pub use host::{
     ConnectedShadowRootSnapshot, DomAttributeMutation, DomAttributeMutationOutcome,
-    DomChildListMutation, DomHost, DomMutationEffects, DomMutationRecord, DomMutationRecordBatch,
-    DomMutationRecordKind, DomScriptMutationEffects, DomSlotAssignmentChange,
-    DomSlotMutationEffects, DomStyleInvalidationInputs, DomStylesheetOwnerChange,
-    DomStylesheetOwnerChangeKind, DomStylesheetOwnerTransitions, DomStylesheetOwnerTreeScopes,
-    DomTreeMutationEffects, ScriptPrepareTrigger, ScriptPrepareTriggerKind,
-    StylesheetCandidateTreeScopeSnapshots,
+    DomCharacterDataMutation, DomChildListMutation, DomDirectionalityChange, DomHost,
+    DomMutationEffects, DomMutationRecord, DomMutationRecordBatch, DomMutationRecordKind,
+    DomScriptMutationEffects, DomSlotAssignmentChange, DomSlotMutationEffects,
+    DomStyleInvalidationInputs, DomStylesheetOwnerChange, DomStylesheetOwnerChangeKind,
+    DomStylesheetOwnerTransitions, DomStylesheetOwnerTreeScopes, DomTreeMutationEffects,
+    ScriptPrepareTrigger, ScriptPrepareTriggerKind, StylesheetCandidateTreeScopeSnapshots,
 };
 pub use host::{
     HostElementSnapshot, ShadowRootBindingSnapshot, ShadowRootInclusion, ShadowRootInit,
@@ -1452,12 +1452,14 @@ mod tests {
         assert!(host.append_child(shadow_host, second));
 
         let initial = host.assign_nodes_to_slot(first_slot, vec![first]);
+        let initial = initial.slots().assignment_changes();
         assert_eq!(initial.len(), 1);
         assert_eq!(initial[0].slot(), first_slot);
         assert_eq!(initial[0].previous_assigned_nodes(), &[]);
         assert_eq!(initial[0].assigned_nodes(), &[first]);
 
         let changed = host.assign_nodes_to_slot(second_slot, vec![first, second]);
+        let changed = changed.slots().assignment_changes();
         assert_eq!(changed.len(), 2);
         assert_eq!(changed[0].slot(), first_slot);
         assert_eq!(changed[0].previous_assigned_nodes(), &[first]);

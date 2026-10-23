@@ -91,6 +91,7 @@ impl DomHost {
                 )
             })
             .unwrap_or_default();
+        let directionality = DirectionalitySnapshot::for_attribute(self, handle, None, name);
         let changed = self.dom.set_attribute(handle, name, value);
         if changed {
             self.invalidate_shadow_slot_name_index_for_attribute(handle, None, name);
@@ -157,6 +158,7 @@ impl DomHost {
                     &prior_assigned_nodes,
                 );
             }
+            directionality.finish(self, &mut effects);
             return DomAttributeMutationOutcome::new(effects, prior_value);
         }
         if records_enabled && prior_value.as_deref() == Some(value) {
@@ -224,6 +226,8 @@ impl DomHost {
         let prior_value = self
             .get_attribute_ns(handle, namespace, local_name)
             .map(Arc::from);
+        let directionality =
+            DirectionalitySnapshot::for_attribute(self, handle, namespace, local_name);
         let changed = self
             .dom
             .set_attribute_ns(handle, namespace, prefix, local_name, value);
@@ -252,6 +256,7 @@ impl DomHost {
                 Some(value),
                 records_enabled,
             );
+            directionality.finish(self, &mut effects);
             return DomAttributeMutationOutcome::new(effects, prior_value);
         }
         DomAttributeMutationOutcome::new(DomMutationEffects::default(), prior_value)
@@ -305,6 +310,7 @@ impl DomHost {
                 )
             })
             .unwrap_or_default();
+        let directionality = DirectionalitySnapshot::for_attribute(self, handle, None, name);
         let removed = self.dom.remove_attribute(handle, name);
         if removed {
             self.invalidate_shadow_slot_name_index_for_attribute(handle, None, name);
@@ -344,6 +350,7 @@ impl DomHost {
                     &prior_assigned_nodes,
                 );
             }
+            directionality.finish(self, &mut effects);
             return DomAttributeMutationOutcome::new(effects, prior_value);
         }
         DomAttributeMutationOutcome::new(DomMutationEffects::default(), prior_value)
@@ -369,6 +376,8 @@ impl DomHost {
         let prior_value = self
             .get_attribute_ns(handle, namespace, local_name)
             .map(Arc::from);
+        let directionality =
+            DirectionalitySnapshot::for_attribute(self, handle, namespace, local_name);
         let removed = self.dom.remove_attribute_ns(handle, namespace, local_name);
         if removed {
             self.invalidate_shadow_slot_name_index_for_attribute(handle, namespace, local_name);
@@ -394,6 +403,7 @@ impl DomHost {
                 None,
                 records_enabled,
             );
+            directionality.finish(self, &mut effects);
             return DomAttributeMutationOutcome::new(effects, prior_value);
         }
         DomAttributeMutationOutcome::new(DomMutationEffects::default(), prior_value)

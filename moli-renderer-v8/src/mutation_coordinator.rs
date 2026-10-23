@@ -204,6 +204,7 @@ impl MutationCoordinator {
         if !style_effects.is_empty() {
             unsafe { &mut *host_ptr }.note_style_mutation_effects(&style_effects);
         }
+        unsafe { &mut *host_ptr }.note_directionality_style_activity(&effects);
         let style_invalidation_us = style_invalidation_started
             .map(|started| started.elapsed().as_micros())
             .unwrap_or_default();
@@ -345,7 +346,8 @@ impl MutationCoordinator {
                 scripts.push(target);
             }
         }
-        for &target in effects.style().character_data_mutations() {
+        for mutation in effects.style().character_data_mutations() {
+            let target = mutation.target();
             let Some(parent) = dom_host
                 .node(target)
                 .and_then(crate::dom::native::Node::parent_node)

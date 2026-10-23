@@ -226,8 +226,12 @@ impl ParserDomMutationConsumer for DocumentWriteParserMutationOwner<'_, '_, '_> 
         node_id: DomHandle,
         attrs: Vec<crate::dom::native::Attribute>,
     ) {
-        self.runtime
+        let effects = self
+            .runtime
             .add_attrs_if_missing_for_parser_in_live_dom_host(node_id, attrs);
+        if effects.did_change() {
+            self.consume_parser_mutation_effects(effects);
+        }
     }
 
     fn create_text_node(&mut self, document_handle: DomHandle, text: String) -> DomHandle {
@@ -272,13 +276,21 @@ impl ParserDomMutationConsumer for DocumentWriteParserMutationOwner<'_, '_, '_> 
     }
 
     fn prepend_text_to_text_node(&mut self, node_id: DomHandle, text: String) {
-        self.runtime
+        let effects = self
+            .runtime
             .prepend_text_to_text_node_in_live_dom_host(node_id, text);
+        if effects.did_change() {
+            self.consume_parser_mutation_effects(effects);
+        }
     }
 
     fn append_text_to_text_node(&mut self, node_id: DomHandle, text: String) {
-        self.runtime
+        let effects = self
+            .runtime
             .append_text_to_text_node_in_live_dom_host(node_id, text);
+        if effects.did_change() {
+            self.consume_parser_mutation_effects(effects);
+        }
     }
 
     fn push_parse_error(&mut self, error: String) {

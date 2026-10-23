@@ -13,6 +13,7 @@ use super::{Element, LiveDomNodeMetadata, NativeDom, NativeNodeId, Node, NodeTyp
 
 mod clone;
 mod collections;
+mod directionality;
 mod document;
 mod flat_tree;
 mod html_serialization;
@@ -27,8 +28,9 @@ pub use stylesheet_candidates::StylesheetCandidateTreeScopeSnapshots;
 pub(crate) use stylesheet_candidates::{StylesheetCandidateChanges, StylesheetCandidateRegistries};
 
 pub use self::mutation::{
-    DomAttributeMutation, DomAttributeMutationOutcome, DomChildListMutation, DomMutationEffects,
-    DomMutationRecord, DomMutationRecordBatch, DomMutationRecordKind, DomScriptMutationEffects,
+    DomAttributeMutation, DomAttributeMutationOutcome, DomCharacterDataMutation,
+    DomChildListMutation, DomDirectionalityChange, DomMutationEffects, DomMutationRecord,
+    DomMutationRecordBatch, DomMutationRecordKind, DomScriptMutationEffects,
     DomSlotAssignmentChange, DomSlotMutationEffects, DomStyleInvalidationInputs,
     DomStylesheetOwnerChange, DomStylesheetOwnerChangeKind, DomStylesheetOwnerTransitions,
     DomStylesheetOwnerTreeScopes, DomTreeMutationEffects, ScriptPrepareTrigger,

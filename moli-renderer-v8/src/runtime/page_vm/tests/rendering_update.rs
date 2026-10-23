@@ -2804,6 +2804,176 @@ async fn screenshot_preserves_slot_inheritance_across_reassignment_and_fallback(
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn screenshot_resolves_html_directionality_independently_of_css_and_flattened_ancestry() {
+    run_page_vm_async_test(async move {
+        let loader = crate::network::ResourceRequestClient::new(&FetchConfig::default())?;
+        let mut page = test_page_vm_with_loader_and_document_url(
+            &loader,
+            Vec::new(),
+            Url::parse("https://example.com/html-directionality.html")?,
+        );
+        page.vm_mut()
+            .set_layout_policy(moli_page_types::LayoutPolicy::OnDemand);
+        let fixture = include_str!("../../../../tests/fixtures/html-directionality.html");
+        page.vm_mut().eval(&format!(
+            "document.open();document.write({});document.close()",
+            serde_json::to_string(fixture)?,
+        ))?;
+        page.vm_mut()
+            .prime_document_lifecycle_processing_and_record_stylesheet_network_results();
+        let mut failures = Vec::new();
+        for phase in 0..3 {
+            page.vm_mut().eval(&format!("setDirectionPhase({phase})"))?;
+            page.vm_mut()
+                .screenshot_layout_snapshot(moli_layout::PaintViewport::new(800, 1100, 1.0))?
+                .expect("directionality fixture must retain a layout root");
+            let checks: serde_json::Value = serde_json::from_str(
+                &page
+                    .vm_mut()
+                    .eval("JSON.stringify(collectDirectionChecks())")?,
+            )?;
+            let checks = checks.as_array().expect("directionality checks");
+            assert_eq!(checks.len(), 53);
+            for check in checks
+                .iter()
+                .filter(|check| check["actual"] != check["expected"])
+            {
+                failures.push(serde_json::json!({"phase": phase, "check": check}));
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "{}",
+            serde_json::to_string_pretty(&failures)?
+        );
+        Ok::<_, anyhow::Error>(())
+    })
+    .await
+    .expect("HTML directionality should reach style and layout");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn screenshot_invalidates_direction_dependents_after_text_value_and_slot_mutations() {
+    run_page_vm_async_test(async move {
+        let loader = crate::network::ResourceRequestClient::new(&FetchConfig::default())?;
+        let mut page = test_page_vm_with_loader_and_document_url(
+            &loader,
+            Vec::new(),
+            Url::parse("https://example.com/html-direction-invalidation.html")?,
+        );
+        page.vm_mut()
+            .set_layout_policy(moli_page_types::LayoutPolicy::OnDemand);
+        let fixture = include_str!("../../../../tests/fixtures/html-direction-invalidation.html");
+        page.vm_mut().eval(&format!(
+            "document.open();document.write({});document.close()",
+            serde_json::to_string(fixture)?,
+        ))?;
+        page.vm_mut()
+            .prime_document_lifecycle_processing_and_record_stylesheet_network_results();
+        let mut failures = Vec::new();
+        for phase in 0..6 {
+            page.vm_mut()
+                .eval(&format!("setDirectionInvalidationPhase({phase})"))?;
+            for geometry in [false, true] {
+                if geometry {
+                    page.vm_mut()
+                        .screenshot_layout_snapshot(moli_layout::PaintViewport::new(800, 600, 1.0))?
+                        .expect("direction invalidation fixture must retain a layout root");
+                }
+                let checks: serde_json::Value = serde_json::from_str(&page.vm_mut().eval(
+                    &format!("JSON.stringify(collectDirectionInvalidationChecks({geometry}))"),
+                )?)?;
+                let checks = checks.as_array().expect("direction invalidation checks");
+                // Phase 3 deliberately leaves the assignee outside the flat tree.
+                let style_checks = if phase == 3 { 11 } else { 12 };
+                assert_eq!(checks.len(), style_checks + if geometry { 5 } else { 0 });
+                for check in checks
+                    .iter()
+                    .filter(|check| check["actual"] != check["expected"])
+                {
+                    failures.push(
+                        serde_json::json!({"phase": phase, "geometry": geometry, "check": check}),
+                    );
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "{}",
+            serde_json::to_string_pretty(&failures)?
+        );
+        Ok::<_, anyhow::Error>(())
+    })
+    .await
+    .expect("direction transitions must invalidate selectors, presentation hints and layout");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn screenshot_updates_direction_after_parser_text_chunks_and_attribute_repair() {
+    run_page_vm_async_test(async move {
+        let loader = crate::network::ResourceRequestClient::new(&FetchConfig::default())?;
+        let mut page = test_page_vm_with_loader_and_document_url(
+            &loader, Vec::new(), Url::parse("https://example.com/direction-stream.html")?,
+        );
+        page.vm_mut().set_layout_policy(moli_page_types::LayoutPolicy::OnDemand);
+        // Keep the parser open and warm style caches before the next input
+        // chunk. Appending to an existing Text emits no child-list mutation.
+        let prefix = r#"<!doctype html><style>.flag{color:rgb(0,128,0)} #source:dir(rtl) .flag{color:rgb(255,0,0)}</style><body><div id="source" dir="auto"><span id="flag" class="flag"></span> "#;
+        page.vm_mut().eval(&format!("document.open();document.write({})", serde_json::to_string(prefix)?))?;
+        let chunks = [None, Some("א"), Some("</div><span id=\"inherited\"></span>"), Some("<body dir=\"rtl\">")];
+        for (phase, chunk) in chunks.into_iter().enumerate() {
+            if let Some(chunk) = chunk {
+                page.vm_mut().eval(&format!("document.write({})", serde_json::to_string(chunk)?))?;
+            }
+            for geometry in [false, true] {
+                if geometry {
+                    page.vm_mut().screenshot_layout_snapshot(moli_layout::PaintViewport::new(800, 600, 1.0))?
+                        .expect("parser fixture layout root");
+                }
+                let actual: serde_json::Value = serde_json::from_str(&page.vm_mut().eval(
+                    r#"JSON.stringify([getComputedStyle(flag).color,getComputedStyle(source).direction,source.matches(':dir(rtl)'),source.textContent,document.getElementById('inherited') ? getComputedStyle(inherited).direction : null,getComputedStyle(document.body).direction])"#,
+                )?)?;
+                let inherited = if phase < 2 { None } else { Some(if phase == 3 { "rtl" } else { "ltr" }) };
+                let expected = serde_json::json!([
+                    if phase == 0 { "rgb(0, 128, 0)" } else { "rgb(255, 0, 0)" },
+                    if phase == 0 { "ltr" } else { "rtl" }, phase != 0,
+                    if phase == 0 { " " } else { " א" }, inherited,
+                    if phase == 3 { "rtl" } else { "ltr" },
+                ]);
+                assert_eq!(actual, expected, "phase {phase}, after screenshot: {geometry}");
+            }
+        }
+        page.vm_mut().eval("document.close()")?;
+        Ok::<_, anyhow::Error>(())
+    }).await.expect("parser writes to exposed nodes must publish mutation effects");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn child_parser_attribute_repair_invalidates_warmed_direction_styles() {
+    run_page_vm_async_test(async move {
+        let loader = crate::network::ResourceRequestClient::new(&FetchConfig::default())?;
+        let (mut page, _resource_source, _owner_wake_rx) = page_vm_with_bound_task_sources_and_owner_wake(
+            &loader, Url::parse("https://example.com/child-direction.html")?,
+        );
+        let fixture = r#"<!doctype html><style>.flag{color:rgb(0,128,0)} body:dir(rtl) .flag{color:rgb(255,0,0)}</style><body><span id="probe" class="flag"></span><script>parent.__childDirections.push([getComputedStyle(probe).direction,getComputedStyle(probe).color]);</script><body dir="rtl"><script>parent.__childDirections.push([getComputedStyle(probe).direction,getComputedStyle(probe).color]);</script>"#;
+        page.vm_mut().eval(&format!(
+            "globalThis.__childDirections=[];const directionFrame=document.createElement('iframe');directionFrame.srcdoc={};document.body.appendChild(directionFrame)",
+            serde_json::to_string(fixture)?,
+        ))?;
+        // No network or wall-clock wait: advance the parser's concrete tasks
+        // until both inline scripts have observed their respective token state.
+        for _ in 0..32 {
+            if page.vm_mut().eval("__childDirections.length")? == "2" { break; }
+            assert!(page.run_next_child_frame_task_source_for_semantic_test().await.is_some(),
+                "the child parser must have a concrete continuation before its second observation");
+        }
+        let actual: serde_json::Value = serde_json::from_str(&page.vm_mut().eval("JSON.stringify(__childDirections)")?)?;
+        assert_eq!(actual, serde_json::json!([["ltr","rgb(0, 128, 0)"],["rtl","rgb(255, 0, 0)"]]));
+        Ok::<_, anyhow::Error>(())
+    }).await.expect("child parser attribute repair should invalidate retained style");
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn screenshot_preserves_table_cell_dimension_hints_and_avatar_columns() {
     run_page_vm_async_test(async move {
         let loader = crate::network::ResourceRequestClient::new(&FetchConfig::default())?;

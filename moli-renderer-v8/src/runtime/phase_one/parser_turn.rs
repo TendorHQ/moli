@@ -230,9 +230,13 @@ impl ParserDomMutationConsumer for PhaseOneParserOwner<'_> {
     }
 
     fn add_attrs_if_missing_for_parser(&mut self, node_id: NativeNodeId, attrs: Vec<Attribute>) {
-        self.vm
+        let effects = self
+            .vm
             .document_runtime
             .add_attrs_if_missing_for_parser_in_live_dom_host(node_id, attrs);
+        if effects.did_change() {
+            self.consume_parser_mutation_effects(effects);
+        }
     }
 
     fn create_text_node(&mut self, document_handle: NativeNodeId, text: String) -> NativeNodeId {
@@ -290,15 +294,23 @@ impl ParserDomMutationConsumer for PhaseOneParserOwner<'_> {
     }
 
     fn prepend_text_to_text_node(&mut self, node_id: NativeNodeId, text: String) {
-        self.vm
+        let effects = self
+            .vm
             .document_runtime
             .prepend_text_to_text_node_in_live_dom_host(node_id, text);
+        if effects.did_change() {
+            self.consume_parser_mutation_effects(effects);
+        }
     }
 
     fn append_text_to_text_node(&mut self, node_id: NativeNodeId, text: String) {
-        self.vm
+        let effects = self
+            .vm
             .document_runtime
             .append_text_to_text_node_in_live_dom_host(node_id, text);
+        if effects.did_change() {
+            self.consume_parser_mutation_effects(effects);
+        }
     }
 
     fn push_parse_error(&mut self, error: String) {

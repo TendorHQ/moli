@@ -348,10 +348,10 @@ impl DocumentRuntime {
         &mut self,
         node_id: DomHandle,
         attrs: Vec<crate::dom::native::Attribute>,
-    ) {
+    ) -> DomMutationEffects {
         let should_hide_nonce = !attrs.is_empty();
         let dom_host = self.dom_host_mut_for_active_parser_step();
-        dom_host.add_attrs_if_missing_for_parser(node_id, attrs);
+        let effects = dom_host.add_attrs_if_missing_for_parser(node_id, attrs);
         if should_hide_nonce
             && dom_host.is_connected(node_id)
             && let Some(nonce) = dom_host.get_attribute(node_id, "nonce")
@@ -360,6 +360,7 @@ impl DocumentRuntime {
             let _ = dom_host.set_attribute(node_id, "nonce", "");
             let _ = dom_host.set_cryptographic_nonce(node_id, Some(nonce));
         }
+        effects
     }
 
     pub(crate) fn create_text_node_for_document_in_live_dom_host(
@@ -414,32 +415,18 @@ impl DocumentRuntime {
         &mut self,
         node_id: DomHandle,
         text: String,
-    ) {
-        let host = self.dom_host_mut_for_active_parser_step();
-        if let Some(text_node) = host
-            .node_mut(node_id)
-            .and_then(|node| node.data_mut().as_text_mut())
-        {
-            let mut merged = text;
-            merged.push_str(text_node.data());
-            text_node.set_data(merged);
-        }
+    ) -> DomMutationEffects {
+        self.dom_host_mut_for_active_parser_step()
+            .prepend_text_for_parser(node_id, text)
     }
 
     pub(crate) fn append_text_to_text_node_in_live_dom_host(
         &mut self,
         node_id: DomHandle,
         text: String,
-    ) {
-        let host = self.dom_host_mut_for_active_parser_step();
-        if let Some(text_node) = host
-            .node_mut(node_id)
-            .and_then(|node| node.data_mut().as_text_mut())
-        {
-            let mut merged = text_node.data().to_owned();
-            merged.push_str(&text);
-            text_node.set_data(merged);
-        }
+    ) -> DomMutationEffects {
+        self.dom_host_mut_for_active_parser_step()
+            .append_text_for_parser(node_id, &text)
     }
 
     pub(crate) fn push_parse_error_in_live_dom_host(&mut self, error: String) {

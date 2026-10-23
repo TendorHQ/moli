@@ -1418,8 +1418,8 @@ impl DocumentRuntime {
         }
     }
 
-    pub(crate) fn set_input_value(&mut self, handle: DomHandle, value: &str) -> bool {
-        self.dom_host.set_input_value(handle, value)
+    pub(crate) fn set_input_value(&mut self, handle: DomHandle, value: &str) -> DomMutationEffects {
+        self.dom_host.set_input_value_effects(handle, value)
     }
 
     pub(crate) fn set_input_value_with_dirty(
@@ -1427,17 +1427,18 @@ impl DocumentRuntime {
         handle: DomHandle,
         value: &str,
         dirty: bool,
-    ) -> bool {
+    ) -> DomMutationEffects {
         self.dom_host
-            .set_input_value_with_dirty(handle, value, dirty)
+            .set_input_value_with_dirty_effects(handle, value, dirty)
     }
 
     pub(crate) fn set_input_value_from_user_edit(
         &mut self,
         handle: DomHandle,
         value: &str,
-    ) -> bool {
-        self.dom_host.set_input_value_from_user_edit(handle, value)
+    ) -> DomMutationEffects {
+        self.dom_host
+            .set_input_value_from_user_edit_effects(handle, value)
     }
 
     pub(crate) fn set_autofilled(&mut self, handle: DomHandle, autofilled: bool) -> bool {

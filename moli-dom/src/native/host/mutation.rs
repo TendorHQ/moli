@@ -1,3 +1,4 @@
+use super::directionality::DirectionalitySnapshot;
 use super::*;
 
 mod attributes;
@@ -7,8 +8,9 @@ mod state;
 mod tree;
 
 pub use effects::{
-    DomAttributeMutation, DomAttributeMutationOutcome, DomChildListMutation, DomMutationEffects,
-    DomMutationRecord, DomMutationRecordBatch, DomMutationRecordKind, DomScriptMutationEffects,
+    DomAttributeMutation, DomAttributeMutationOutcome, DomCharacterDataMutation,
+    DomChildListMutation, DomDirectionalityChange, DomMutationEffects, DomMutationRecord,
+    DomMutationRecordBatch, DomMutationRecordKind, DomScriptMutationEffects,
     DomSlotAssignmentChange, DomSlotMutationEffects, DomStyleInvalidationInputs,
     DomStylesheetOwnerChange, DomStylesheetOwnerChangeKind, DomStylesheetOwnerTransitions,
     DomStylesheetOwnerTreeScopes, DomTreeMutationEffects, ScriptPrepareTrigger,

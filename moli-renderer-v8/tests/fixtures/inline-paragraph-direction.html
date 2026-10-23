@@ -1,0 +1,73 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+body {margin:0; font:20px/1.5 monospace}
+.line {width:200px; white-space:pre}
+</style>
+<body>
+<script>
+const cases = [];
+for (const paragraphs of [['אב WW', 'WW'], ['WW', 'אב WW']]) {
+  for (const align of ['start','end','center']) {
+    const actual = document.createElement('div');
+    actual.className = 'line';
+    actual.style.cssText = `unicode-bidi:plaintext;text-align:${align}`;
+    actual.textContent = paragraphs.join('\n');
+    document.body.append(actual);
+    const expected = paragraphs.map(text => {
+      const reference = document.createElement('div');
+      reference.className = 'line';
+      reference.style.cssText = `direction:${text[0] === 'א' ? 'rtl' : 'ltr'};text-align:${align}`;
+      reference.textContent = text;
+      document.body.append(reference);
+      return reference;
+    });
+    cases.push({id: paragraphs.join('/') + '/' + align, actual, expected, paragraphs});
+  }
+}
+const structural = [];
+for (const markup of ['<span>WW </span><br>WW', '<span>WW <i></i></span><br>WW']) {
+  const pair = [markup, markup.replace('WW ', 'WW')].map(html => {
+    const line = document.createElement('div');
+    line.className = 'line';
+    line.style.cssText = 'direction:rtl;white-space:normal';
+    line.innerHTML = html;
+    line.querySelector('span').style.position = 'relative';
+    if (line.querySelector('i')) line.querySelector('i').style.position = 'absolute';
+    document.body.append(line);
+    return line;
+  });
+  structural.push(pair);
+}
+function collectInlineFragmentChecks() {
+  const glyphs = (line, index, length) => {
+    const origin = line.getBoundingClientRect();
+    const node = line.firstChild;
+    const rects = [];
+    for (let offset=index; offset<index+length; offset++) {
+      if (node.data[offset] !== 'W') continue;
+      const range = document.createRange();
+      range.setStart(node,offset); range.setEnd(node,offset+1);
+      const rect = range.getBoundingClientRect();
+      rects.push([rect.x-origin.x,rect.width]);
+    }
+    return rects;
+  };
+  const checks = cases.flatMap(test => {
+    let start=0;
+    return test.paragraphs.map((text,index) => {
+      const actual = glyphs(test.actual,start,text.length);
+      start += text.length+1;
+      return {id:test.id+'/'+index, actual, expected:glyphs(test.expected[index],0,text.length)};
+    });
+  });
+  structural.forEach((pair,index) => {
+    const rect = line => {
+      const box=line.querySelector('span').getBoundingClientRect();
+      return [box.x-line.getBoundingClientRect().x,box.width];
+    };
+    checks.push({id:'forced-boundary/'+index,actual:rect(pair[0]),expected:rect(pair[1])});
+  });
+  return checks;
+}
+</script>

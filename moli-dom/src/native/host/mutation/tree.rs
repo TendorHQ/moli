@@ -96,6 +96,7 @@ impl DomHost {
             .unwrap_or_default();
         let previous_sibling = self.node(child).and_then(Node::prev_sibling);
         let next_sibling = self.node(child).and_then(Node::next_sibling);
+        let directionality = DirectionalitySnapshot::for_tree(self, parent, child);
         let candidate_changes = self
             .dom
             .remove_child_with_stylesheet_candidate_changes(parent, child);
@@ -146,6 +147,7 @@ impl DomHost {
                 &mut effects,
                 &removal_context.shadow_slots,
             );
+            directionality.finish(self, &mut effects);
             return effects;
         }
         DomMutationEffects::default()
@@ -323,6 +325,7 @@ impl DomHost {
         let inserted_shadow_slot_assignment_snapshots =
             self.slot_assignment_snapshots_for_inserted_shadow_tree_slots(parent, &inserted_roots);
         let previous_shadow_root = self.containing_shadow_root(child);
+        let directionality = DirectionalitySnapshot::for_tree(self, parent, child);
         let candidate_changes = self.dom.insert_before_with_stylesheet_candidate_changes(
             parent,
             child,
@@ -486,6 +489,7 @@ impl DomHost {
                 &mut effects,
                 &inserted_roots,
             );
+            directionality.finish(self, &mut effects);
             return effects;
         }
         DomMutationEffects::default()
@@ -567,6 +571,11 @@ impl DomHost {
 
         match node_type {
             NodeType::Text | NodeType::CDataSection => {
+                let directionality = DirectionalitySnapshot::for_text(self, handle);
+                let old_is_empty = self
+                    .node(handle)
+                    .and_then(Node::node_value)
+                    .is_none_or(str::is_empty);
                 let records_enabled = self.mutation_records_enabled();
                 let old_value = if records_enabled {
                     self.node(handle)
@@ -611,13 +620,14 @@ impl DomHost {
                 }
                 self.record_mutation(MutationScope::QueryState);
                 let mut effects = self.node_update_effects(handle);
-                effects.mark_style_character_data_mutation(handle);
+                effects.mark_style_character_data_mutation(handle, old_is_empty, value.is_empty());
                 if let Some(parent) = self.parent_node(handle) {
                     self.mark_stylesheet_owner_contents_change_for_parent(&mut effects, parent);
                 }
                 if records_enabled {
                     effects.mark_character_data_mutation(handle, old_value);
                 }
+                directionality.finish(self, &mut effects);
                 effects
             }
             NodeType::Element | NodeType::DocumentFragment => {

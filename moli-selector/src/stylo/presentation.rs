@@ -23,7 +23,8 @@ use style::{
 };
 use style_traits::{ParsingMode, ToCss};
 
-use crate::dom::native::Element;
+use crate::{HtmlDirection, dom::native::Element};
+use moli_dom::directionality::HtmlDir;
 
 use super::query::QueryElement;
 
@@ -135,6 +136,7 @@ impl QueryElement<'_> {
                 );
             }
         } else if element.namespace() == HTML_NAMESPACE {
+            append_html_direction_declarations(*self, &mut block);
             append_html_replaced_size_declarations(element, &mut block);
             append_html_table_presentation_declarations(*self, &mut block);
         } else {
@@ -148,6 +150,52 @@ impl QueryElement<'_> {
                 LayerOrder::root(),
             ));
         }
+    }
+}
+
+fn append_html_direction_declarations(
+    element: QueryElement<'_>,
+    block: &mut PropertyDeclarationBlock,
+) {
+    use style::properties::longhands::{direction, unicode_bidi};
+
+    let native = element.element();
+    let dir = HtmlDir::for_element(native);
+    let direction = match dir {
+        HtmlDir::Explicit(direction) => Some(direction),
+        HtmlDir::Auto => Some(element.resolved_direction()),
+        HtmlDir::Undefined if native.is_html_element("bdi") => Some(element.resolved_direction()),
+        HtmlDir::Undefined
+            if native.is_html_element("body") && native.attribute_ns("", "dir").is_some() =>
+        {
+            Some(HtmlDirection::Ltr)
+        }
+        HtmlDir::Undefined => None,
+    };
+    if let Some(direction) = direction {
+        block.push(
+            PropertyDeclaration::Direction(match direction {
+                HtmlDirection::Ltr => direction::SpecifiedValue::Ltr,
+                HtmlDirection::Rtl => direction::SpecifiedValue::Rtl,
+            }),
+            Importance::Normal,
+        );
+    }
+
+    // Like Blink, map auto direction at presentation-hint priority; CSS may
+    // override it without changing HTML directionality or :dir() matching.
+    // The bdo/textarea/pre bidi defaults are owned by the UA stylesheet.
+    if dir == HtmlDir::Auto && !matches!(native.local_name(), "bdo" | "textarea" | "pre") {
+        let bidi = if native.is_html_input()
+            && matches!(
+                native.input_type().as_str(),
+                "search" | "tel" | "url" | "email"
+            ) {
+            unicode_bidi::SpecifiedValue::Plaintext
+        } else {
+            unicode_bidi::SpecifiedValue::Isolate
+        };
+        block.push(PropertyDeclaration::UnicodeBidi(bidi), Importance::Normal);
     }
 }
 

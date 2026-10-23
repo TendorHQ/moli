@@ -1347,7 +1347,6 @@ dependencies = [
 [[package]]
 name = "fontique"
 version = "0.11.1"
-source = "git+https://github.com/ldm0/parley?rev=9e1fffaf84437cda87fa1fc726a61f9e091b9563#9e1fffaf84437cda87fa1fc726a61f9e091b9563"
 dependencies = [
  "hashbrown 0.17.1",
  "linebender_resource_handle",
@@ -2483,6 +2482,7 @@ dependencies = [
  "serde_json",
  "servo_arc",
  "thin-vec",
+ "unicode-bidi",
  "url",
 ]
 
@@ -2981,7 +2981,6 @@ dependencies = [
  "stylo",
  "stylo_dom",
  "stylo_traits",
- "unicode-bidi",
  "url",
 ]
 
@@ -3723,12 +3722,10 @@ dependencies = [
 [[package]]
 name = "parlance"
 version = "0.1.0"
-source = "git+https://github.com/ldm0/parley?rev=9e1fffaf84437cda87fa1fc726a61f9e091b9563#9e1fffaf84437cda87fa1fc726a61f9e091b9563"
 
 [[package]]
 name = "parley"
 version = "0.11.1"
-source = "git+https://github.com/ldm0/parley?rev=9e1fffaf84437cda87fa1fc726a61f9e091b9563#9e1fffaf84437cda87fa1fc726a61f9e091b9563"
 dependencies = [
  "fontique",
  "harfrust",
@@ -3745,7 +3742,6 @@ dependencies = [
 [[package]]
 name = "parley_data"
 version = "0.11.1"
-source = "git+https://github.com/ldm0/parley?rev=9e1fffaf84437cda87fa1fc726a61f9e091b9563#9e1fffaf84437cda87fa1fc726a61f9e091b9563"
 dependencies = [
  "icu_properties",
 ]

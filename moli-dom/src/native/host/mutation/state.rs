@@ -127,24 +127,7 @@ impl DomHost {
     }
 
     pub fn set_input_value(&mut self, handle: DomHandle, value: &str) -> bool {
-        let has_connected_datalist =
-            self.is_connected(handle) && self.input_datalist_handle(handle).is_some();
-        let did_change = {
-            let Some(element) = self
-                .node_mut(handle)
-                .and_then(|node| node.data_mut().as_element_mut())
-            else {
-                return false;
-            };
-            let mut did_change =
-                element.prepare_datalist_text_decoration_for_value_mutation(has_connected_datalist);
-            did_change |= element.set_input_value(value);
-            did_change
-        };
-        if did_change {
-            self.record_mutation(MutationScope::LocalState);
-        }
-        did_change
+        self.set_input_value_effects(handle, value).did_change()
     }
 
     pub fn set_input_value_with_dirty(
@@ -153,6 +136,21 @@ impl DomHost {
         value: &str,
         dirty: bool,
     ) -> bool {
+        self.set_input_value_with_dirty_effects(handle, value, dirty)
+            .did_change()
+    }
+
+    pub fn set_input_value_from_user_edit(&mut self, handle: DomHandle, value: &str) -> bool {
+        self.set_input_value_from_user_edit_effects(handle, value)
+            .did_change()
+    }
+
+    pub fn set_input_value_effects(
+        &mut self,
+        handle: DomHandle,
+        value: &str,
+    ) -> DomMutationEffects {
+        let directionality = DirectionalitySnapshot::for_value(self, handle);
         let has_connected_datalist =
             self.is_connected(handle) && self.input_datalist_handle(handle).is_some();
         let did_change = {
@@ -160,20 +158,58 @@ impl DomHost {
                 .node_mut(handle)
                 .and_then(|node| node.data_mut().as_element_mut())
             else {
-                return false;
+                return DomMutationEffects::default();
+            };
+            let mut did_change =
+                element.prepare_datalist_text_decoration_for_value_mutation(has_connected_datalist);
+            did_change |= element.set_input_value(value);
+            did_change
+        };
+        if !did_change {
+            return DomMutationEffects::default();
+        }
+        self.record_mutation(MutationScope::LocalState);
+        let mut effects = DomMutationEffects::changed();
+        directionality.finish(self, &mut effects);
+        effects
+    }
+
+    pub fn set_input_value_with_dirty_effects(
+        &mut self,
+        handle: DomHandle,
+        value: &str,
+        dirty: bool,
+    ) -> DomMutationEffects {
+        let directionality = DirectionalitySnapshot::for_value(self, handle);
+        let has_connected_datalist =
+            self.is_connected(handle) && self.input_datalist_handle(handle).is_some();
+        let did_change = {
+            let Some(element) = self
+                .node_mut(handle)
+                .and_then(|node| node.data_mut().as_element_mut())
+            else {
+                return DomMutationEffects::default();
             };
             let mut did_change =
                 element.prepare_datalist_text_decoration_for_value_mutation(has_connected_datalist);
             did_change |= element.set_input_value_with_dirty(value, dirty);
             did_change
         };
-        if did_change {
-            self.record_mutation(MutationScope::LocalState);
+        if !did_change {
+            return DomMutationEffects::default();
         }
-        did_change
+        self.record_mutation(MutationScope::LocalState);
+        let mut effects = DomMutationEffects::changed();
+        directionality.finish(self, &mut effects);
+        effects
     }
 
-    pub fn set_input_value_from_user_edit(&mut self, handle: DomHandle, value: &str) -> bool {
+    pub fn set_input_value_from_user_edit_effects(
+        &mut self,
+        handle: DomHandle,
+        value: &str,
+    ) -> DomMutationEffects {
+        let directionality = DirectionalitySnapshot::for_value(self, handle);
         let has_connected_datalist =
             self.is_connected(handle) && self.input_datalist_handle(handle).is_some();
         let did_change = {
@@ -181,17 +217,20 @@ impl DomHost {
                 .node_mut(handle)
                 .and_then(|node| node.data_mut().as_element_mut())
             else {
-                return false;
+                return DomMutationEffects::default();
             };
             let mut did_change =
                 element.prepare_datalist_text_decoration_for_value_mutation(has_connected_datalist);
             did_change |= element.set_input_value_from_user_edit(value);
             did_change
         };
-        if did_change {
-            self.record_mutation(MutationScope::LocalState);
+        if !did_change {
+            return DomMutationEffects::default();
         }
-        did_change
+        self.record_mutation(MutationScope::LocalState);
+        let mut effects = DomMutationEffects::changed();
+        directionality.finish(self, &mut effects);
+        effects
     }
 
     pub fn set_autofilled_state(&mut self, handle: DomHandle, autofilled: bool) -> bool {

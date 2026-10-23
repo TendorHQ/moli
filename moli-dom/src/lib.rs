@@ -6,6 +6,7 @@
 pub mod accessibility;
 pub mod canvas;
 pub mod custom_elements;
+pub mod directionality;
 pub mod forms;
 pub mod native;
 
