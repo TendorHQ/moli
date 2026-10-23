@@ -207,7 +207,6 @@ mod tests {
             "css".into(),
             moli_layout::WebFontFace::new("CSS"),
             Vec::new(),
-            true,
         );
         let js_load = {
             let scope = std::pin::pin!(v8::HandleScope::new(&mut isolate));
@@ -220,12 +219,7 @@ mod tests {
             initialize(
                 scope,
                 js_face,
-                FontFaceResource::new(
-                    "js".into(),
-                    moli_layout::WebFontFace::new("JS"),
-                    Vec::new(),
-                    false,
-                ),
+                FontFaceResource::new("js".into(), moli_layout::WebFontFace::new("JS"), Vec::new()),
                 None,
             );
             Rc::downgrade(&get(scope, js_face).unwrap())

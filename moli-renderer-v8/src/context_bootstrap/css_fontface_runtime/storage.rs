@@ -214,6 +214,20 @@ fn font_face_set_connected_faces_array<'s>(
     font_face_set_array_for_slot(scope, object, FONT_FACE_SET_CONNECTED_FACES_SLOT)
 }
 
+pub(super) fn font_face_set_registration_scope<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    fonts: v8::Local<'s, v8::Object>,
+    face: v8::Local<'s, v8::Object>,
+) -> moli_layout::WebFontRegistrationScope {
+    if font_face_set_connected_faces_array(scope, fonts)
+        .is_some_and(|faces| array_contains_value(scope, faces, face.into()))
+    {
+        moli_layout::WebFontRegistrationScope::FontFaceSetConnected
+    } else {
+        moli_layout::WebFontRegistrationScope::FontFaceSetManual
+    }
+}
+
 fn font_face_set_array_for_slot<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     object: v8::Local<'s, v8::Object>,
@@ -318,8 +332,8 @@ fn sync_font_face_set_owners<'s>(
     previous: v8::Local<'s, v8::Array>,
     current: v8::Local<'s, v8::Array>,
 ) {
-    // Distinct CSS-connected wrappers can share a resource slot. Removing one
-    // membership must not unregister the resource still used by another face.
+    // A declaration projected by multiple stylesheet contributions retains one
+    // registration until its final set membership leaves.
     let mut retained_slots = std::collections::HashSet::new();
     for index in 0..current.length() {
         let Some(face) = current

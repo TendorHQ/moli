@@ -1,3 +1,8 @@
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
+
 use cssparser::{Parser, UnicodeRange};
 use moli_crypto::sha256_hex;
 use moli_css_parse::{
@@ -8,6 +13,7 @@ use moli_layout::{WebFontFace, WebFontUnicodeRange};
 use url::Url;
 
 use crate::protocol_types::OptionalResourceFetchMask;
+static NEXT_CSS_FONT_FACE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum StylesheetLoadBlockingResourceKind {
@@ -49,6 +55,13 @@ impl StylesheetLoadBlockingResource {
             Self::Image(_) => None,
             Self::Font { font, .. } => Some(font),
         }
+    }
+
+    pub(crate) fn with_registration_slot(mut self, slot: String) -> Self {
+        if let Self::Font { font, .. } = &mut self {
+            font.registration_slot = slot;
+        }
+        self
     }
 
     pub(crate) fn kind(&self) -> StylesheetLoadBlockingResourceKind {
@@ -108,8 +121,9 @@ impl StylesheetSubresourceRequest {
 /// Parsed declaration metadata, before any network source is selected.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct StylesheetWebFont {
-    slot: String,
-    face: WebFontFace,
+    resource_key: String,
+    registration_slot: String,
+    face: Arc<WebFontFace>,
     sources: Vec<moli_css_parse::CssFontSource>,
 }
 
@@ -125,11 +139,15 @@ impl StylesheetWebFont {
         &self.sources
     }
 
-    pub(crate) fn slot(&self) -> &str {
-        &self.slot
+    pub(crate) fn resource_key(&self) -> &str {
+        &self.resource_key
     }
 
-    pub(crate) fn face(&self) -> &WebFontFace {
+    pub(crate) fn registration_slot(&self) -> &str {
+        &self.registration_slot
+    }
+
+    pub(crate) fn face(&self) -> &Arc<WebFontFace> {
         &self.face
     }
 }
@@ -252,7 +270,6 @@ pub(crate) fn stylesheet_web_font_resource_with_resolved_sources(
     });
     let descriptor = parsed_web_font_face(css_text)?;
     Some(stylesheet_web_font_resource_with_descriptor(
-        css_text,
         request_url,
         descriptor,
         sources,
@@ -260,20 +277,14 @@ pub(crate) fn stylesheet_web_font_resource_with_resolved_sources(
 }
 
 fn stylesheet_web_font_resource_with_descriptor(
-    css_text: &str,
     request_url: Option<Url>,
     descriptor: ParsedWebFontFace,
     sources: Vec<moli_css_parse::CssFontSource>,
 ) -> StylesheetLoadBlockingResource {
-    // The slot identifies a shareable resource, not a layout generation or
-    // an individual declaration. The import response and retained style world
-    // must converge on one slot. Identical relative declarations parsed under
-    // different stylesheet bases must not
-    // alias, so identity includes every resolved fallback, its kind and order.
+    // Resource identity includes the complete resolved source list, independently
+    // of mutable face descriptors and declaration/registration identity.
     // Length-prefix strings so source boundaries cannot collide.
     let mut slot_material = Vec::new();
-    slot_material.extend_from_slice(&(css_text.len() as u64).to_le_bytes());
-    slot_material.extend_from_slice(css_text.as_bytes());
     for source in &sources {
         let (kind, value) = match source {
             moli_css_parse::CssFontSource::Local(value) => (0, value),
@@ -287,8 +298,12 @@ fn stylesheet_web_font_resource_with_descriptor(
     StylesheetLoadBlockingResource::font(
         request_url,
         StylesheetWebFont {
-            slot,
-            face: descriptor.into_face(),
+            resource_key: slot,
+            registration_slot: format!(
+                "stylesheet-font-face:anonymous:{}",
+                NEXT_CSS_FONT_FACE.fetch_add(1, Ordering::Relaxed)
+            ),
+            face: Arc::new(descriptor.into_face()),
             sources,
         },
     )
@@ -455,7 +470,7 @@ mod tests {
         let web_font = resources[0]
             .web_font()
             .expect("font resource should retain its descriptors");
-        assert!(web_font.slot().starts_with("stylesheet-font:"));
+        assert!(web_font.resource_key().starts_with("stylesheet-font:"));
         assert_eq!(web_font.face().family_name(), "Demo");
         assert_eq!(web_font.face().weight(), Some(625.0));
         assert_eq!(web_font.face().stretch(), Some(87.5));
@@ -530,8 +545,11 @@ mod tests {
             response_projection
                 .web_font()
                 .expect("response font")
-                .slot(),
-            native_projection.web_font().expect("native font").slot(),
+                .resource_key(),
+            native_projection
+                .web_font()
+                .expect("native font")
+                .resource_key(),
             "the early import-response registration and retained manifest must keep one slot",
         );
         assert_eq!(
@@ -560,8 +578,8 @@ mod tests {
         .expect("second native resource");
 
         assert_ne!(
-            first.web_font().expect("first font").slot(),
-            second.web_font().expect("second font").slot(),
+            first.web_font().expect("first font").resource_key(),
+            second.web_font().expect("second font").resource_key(),
             "equal relative text parsed in different stylesheet directories must not alias",
         );
     }
@@ -583,15 +601,15 @@ mod tests {
         .unwrap();
         assert_eq!(first.request_url(), second.request_url());
         assert_ne!(
-            first.web_font().unwrap().slot(),
-            second.web_font().unwrap().slot()
+            first.web_font().unwrap().resource_key(),
+            second.web_font().unwrap().resource_key()
         );
         let slot = |sources| {
             stylesheet_web_font_resource_with_resolved_sources(css, sources)
                 .unwrap()
                 .web_font()
                 .unwrap()
-                .slot()
+                .resource_key()
                 .to_owned()
         };
         let url = "https://example.test/font.woff2".to_owned();

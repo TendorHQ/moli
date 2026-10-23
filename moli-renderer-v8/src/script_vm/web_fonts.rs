@@ -4,14 +4,17 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use moli_layout::{DocumentLayoutServices, WebFontRegistrationError, WebFontRegistrationOutcome};
+use moli_layout::{
+    DocumentLayoutServices, WebFontRegistrationError, WebFontRegistrationOutcome,
+    WebFontRegistrationScope,
+};
 
 use crate::{
     css_resource_urls::{
         CompletedStylesheetWebFont, StylesheetLoadBlockingResource, StylesheetSubresourceRequest,
         StylesheetWebFont,
     },
-    font_loading::{FontFaceLoad, FontFaceResource},
+    font_loading::{FontFaceLoad, FontFaceResource, FontSourceResource},
 };
 
 #[derive(Clone, Debug)]
@@ -30,6 +33,7 @@ pub(crate) struct DocumentWebFontState {
     // entries let a detached rule keep its FontFace state while JS holds it,
     // without retaining every stylesheet ever seen by the document.
     loads: BTreeMap<String, Weak<RefCell<FontFaceResource>>>,
+    sources: BTreeMap<String, Weak<RefCell<FontSourceResource>>>,
     // Removing a CSS declaration revokes registration, not promises held by JS.
     // Keep its in-flight resource until the owner-validated response settles it.
     pending: BTreeMap<u64, FontFaceLoad>,
@@ -42,6 +46,13 @@ pub(crate) enum DocumentWebFontCompletion {
     NetworkFailed,
     Retry(Box<StylesheetSubresourceRequest>),
     Stale,
+}
+
+/// Loading can finish from cached/local data without producing a request.
+/// Publish registration changes independently so geometry is invalidated then.
+pub(crate) struct PreparedStylesheetResourceLoad {
+    pub(crate) request: Option<StylesheetSubresourceRequest>,
+    pub(crate) fonts_changed: bool,
 }
 
 impl DocumentWebFontState {
@@ -70,17 +81,35 @@ impl DocumentWebFontState {
     }
 
     pub(crate) fn observe(&mut self, resource: &StylesheetWebFont) -> FontFaceLoad {
-        if let Some(load) = self.loads.get(resource.slot()).and_then(Weak::upgrade) {
+        if let Some(load) = self
+            .loads
+            .get(resource.registration_slot())
+            .and_then(Weak::upgrade)
+        {
             return load;
         }
-        let load = FontFaceResource::new(
-            resource.slot().to_owned(),
+        let source = self
+            .sources
+            .get(resource.resource_key())
+            .and_then(Weak::upgrade)
+            .unwrap_or_else(|| {
+                let source = FontSourceResource::new(
+                    resource.sources().to_vec(),
+                    Some(resource.resource_key().to_owned()),
+                );
+                self.sources
+                    .insert(resource.resource_key().to_owned(), Rc::downgrade(&source));
+                source
+            });
+        let load = FontFaceResource::with_source(
+            resource.registration_slot().to_owned(),
             resource.face().clone(),
-            resource.sources().to_vec(),
-            true,
+            source,
         );
-        self.loads
-            .insert(resource.slot().to_owned(), Rc::downgrade(&load));
+        self.loads.insert(
+            resource.registration_slot().to_owned(),
+            Rc::downgrade(&load),
+        );
         load
     }
 
@@ -89,21 +118,33 @@ impl DocumentWebFontState {
         resources: impl IntoIterator<Item = &'a StylesheetLoadBlockingResource>,
         services: &mut DocumentLayoutServices,
     ) -> bool {
-        let order = resources
+        let resources = resources
             .into_iter()
             .filter_map(StylesheetLoadBlockingResource::web_font)
-            .map(|font| font.slot().to_owned())
+            .collect::<Vec<_>>();
+        // Establish the new declarations before retiring old ones, so their
+        // shared decoded source survives an owner/projection identity change.
+        for font in &resources {
+            let load = self.observe(font);
+            self.slots
+                .entry(font.registration_slot().to_owned())
+                .or_insert(WebFontSlot { load });
+        }
+        let order = resources
+            .into_iter()
+            .map(|font| font.registration_slot().to_owned())
             .collect::<Vec<_>>();
         let active = order.iter().collect::<BTreeSet<_>>();
         let mut changed = false;
-        self.slots.retain(|slot, entry| {
+        self.slots.retain(|slot, _| {
             if active.contains(slot) {
                 return true;
             }
-            changed |= entry.load.borrow().unregister(services);
+            changed |= services.remove_stylesheet_web_font(slot);
             false
         });
         self.loads.retain(|_, load| load.strong_count() != 0);
+        self.sources.retain(|_, source| source.strong_count() != 0);
         changed | services.set_stylesheet_web_font_order(&order)
     }
 
@@ -126,33 +167,49 @@ impl DocumentWebFontState {
         &mut self,
         resource: StylesheetLoadBlockingResource,
         services: &mut DocumentLayoutServices,
-    ) -> Option<StylesheetSubresourceRequest> {
+    ) -> PreparedStylesheetResourceLoad {
         let font = match resource {
             StylesheetLoadBlockingResource::Image(url) => {
-                return Some(StylesheetSubresourceRequest::image(url, None));
+                return PreparedStylesheetResourceLoad {
+                    request: Some(StylesheetSubresourceRequest::image(url, None)),
+                    fonts_changed: false,
+                };
             }
             StylesheetLoadBlockingResource::Font { font, .. } => font,
         };
         let load = self.observe(&font);
-        self.slots
-            .insert(font.slot().to_owned(), WebFontSlot { load: load.clone() });
-        if !load.borrow_mut().begin() {
-            // Reactivating a previously loaded CSS declaration reuses its data;
-            // it must restore registration without starting a second request.
-            if let Err(error) = load.borrow().register(services) {
-                tracing::warn!(%error, "failed to reactivate stylesheet font");
-            }
-            return None;
-        }
-        let next = load.borrow_mut().next_url(services);
+        self.slots.insert(
+            font.registration_slot().to_owned(),
+            WebFontSlot { load: load.clone() },
+        );
+        let next = if load.borrow_mut().begin() {
+            load.borrow_mut().next_url(services)
+        } else {
+            None
+        };
         if let Some(url) = next {
             let url = url::Url::parse(&url).expect("CSS font sources retain resolved URLs");
-            Some(self.bind_request(url, font, load))
-        } else {
-            if let Err(error) = load.borrow().register(services) {
-                tracing::warn!(%error, "failed to register local stylesheet font");
+            return PreparedStylesheetResourceLoad {
+                request: Some(self.bind_request(url, font, load)),
+                fonts_changed: false,
+            };
+        }
+        let fonts_changed = match load
+            .borrow()
+            .register(services, WebFontRegistrationScope::Stylesheet)
+        {
+            Ok(Some(WebFontRegistrationOutcome::Added | WebFontRegistrationOutcome::Replaced)) => {
+                true
             }
-            None
+            Ok(_) => false,
+            Err(error) => {
+                tracing::warn!(%error, "failed to register cached/local stylesheet font");
+                false
+            }
+        };
+        PreparedStylesheetResourceLoad {
+            request: None,
+            fonts_changed,
         }
     }
 
@@ -166,7 +223,7 @@ impl DocumentWebFontState {
         if self
             .pending
             .get(&id)
-            .is_none_or(|load| load.borrow().slot() != request.font().slot())
+            .is_none_or(|load| load.borrow().slot() != request.font().registration_slot())
         {
             return DocumentWebFontCompletion::Stale;
         }
@@ -184,19 +241,33 @@ impl DocumentWebFontState {
                 load,
             )));
         }
-        let active = self
-            .slots
-            .get(request.font().slot())
-            .is_some_and(|slot| std::rc::Rc::ptr_eq(&slot.load, &load));
+        let mut active = false;
+        let mut registered = None;
+        let mut registration_error = None;
+        for entry in self.slots.values() {
+            let face = entry.load.borrow();
+            if !face.shares_source(&load.borrow()) {
+                continue;
+            }
+            active = true;
+            match face.register(services, WebFontRegistrationScope::Stylesheet) {
+                Ok(Some(outcome)) => {
+                    registered.get_or_insert(outcome);
+                }
+                Err(error) => registration_error = Some(error),
+                Ok(None) => {}
+            }
+        }
         if !active {
             return DocumentWebFontCompletion::Stale;
         }
-        match load.borrow().register(services) {
-            Ok(Some(outcome)) => DocumentWebFontCompletion::Registered(outcome),
-            Err(error) => DocumentWebFontCompletion::Invalid(error),
-            Ok(None) => error
+        if let Some(outcome) = registered {
+            DocumentWebFontCompletion::Registered(outcome)
+        } else {
+            registration_error
+                .or(error)
                 .map(DocumentWebFontCompletion::Invalid)
-                .unwrap_or(DocumentWebFontCompletion::NetworkFailed),
+                .unwrap_or(DocumentWebFontCompletion::NetworkFailed)
         }
     }
 
@@ -226,6 +297,44 @@ mod tests {
     use url::Url;
 
     const TEST_FONT: &[u8] = include_bytes!("../../../moli-layout/tests/fixtures/moli-ahem.woff2");
+
+    #[test]
+    fn independent_declarations_share_source_loading_but_not_descriptors_or_registrations() {
+        let mut state = DocumentWebFontState::default();
+        let mut services = DocumentLayoutServices::new();
+        let first = resource("@font-face{font-family:First;src:url(font.woff2)}");
+        let second = resource("@font-face{font-family:Second;src:url(font.woff2)}");
+        assert_eq!(
+            first.web_font().unwrap().resource_key(),
+            second.web_font().unwrap().resource_key()
+        );
+        let first_load = state.observe(first.web_font().unwrap());
+        let second_load = state.observe(second.web_font().unwrap());
+        assert!(!Rc::ptr_eq(&first_load, &second_load));
+        assert!(first_load.borrow().shares_source(&second_load.borrow()));
+        let request = state.admit(first, &mut services).request.unwrap();
+        assert_eq!(
+            second_load.borrow().status(),
+            crate::font_loading::FontFaceStatus::Unloaded
+        );
+        assert!(
+            state.admit(second, &mut services).request.is_none(),
+            "the second face joins the existing source operation"
+        );
+        assert_eq!(state.pending.len(), 1);
+        assert!(matches!(
+            state.complete(terminal(request, Some(TEST_FONT.to_vec())), &mut services),
+            DocumentWebFontCompletion::Registered(_)
+        ));
+        assert_eq!(services.web_font_count(), 2);
+        assert_eq!(state.ready_slot_count(), 2);
+        assert!(state.pending.is_empty());
+        first_load
+            .borrow_mut()
+            .set_descriptor(moli_layout::WebFontFace::new("Moved"));
+        assert_eq!(second_load.borrow().descriptor().family_name(), "Second");
+        assert_ne!(first_load.borrow().slot(), second_load.borrow().slot());
+    }
 
     fn resource(css: &str) -> StylesheetLoadBlockingResource {
         stylesheet_load_blocking_font_resources(
@@ -261,9 +370,13 @@ mod tests {
                 resource("@font-face{font-family:First;src:url(font.woff2)}"),
                 &mut services,
             )
+            .request
             .unwrap();
-        let second_resource = resource("@font-face{font-family:Second;src:url(font.woff2)}");
-        let second = state.admit(second_resource.clone(), &mut services).unwrap();
+        let second_resource = resource("@font-face{font-family:Second;src:url(replacement.woff2)}");
+        let second = state
+            .admit(second_resource.clone(), &mut services)
+            .request
+            .unwrap();
 
         state.retain_active_slots([&second_resource], &mut services);
         assert!(matches!(
@@ -287,6 +400,7 @@ mod tests {
                 resource("@font-face{font-family:Demo;src:url(font.woff2)}"),
                 &mut services,
             )
+            .request
             .unwrap();
         let late = admitted.clone();
         assert!(matches!(
@@ -310,8 +424,11 @@ mod tests {
         let resource =
             resource("@font-face{font-family:Demo;src:url(first.woff2),url(second.woff2)}");
         let load = state.observe(resource.web_font().unwrap());
-        let first = state.admit(resource.clone(), &mut services).unwrap();
-        assert!(state.admit(resource, &mut services).is_none());
+        let first = state
+            .admit(resource.clone(), &mut services)
+            .request
+            .unwrap();
+        assert!(state.admit(resource, &mut services).request.is_none());
         assert_eq!(
             load.borrow().status(),
             crate::font_loading::FontFaceStatus::Loading
@@ -348,7 +465,7 @@ mod tests {
         let mut services = DocumentLayoutServices::new();
         let resource = resource("@font-face{font-family:Demo;src:url(font.woff2)}");
         let observer = state.observe(resource.web_font().unwrap());
-        let request = state.admit(resource, &mut services).unwrap();
+        let request = state.admit(resource, &mut services).request.unwrap();
         state.retain_active_slots([], &mut services);
         assert!(matches!(
             state.complete(terminal(request, Some(TEST_FONT.to_vec())), &mut services),
@@ -372,7 +489,10 @@ mod tests {
             0,
             "a CSSOM observer does not activate the rule"
         );
-        let request = state.admit(resource.clone(), &mut services).unwrap();
+        let request = state
+            .admit(resource.clone(), &mut services)
+            .request
+            .unwrap();
         state.complete(terminal(request, Some(TEST_FONT.to_vec())), &mut services);
         state.retain_active_slots([], &mut services);
         assert_eq!(services.web_font_count(), 0);
@@ -381,7 +501,7 @@ mod tests {
             &state.observe(resource.web_font().unwrap())
         ));
         assert!(
-            state.admit(resource, &mut services).is_none(),
+            state.admit(resource, &mut services).request.is_none(),
             "reactivation needs no request"
         );
         assert_eq!(state.ready_slot_count(), 1);

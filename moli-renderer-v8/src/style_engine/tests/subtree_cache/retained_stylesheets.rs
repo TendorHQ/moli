@@ -595,7 +595,7 @@ fn retained_imported_font_resources_keep_each_import_parser_base_and_response_sl
                 resource
                     .web_font()
                     .expect("font manifest entry")
-                    .slot()
+                    .resource_key()
                     .to_owned(),
             )
         })
@@ -627,8 +627,11 @@ fn retained_imported_font_resources_keep_each_import_parser_base_and_response_sl
                 .as_str()];
             assert_eq!(
                 retained_slot,
-                early.web_font().expect("early response font").slot(),
-                "response-time registration and retained reconciliation must share a slot",
+                early
+                    .web_font()
+                    .expect("early response font")
+                    .resource_key(),
+                "response-time discovery and retained reconciliation must share a source key",
             );
         }
     }

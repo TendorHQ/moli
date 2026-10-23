@@ -24,6 +24,95 @@ pub(super) fn order_vm() -> StandaloneScriptVmHarness {
 }
 
 #[tokio::test]
+async fn detached_css_faces_can_be_registered_manually_before_or_after_native_cleanup() {
+    let (_, wide) = order_font_data();
+    for automatic in [false, true] {
+        for cleanup_before_add in [false, true] {
+            let loader = ResourceRequestClient::new(&moli_fetch::FetchConfig::default()).unwrap();
+            if automatic {
+                loader.set_optional_resource_fetch_mask(
+                    crate::protocol_types::OptionalResourceFetchMask::FONT,
+                );
+            }
+            let (mut vm, _completions) =
+                new_parsed_test_vm_with_loader_and_resource_completion_queue(
+                    "https://font-selection-order.test/",
+                    "<!doctype html><span id=probe style='display:inline-block;font:40px OrderFace'>AAAA</span>",
+                    &loader,
+                );
+            vm.set_layout_policy(moli_page_types::LayoutPolicy::OnDemand);
+            vm.eval(&format!(r#"
+                globalThis.style=document.createElement('style');
+                style.textContent='@font-face{{font-family:OrderFace;src:url(data:font/ttf;base64,{wide})}}';document.head.append(style);
+                globalThis.face=[...document.fonts][0];face.load();
+            "#)).unwrap();
+            assert_eq!(
+                vm.eval("String(probe.getBoundingClientRect().width)")
+                    .unwrap(),
+                "160"
+            );
+            vm.eval("style.sheet.deleteRule(0);void document.fonts.size")
+                .unwrap();
+            if cleanup_before_add {
+                assert_ne!(
+                    vm.eval("String(probe.getBoundingClientRect().width)")
+                        .unwrap(),
+                    "160"
+                );
+            }
+            vm.eval("document.fonts.add(face)").unwrap();
+            assert_eq!(
+                vm.eval("String(probe.getBoundingClientRect().width)")
+                    .unwrap(),
+                "160",
+                "a manual member must survive native CSS cleanup"
+            );
+            assert_eq!(vm.eval("face.status==='loaded'&&document.fonts.has(face)&&document.fonts.check('40px OrderFace','AAAA')").unwrap(), "true");
+            vm.eval("document.fonts.delete(face)").unwrap();
+            assert_ne!(
+                vm.eval("String(probe.getBoundingClientRect().width)")
+                    .unwrap(),
+                "160"
+            );
+        }
+    }
+}
+
+#[test]
+fn css_faces_with_shared_sources_keep_independent_mutable_descriptors() {
+    let (_, wide) = order_font_data();
+    for detached in [false, true] {
+        let mut vm = order_vm();
+        vm.eval(&format!(r#"
+            globalThis.style=document.createElement('style');
+            const rule='@font-face{{font-family:OrderFace;src:url(data:font/ttf;base64,{wide})}}';
+            style.textContent=rule+rule;document.head.append(style);
+            globalThis.faces=[...document.fonts];document.fonts.load('40px OrderFace','AAAA');
+            globalThis.moved=document.createElement('span');moved.textContent='AAAA';moved.style.cssText='display:inline-block;font:40px Moved';document.body.append(moved);
+        "#)).unwrap();
+        assert_eq!(
+            vm.eval("String(probe.getBoundingClientRect().width)")
+                .unwrap(),
+            "160"
+        );
+        if detached {
+            vm.eval("style.sheet.deleteRule(0);void document.fonts.size")
+                .unwrap();
+        }
+        vm.eval("faces[0].family='Moved'").unwrap();
+        if detached {
+            vm.eval("document.fonts.add(faces[0])").unwrap();
+        }
+        assert_eq!(vm.eval("[probe.getBoundingClientRect().width,moved.getBoundingClientRect().width].join(',')").unwrap(), "160,160");
+        assert_eq!(vm.eval("faces[1].family==='OrderFace'&&faces[1].status==='loaded'&&document.fonts.has(faces[1])").unwrap(), "true");
+        assert_eq!(
+            vm.eval("style.sheet.cssRules[0].style.fontFamily").unwrap(),
+            "OrderFace"
+        );
+    }
+}
+
+#[tokio::test]
 async fn font_face_css_selection_keeps_declaration_order_without_js_projection() {
     use crate::native_bridge::document::take_owner_font_face_projection_count_for_test;
 
@@ -80,7 +169,19 @@ async fn font_face_css_reordering_preserves_last_duplicate_and_manual_priority()
     "#)).unwrap();
     let width = |vm: &mut StandaloneScriptVmHarness| {
         vm.reconcile_document_web_fonts_for_layout();
-        assert_eq!(vm.document_web_font_counts_for_test(), (2, 2, 2));
+        let declarations = if vm
+            .eval("String(!!globalThis.duplicate?.isConnected)")
+            .unwrap()
+            == "true"
+        {
+            3
+        } else {
+            2
+        };
+        assert_eq!(
+            vm.document_web_font_counts_for_test(),
+            (declarations, declarations, declarations)
+        );
         vm.eval("String(probe.getBoundingClientRect().width)")
             .unwrap()
     };

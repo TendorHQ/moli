@@ -673,7 +673,8 @@ pub struct WebFontRegistration {
     slot: String,
     face: WebFontFace,
     payload: WebFontPayload,
-    stylesheet: bool,
+    source_key: Option<String>,
+    scope: WebFontRegistrationScope,
 }
 
 #[derive(Clone, Debug)]
@@ -703,7 +704,8 @@ impl WebFontRegistration {
             slot: slot.into(),
             face,
             payload: WebFontPayload::Encoded(bytes),
-            stylesheet: false,
+            source_key: None,
+            scope: WebFontRegistrationScope::FontFaceSetManual,
         }
     }
 
@@ -714,14 +716,26 @@ impl WebFontRegistration {
             slot: slot.into(),
             face,
             payload: WebFontPayload::Validated(data),
-            stylesheet: false,
+            source_key: None,
+            scope: WebFontRegistrationScope::FontFaceSetManual,
         }
     }
 
     /// Restricts this registration to passes where its stylesheet declaration
     /// is active. Other native/programmatic registrations remain available.
     pub fn with_stylesheet_scope(mut self) -> Self {
-        self.stylesheet = true;
+        self.scope = WebFontRegistrationScope::Stylesheet;
+        self
+    }
+
+    /// Identifies shareable source data, independently of this declaration's slot.
+    pub fn with_source_key(mut self, source_key: Option<String>) -> Self {
+        self.source_key = source_key;
+        self
+    }
+
+    pub fn with_scope(mut self, scope: WebFontRegistrationScope) -> Self {
+        self.scope = scope;
         self
     }
 
@@ -735,6 +749,58 @@ impl WebFontRegistration {
 
     pub fn bytes(&self) -> &[u8] {
         self.payload.bytes()
+    }
+}
+
+/// One declaration in the current native stylesheet snapshot. A new declaration
+/// may use cached source data without reusing another face's mutable metadata.
+pub struct WebFontDeclaration<'a> {
+    pub slot: &'a str,
+    pub source_key: &'a str,
+    pub face: &'a WebFontFace,
+}
+
+/// The current registration relation in one Document, independently of where
+/// the FontFace or its shared source was originally created.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WebFontRegistrationScope {
+    Stylesheet,
+    FontFaceSetConnected,
+    FontFaceSetManual,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FontFaceSetMembership {
+    Connected,
+    Manual,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct WebFontMembership {
+    stylesheet: bool,
+    font_face_set: Option<FontFaceSetMembership>,
+}
+
+impl WebFontMembership {
+    fn with(mut self, scope: WebFontRegistrationScope) -> Self {
+        match scope {
+            WebFontRegistrationScope::Stylesheet => self.stylesheet = true,
+            WebFontRegistrationScope::FontFaceSetConnected => {
+                self.font_face_set = Some(FontFaceSetMembership::Connected);
+            }
+            WebFontRegistrationScope::FontFaceSetManual => {
+                self.font_face_set = Some(FontFaceSetMembership::Manual);
+            }
+        }
+        self
+    }
+
+    fn is_empty(self) -> bool {
+        !self.stylesheet && self.font_face_set.is_none()
+    }
+
+    fn is_stylesheet_only(self) -> bool {
+        self.font_face_set != Some(FontFaceSetMembership::Manual)
     }
 }
 
@@ -761,7 +827,8 @@ pub enum WebFontRegistrationError {
 struct RegisteredWebFont {
     face: WebFontFace,
     sfnt_bytes: Blob<u8>,
-    stylesheet: bool,
+    source_key: Option<String>,
+    membership: WebFontMembership,
 }
 
 /// Lazily initialized text resources reused by successive layout demands for
@@ -894,7 +961,9 @@ impl DocumentLayoutServices {
                                 .get(&face.source_slot)
                                 .copied()
                                 .unwrap_or((
-                                    !self.web_fonts[&face.source_slot].stylesheet,
+                                    !self.web_fonts[&face.source_slot]
+                                        .membership
+                                        .is_stylesheet_only(),
                                     usize::MAX,
                                 ));
                         }
@@ -926,6 +995,11 @@ impl DocumentLayoutServices {
             return Err(WebFontRegistrationError::EmptySlot);
         }
         registration.face.validate()?;
+        let membership = self
+            .web_fonts
+            .get(&registration.slot)
+            .map_or(WebFontMembership::default(), |font| font.membership)
+            .with(registration.scope);
         let (sfnt_bytes, validated) = match registration.payload {
             WebFontPayload::Encoded(bytes) => (decode_web_font_bytes(bytes)?, false),
             WebFontPayload::Validated(data) => (data.bytes, true),
@@ -933,12 +1007,14 @@ impl DocumentLayoutServices {
         let font = RegisteredWebFont {
             face: registration.face,
             sfnt_bytes,
-            stylesheet: registration.stylesheet,
+            source_key: registration.source_key,
+            membership,
         };
         let outcome = match self.web_fonts.get(&registration.slot) {
             Some(current)
                 if current.face == font.face
-                    && current.stylesheet == font.stylesheet
+                    && current.membership == font.membership
+                    && current.source_key == font.source_key
                     && current.sfnt_bytes.as_ref() == font.sfnt_bytes.as_ref() =>
             {
                 WebFontRegistrationOutcome::Unchanged
@@ -995,8 +1071,48 @@ impl DocumentLayoutServices {
         true
     }
 
+    pub fn remove_stylesheet_web_font(&mut self, slot: &str) -> bool {
+        self.remove_web_font_membership(slot, WebFontRegistrationScope::Stylesheet)
+    }
+
+    pub fn remove_font_face_set_web_font(&mut self, slot: &str) -> bool {
+        self.remove_web_font_membership(slot, WebFontRegistrationScope::FontFaceSetManual)
+    }
+
+    fn remove_web_font_membership(&mut self, slot: &str, scope: WebFontRegistrationScope) -> bool {
+        let Some(font) = self.web_fonts.get_mut(slot) else {
+            return false;
+        };
+        match scope {
+            WebFontRegistrationScope::Stylesheet => {
+                if !std::mem::take(&mut font.membership.stylesheet) {
+                    return false;
+                }
+            }
+            WebFontRegistrationScope::FontFaceSetConnected
+            | WebFontRegistrationScope::FontFaceSetManual => {
+                if font.membership.font_face_set.take().is_none() {
+                    return false;
+                }
+            }
+        }
+        if font.membership.is_empty() {
+            return self.remove_web_font(slot);
+        }
+        if self.parley.is_some() {
+            self.parley = Some(Box::new(build_parley_services(
+                self.system_font_policy,
+                &self.web_fonts,
+                &self.web_font_order,
+            )));
+        }
+        true
+    }
+
     pub fn has_stylesheet_web_fonts(&self) -> bool {
-        self.web_fonts.values().any(|font| font.stylesheet)
+        self.web_fonts
+            .values()
+            .any(|font| font.membership.is_stylesheet_only())
     }
 
     /// Selects loaded CSS fonts for one pass without changing the document's
@@ -1011,14 +1127,66 @@ impl DocumentLayoutServices {
         is_active: impl Fn(&str) -> bool,
         consume: impl FnOnce(&mut Self) -> R,
     ) -> R {
+        self.with_font_view(is_active, Vec::new(), self.web_font_order.clone(), consume)
+    }
+
+    /// Selects this pass's declaration identities and CSS order. Reinserted
+    /// rules can reuse loaded source bytes while keeping independent metadata;
+    /// temporary view/media changes do not mutate authoritative registrations.
+    pub fn with_stylesheet_font_declarations<'a, R>(
+        &mut self,
+        declarations: impl IntoIterator<Item = WebFontDeclaration<'a>>,
+        consume: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let mut active = std::collections::BTreeSet::new();
+        let mut additions = Vec::new();
+        let mut order = self.web_font_order.clone();
+        order.retain(|_, (manual, _)| *manual);
+        for (index, declaration) in declarations.into_iter().enumerate() {
+            active.insert(declaration.slot);
+            order.insert(declaration.slot.to_owned(), (false, index));
+            if self.web_fonts.contains_key(declaration.slot) {
+                continue;
+            }
+            let Some(cached) = self.web_fonts.values().find(|font| {
+                font.membership.stylesheet
+                    && font.source_key.as_deref() == Some(declaration.source_key)
+            }) else {
+                continue;
+            };
+            // Only typed, validated descriptors may expose a cached payload.
+            if declaration.face.validate().is_err() {
+                continue;
+            }
+            additions.push((
+                declaration.slot.to_owned(),
+                RegisteredWebFont {
+                    face: declaration.face.clone(),
+                    sfnt_bytes: cached.sfnt_bytes.clone(),
+                    source_key: cached.source_key.clone(),
+                    membership: WebFontMembership::default()
+                        .with(WebFontRegistrationScope::Stylesheet),
+                },
+            ));
+        }
+        self.with_font_view(|slot| active.contains(slot), additions, order, consume)
+    }
+
+    fn with_font_view<R>(
+        &mut self,
+        is_active: impl Fn(&str) -> bool,
+        additions: Vec<(String, RegisteredWebFont)>,
+        order: BTreeMap<String, (bool, usize)>,
+        consume: impl FnOnce(&mut Self) -> R,
+    ) -> R {
         let excluded = self
             .web_fonts
             .iter()
             .filter_map(|(slot, font)| {
-                (font.stylesheet && !is_active(slot)).then_some(slot.as_str())
+                (font.membership.is_stylesheet_only() && !is_active(slot)).then_some(slot.as_str())
             })
             .collect::<Vec<_>>();
-        if excluded.is_empty() {
+        if excluded.is_empty() && additions.is_empty() && order == self.web_font_order {
             return consume(self);
         }
         // BTreeMap iteration keeps the excluded slots sorted. Font bytes are
@@ -1028,13 +1196,14 @@ impl DocumentLayoutServices {
             .iter()
             .filter(|(slot, _)| excluded.binary_search(&slot.as_str()).is_err())
             .map(|(slot, font)| (slot.clone(), font.clone()))
+            .chain(additions)
             .collect();
         let mut temporary = Self {
             parley: None,
             local_font_sources: None,
             system_font_policy: self.system_font_policy,
             web_fonts,
-            web_font_order: self.web_font_order.clone(),
+            web_font_order: order,
             has_font_face_set_order: self.has_font_face_set_order,
             text_layout_passes: 0,
         };
@@ -1078,7 +1247,7 @@ fn ordered_web_fonts<'a>(
         order
             .get(*slot)
             .copied()
-            .unwrap_or((!font.stylesheet, usize::MAX))
+            .unwrap_or((!font.membership.is_stylesheet_only(), usize::MAX))
     });
     fonts
 }
@@ -1147,7 +1316,7 @@ impl ParleyDocumentServices {
         let source_priority = web_font_order
             .get(slot)
             .copied()
-            .unwrap_or((!font.stylesheet, usize::MAX));
+            .unwrap_or((!font.membership.is_stylesheet_only(), usize::MAX));
         let family = self
             .web_font_families
             .entry(font_family_name_key(font.face.family_name()))

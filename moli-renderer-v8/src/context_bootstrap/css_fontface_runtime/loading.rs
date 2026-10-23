@@ -165,7 +165,6 @@ pub(super) fn new_resource<'s>(
         format!("js-font-face-{id}"),
         descriptor(scope, face),
         sources,
-        false,
     )
 }
 
@@ -371,6 +370,7 @@ pub(super) fn sync_registration<'s>(
     let Some(load) = super::state::get(scope, face) else {
         return;
     };
+    let registration_scope = super::storage::font_face_set_registration_scope(scope, owner, face);
     let Some(context) = owner.get_creation_context(scope) else {
         return;
     };
@@ -384,7 +384,7 @@ pub(super) fn sync_registration<'s>(
     let changed = host.with_font_services(document, |services| {
         let load = load.borrow();
         if present {
-            match load.register(services) {
+            match load.register(services, registration_scope) {
                 Ok(Some(
                     moli_layout::WebFontRegistrationOutcome::Added
                     | moli_layout::WebFontRegistrationOutcome::Replaced,
@@ -396,7 +396,7 @@ pub(super) fn sync_registration<'s>(
                 }
             }
         } else {
-            load.unregister(services)
+            services.remove_font_face_set_web_font(load.slot())
         }
     });
     if changed {

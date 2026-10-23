@@ -118,8 +118,8 @@ impl StylesheetResourceManifest {
                 &mut imports,
             );
         }
-        // Slots share resource identity, but priority follows declarations.
-        // Keep the last occurrence when identical rules reuse the same slot.
+        // A declaration may be adopted by more than one scope. Keep its last
+        // occurrence, while independent rules retain independent registrations.
         let mut seen = BTreeSet::new();
         web_fonts.reverse();
         web_fonts.retain(|resource| {
@@ -127,7 +127,7 @@ impl StylesheetResourceManifest {
                 resource
                     .web_font()
                     .expect("font resource")
-                    .slot()
+                    .registration_slot()
                     .to_owned(),
             )
         });

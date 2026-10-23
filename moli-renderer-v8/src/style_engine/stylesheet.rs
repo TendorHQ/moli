@@ -103,15 +103,27 @@ pub(super) fn install_active_stylesheet(
     quirks_mode: QuirksMode,
 ) -> ActiveStylesheet {
     let stylesheet = author_stylesheet_for_source(shared_lock, source, quirks_mode);
-    let web_font_resources = native_font_face_rules_for_stylesheet(&stylesheet)
+    let rules = native_font_face_rules_for_stylesheet(&stylesheet);
+    source.retain_font_face_rule_identities(&rules);
+    let mut occurrences = std::collections::HashMap::new();
+    let web_font_resources = rules
         .into_iter()
         .filter_map(|rule| {
+            let occurrence = occurrences
+                .entry(rule.rule_fingerprint.clone())
+                .or_insert(0);
+            let slot =
+                source.font_face_registration_slot(&rule.rule, &rule.rule_fingerprint, *occurrence);
+            *occurrence += 1;
             let resource =
                 crate::css_resource_urls::stylesheet_web_font_resource_with_resolved_sources(
                     &rule.rule_fingerprint,
                     rule.sources,
                 )?;
-            Some(ActiveWebFontResource::new(rule.rule, resource))
+            Some(ActiveWebFontResource::new(
+                rule.rule,
+                resource.with_registration_slot(slot),
+            ))
         })
         .collect::<Vec<_>>();
     ActiveStylesheet::new(

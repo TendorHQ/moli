@@ -117,6 +117,51 @@ fn validated_font_data_keeps_its_blob_through_registration_and_layout() {
     assert_eq!(font.fonts()[0].load(None).unwrap().id(), blob_id);
 }
 
+#[test]
+fn stylesheet_and_font_face_set_memberships_are_retired_independently() {
+    for remove_stylesheet_first in [false, true] {
+        let mut services =
+            DocumentLayoutServices::with_system_font_policy(SystemFontPolicy::Disabled);
+        let data = FontFaceData::from_bytes(TEST_TTF).unwrap();
+        services
+            .register_web_font(
+                WebFontRegistration::from_font_data(
+                    "face",
+                    WebFontFace::new("Scoped"),
+                    data.clone(),
+                )
+                .with_stylesheet_scope(),
+            )
+            .unwrap();
+        services
+            .register_web_font(
+                WebFontRegistration::from_font_data("face", WebFontFace::new("Scoped"), data)
+                    .with_scope(WebFontRegistrationScope::FontFaceSetManual),
+            )
+            .unwrap();
+        services.with_active_stylesheet_fonts(
+            |_| false,
+            |active| assert_eq!(active.web_font_count(), 1),
+        );
+        if remove_stylesheet_first {
+            assert!(services.remove_stylesheet_web_font("face"));
+            assert_eq!(services.web_font_count(), 1);
+            assert!(!services.has_stylesheet_web_fonts());
+            assert!(services.remove_font_face_set_web_font("face"));
+        } else {
+            assert!(services.remove_font_face_set_web_font("face"));
+            assert_eq!(services.web_font_count(), 1);
+            assert!(services.has_stylesheet_web_fonts());
+            services.with_active_stylesheet_fonts(
+                |_| false,
+                |active| assert_eq!(active.web_font_count(), 0),
+            );
+            assert!(services.remove_stylesheet_web_font("face"));
+        }
+        assert_eq!(services.web_font_count(), 0);
+    }
+}
+
 fn source_id(services: &mut ParleyDocumentServices, family: &str) -> parley::fontique::SourceId {
     let family = resolved_registered_family_name(services, family).unwrap();
     services
@@ -371,25 +416,26 @@ fn replacement_and_removal_preserve_other_same_capability_slots() {
 }
 
 #[test]
-fn unchanged_bytes_still_replace_changed_stylesheet_scope() {
+fn unchanged_bytes_merge_and_retire_stylesheet_scope_independently() {
     let mut services = DocumentLayoutServices::with_system_font_policy(SystemFontPolicy::Disabled);
     services
         .register_web_font(registration("same", "Same", TEST_TTF))
         .unwrap();
-    for stylesheet in [true, false] {
-        let mut registration = registration("same", "Same", TEST_TTF);
-        if stylesheet {
-            registration = registration.with_stylesheet_scope();
-        }
-        assert_eq!(
-            services.register_web_font(registration),
-            Ok(WebFontRegistrationOutcome::Replaced)
-        );
-        services.with_active_stylesheet_fonts(
-            |_| false,
-            |selected| assert_eq!(selected.web_font_count(), usize::from(!stylesheet)),
-        );
-    }
+    assert_eq!(
+        services.register_web_font(registration("same", "Same", TEST_TTF).with_stylesheet_scope()),
+        Ok(WebFontRegistrationOutcome::Replaced)
+    );
+    services.with_active_stylesheet_fonts(
+        |_| false,
+        |selected| assert_eq!(selected.web_font_count(), 1),
+    );
+    assert!(services.remove_font_face_set_web_font("same"));
+    services.with_active_stylesheet_fonts(
+        |_| false,
+        |selected| assert_eq!(selected.web_font_count(), 0),
+    );
+    assert!(services.remove_stylesheet_web_font("same"));
+    assert_eq!(services.web_font_count(), 0);
 }
 
 #[test]

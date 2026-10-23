@@ -662,9 +662,15 @@ impl JsContextHost {
         document: DomHandle,
         resource: StylesheetLoadBlockingResource,
     ) -> Option<StylesheetSubresourceRequest> {
-        self.document_layout_state
-            .borrow_mut()
-            .admit(document, self.document_handle(), resource)
+        let prepared = self.document_layout_state.borrow_mut().admit(
+            document,
+            self.document_handle(),
+            resource,
+        );
+        if prepared.fonts_changed {
+            self.invalidate_document_font_layout(document);
+        }
+        prepared.request
     }
 
     pub(crate) fn complete_document_web_font(
