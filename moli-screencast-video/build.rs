@@ -109,6 +109,16 @@ fn main() {
             configure.env("AS", x86_assembler(&out));
         }
         run(&mut configure);
+        // x264's Linux THP path asks memalign for 2 MiB alignment. Moli's
+        // process-wide V8 PartitionAlloc shim rejects that alignment. Keep
+        // normal 64-byte SIMD alignment without the optional THP allocation.
+        let config = build.join("config.h");
+        let configured = fs::read_to_string(&config).expect("x264 private build configuration");
+        fs::write(
+            &config,
+            configured.replace("#define HAVE_THP 1", "#define HAVE_THP 0"),
+        )
+        .expect("configure allocator-compatible x264");
         run(Command::new("make")
             .arg("-j")
             .arg(env::var("NUM_JOBS").unwrap_or_else(|_| "1".into()))

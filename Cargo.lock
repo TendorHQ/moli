@@ -3457,10 +3457,13 @@ dependencies = [
  "bytes",
  "cc",
  "flate2",
+ "image",
  "moli-image",
  "mp4",
+ "parking_lot",
  "tar",
  "tempfile",
+ "tokio",
  "yuv",
 ]
 

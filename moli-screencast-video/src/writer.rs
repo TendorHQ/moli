@@ -20,14 +20,74 @@ pub struct VideoWriterStats {
     pub encoded_frames: u64,
     pub duration_ticks: u64,
     pub encoded_bytes: u64,
+    pub replaced_frames: u64,
+}
+
+pub(crate) struct PreparedOutput {
+    file: Option<NamedTempFile>,
+    destination: PathBuf,
+}
+
+impl PreparedOutput {
+    pub(crate) fn create(path: &Path) -> Result<Self> {
+        ensure!(!path.as_os_str().is_empty(), "video path cannot be empty");
+        ensure!(
+            !path.try_exists()?,
+            "video destination already exists: {}",
+            path.display()
+        );
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let file = tempfile::Builder::new()
+            .prefix(".moli-video-")
+            .suffix(".part")
+            .tempfile_in(parent)
+            .with_context(|| format!("cannot create video in {}", parent.display()))?;
+        Ok(Self {
+            file: Some(file),
+            destination: path.into(),
+        })
+    }
+
+    fn publish(&mut self) -> Result<()> {
+        let output = self.file.take().context("video output already published")?;
+        if let Err(error) = output.persist_noclobber(&self.destination) {
+            let source = error.error;
+            let (_, path) = error.file.keep()?;
+            return Err(source).with_context(|| {
+                format!(
+                    "cannot publish video to {}; recording retained at {}",
+                    self.destination.display(),
+                    path.display()
+                )
+            });
+        }
+        Ok(())
+    }
+
+    pub(crate) fn discard(mut self) -> Result<()> {
+        if let Some(file) = self.file.take() {
+            file.close()?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for PreparedOutput {
+    fn drop(&mut self) {
+        if let Some(output) = self.file.take() {
+            let _ = output.keep();
+        }
+    }
 }
 
 /// One fixed-size, CPU-encoded AVC track. Construct and use on one thread.
 pub struct VideoWriter {
     encoder: Encoder,
     muxer: Option<Mp4Writer<BufWriter<File>>>,
-    output: Option<NamedTempFile>,
-    destination: PathBuf,
+    output: PreparedOutput,
     canvas: Vec<u8>,
     width: u32,
     height: u32,
@@ -40,28 +100,27 @@ pub struct VideoWriter {
 
 impl VideoWriter {
     pub fn new(path: &Path, width: u32, height: u32, started: Instant) -> Result<Self> {
+        Self::from_output(PreparedOutput::create(path)?, width, height, started)
+    }
+
+    pub(crate) fn from_output(
+        output: PreparedOutput,
+        width: u32,
+        height: u32,
+        started: Instant,
+    ) -> Result<Self> {
         ensure!(
             width > 0 && height > 0 && width <= 1920 && height <= 1080,
             "video canvas must fit 1920x1080"
         );
-        ensure!(
-            !path.try_exists()?,
-            "video destination already exists: {}",
-            path.display()
-        );
         let width = (width + 1) & !1;
         let height = (height + 1) & !1;
-        let parent = path
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new("."));
-        let output = tempfile::Builder::new()
-            .prefix(".moli-video-")
-            .suffix(".part")
-            .tempfile_in(parent)
-            .with_context(|| format!("cannot create video in {}", parent.display()))?;
         let encoder = Encoder::new(width, height)?;
-        let file = output.reopen()?;
+        let file = output
+            .file
+            .as_ref()
+            .context("video output unavailable")?
+            .reopen()?;
         let mut muxer = Mp4Writer::write_start(
             BufWriter::new(file),
             &Mp4Config {
@@ -87,8 +146,7 @@ impl VideoWriter {
         Ok(Self {
             encoder,
             muxer: Some(muxer),
-            output: Some(output),
-            destination: path.into(),
+            output,
             canvas: vec![255; width as usize * height as usize * 4],
             width,
             height,
@@ -98,6 +156,10 @@ impl VideoWriter {
             last_idr: 0,
             stats: VideoWriterStats::default(),
         })
+    }
+
+    pub fn canvas_size(&self) -> (u32, u32) {
+        (self.width, self.height)
     }
 
     pub fn push_frame(&mut self, image: &RgbaImage, captured_at: Instant) -> Result<()> {
@@ -218,28 +280,8 @@ impl VideoWriter {
             .context("flushing MP4 output")?;
         file.flush()?;
         drop(file);
-        let output = self.output.take().context("video output missing")?;
-        match output.persist_noclobber(&self.destination) {
-            Ok(_) => Ok(self.stats.clone()),
-            Err(error) => {
-                let message = error.error.to_string();
-                let (_, path) = error.file.keep().context("preserving failed video")?;
-                anyhow::bail!(
-                    "cannot publish video: {message}; partial file: {}",
-                    path.display()
-                )
-            }
-        }
-    }
-}
-
-impl Drop for VideoWriter {
-    fn drop(&mut self) {
-        if let Some(output) = self.output.take() {
-            // A failed recording must remain available for diagnosis. The
-            // explicit finish path alone publishes the requested destination.
-            let _ = output.keep();
-        }
+        self.output.publish()?;
+        Ok(self.stats)
     }
 }
 
