@@ -522,6 +522,7 @@ impl WebFontStyle {
 #[derive(Clone, Debug, PartialEq)]
 pub struct WebFontFace {
     family_name: String,
+    family_name_key: String,
     weight: Option<f32>,
     stretch: Option<f32>,
     style: Option<WebFontStyle>,
@@ -531,8 +532,11 @@ pub struct WebFontFace {
 
 impl WebFontFace {
     pub fn new(family_name: impl Into<String>) -> Self {
+        let family_name = family_name.into();
+        let family_name_key = font_family_name_key(&family_name);
         Self {
-            family_name: family_name.into(),
+            family_name,
+            family_name_key,
             weight: None,
             stretch: None,
             style: None,
@@ -598,6 +602,16 @@ impl WebFontFace {
 
     pub fn family_name(&self) -> &str {
         &self.family_name
+    }
+
+    /// Chromium-compatible CSS family matching key, computed with the descriptor.
+    pub fn family_name_key(&self) -> &str {
+        &self.family_name_key
+    }
+
+    /// Full computed CSS ranges, when descriptors override font metadata.
+    pub const fn css_capabilities(&self) -> Option<WebFontCapabilities> {
+        self.capabilities
     }
 
     pub const fn weight(&self) -> Option<f32> {
@@ -1319,7 +1333,7 @@ impl ParleyDocumentServices {
             .unwrap_or((!font.membership.is_stylesheet_only(), usize::MAX));
         let family = self
             .web_font_families
-            .entry(font_family_name_key(font.face.family_name()))
+            .entry(font.face.family_name_key().to_owned())
             .or_default();
         for (_, fonts) in internal_fonts {
             for selector_font in fonts {

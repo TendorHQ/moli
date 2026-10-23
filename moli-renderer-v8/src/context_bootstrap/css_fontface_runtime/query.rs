@@ -1,14 +1,12 @@
 use super::storage::font_face_set_faces_array;
-use super::*;
 use crate::util::serialize_v8_iter_array;
 
 mod selection;
 
 struct Candidate<'s> {
     face: v8::Local<'s, v8::Value>,
-    family: String,
+    descriptor: std::sync::Arc<moli_layout::WebFontFace>,
     selection: selection::Selection,
-    ranges: Vec<moli_layout::WebFontUnicodeRange>,
 }
 
 pub(super) fn font_face_set_matching_faces_array<'s>(
@@ -35,19 +33,17 @@ pub(super) fn font_face_set_matching_faces_array<'s>(
         let Ok(face_object) = v8::Local::<v8::Object>::try_from(face) else {
             continue;
         };
-        let family = super::loading::string_slot(scope, face_object, FONT_FACE_FAMILY_SLOT);
-        let weight = super::loading::string_slot(scope, face_object, FONT_FACE_WEIGHT_SLOT);
-        let stretch = super::loading::string_slot(scope, face_object, FONT_FACE_STRETCH_SLOT);
-        let style = super::loading::string_slot(scope, face_object, FONT_FACE_STYLE_SLOT);
-        let ranges = super::loading::string_slot(scope, face_object, FONT_FACE_UNICODE_RANGE_SLOT);
+        let load = super::state::get(scope, face_object).expect("FontFace has native state");
+        let descriptor = load.borrow().descriptor().clone();
+        // Constructors and successful setters update this same typed descriptor
+        // for query matching and layout. Querying never reparses JS slots.
+        let selection = descriptor
+            .css_capabilities()
+            .expect("FontFace has computed CSS descriptors");
         candidates.push(Candidate {
             face,
-            family: moli_css_parse::font_family_name_key(&moli_css_parse::unquote_css_string(
-                &family,
-            )),
-            selection: selection::Selection::new(&weight, &stretch, &style),
-            ranges: crate::css_resource_urls::parse_font_unicode_ranges(&ranges)
-                .unwrap_or_default(),
+            descriptor,
+            selection,
         });
     }
     let text = text.chars().collect::<Vec<_>>();
@@ -59,7 +55,7 @@ pub(super) fn font_face_set_matching_faces_array<'s>(
         let family = moli_css_parse::font_family_name_key(&family);
         let family_faces = candidates
             .iter()
-            .filter(|face| family == face.family)
+            .filter(|face| family == face.descriptor.family_name_key())
             .collect::<Vec<_>>();
         let Some(best) = family_faces
             .iter()
@@ -73,8 +69,12 @@ pub(super) fn font_face_set_matching_faces_array<'s>(
             // weight/style instead of the CSS-matched segmented face.
             if face.selection.compare(best.selection, requested).is_eq()
                 && text.iter().any(|&character| {
-                    face.ranges.is_empty()
-                        || face.ranges.iter().any(|range| range.contains(character))
+                    face.descriptor.unicode_ranges().is_empty()
+                        || face
+                            .descriptor
+                            .unicode_ranges()
+                            .iter()
+                            .any(|range| range.contains(character))
                 })
             {
                 matching.push(face.face);
