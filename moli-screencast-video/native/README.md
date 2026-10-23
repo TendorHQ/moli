@@ -13,7 +13,7 @@ The resulting binaries containing x264 require the accompanying GPL notices/sour
 
 # NASM source
 
-On x86 Unix hosts, an existing NASM >= 2.13 is used. If it is unavailable,
+On x86 targets, an existing NASM >= 2.13 is used. If it is unavailable,
 Cargo builds the bundled NASM 2.16.03 for the build host, retaining x264's
 assembly optimizations. An explicit `AS` overrides this selection. Native
 builds need a C compiler, make and a shell; no download runs in build.rs.
@@ -26,3 +26,14 @@ Recompressed as gzip with mtime 0; `nasm.tar.gz` SHA-256:
 
 License: BSD-2-Clause; see LICENSE.nasm. NASM is only a build tool and is not
 linked into Moli.
+
+# Windows builds
+
+MSVC builds use the same bundled x264 revision with GNU make, Git for Windows
+Bash/Perl, and the MSVC C/assembly tools detected by `cc`. Put Git's `usr/bin`
+before Windows' WSL Bash on PATH. Missing NASM is built with MSVC/nmake.
+ARM64 uses the gas-preprocessor script already included in the x264 archive.
+
+`MOLI_X264_DIR` may instead point to a matching static prefix containing
+`include/x264.h`, `include/x264_config.h` and `lib/libx264.lib` (MSVC), or
+`lib/libx264.a` (Unix). The header and library must come from the same build.
