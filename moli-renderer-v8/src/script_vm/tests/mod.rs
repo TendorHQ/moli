@@ -2191,6 +2191,9 @@ mod media_owner_playback_interfaces;
 mod media_recorder_shell;
 mod media_source_buffer_interface_exposure_interfaces;
 mod performance_observer_contract;
+
+mod svg_transform_list_native_receivers;
+
 mod performance_receiver_consolidation;
 mod performance_timing_interface_exposure_interfaces;
 mod svg_animation_interfaces;

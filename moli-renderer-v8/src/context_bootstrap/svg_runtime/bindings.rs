@@ -275,7 +275,7 @@ struct SvgStringListTemplateMethodsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::SVGTransformList, enumerable)]
+#[webapi(interface = web_api_interfaces::SVGTransformList, enumerable, receiver)]
 struct SvgTransformListTemplateMethodsDeclaration {
     #[webapi(method = "clear", length = 0, callback = svg_transform_list_clear_callback)]
     clear: (),
@@ -1271,7 +1271,7 @@ struct SvgAnimatedTransformListTemplateAccessorsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::SVGTransformList, enumerable)]
+#[webapi(interface = web_api_interfaces::SVGTransformList, enumerable, receiver)]
 struct SvgTransformListTemplateAccessorsDeclaration {
     #[webapi(accessor_property = "length", getter = svg_transform_list_length_getter)]
     length: (),
