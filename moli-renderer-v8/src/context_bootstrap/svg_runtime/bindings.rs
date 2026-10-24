@@ -140,7 +140,7 @@ struct SvgLengthListTemplateMethodsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::SVGNumberList, enumerable)]
+#[webapi(interface = web_api_interfaces::SVGNumberList, enumerable, receiver)]
 struct SvgNumberListTemplateMethodsDeclaration {
     #[webapi(method = "clear", length = 0, callback = svg_number_list_clear_callback)]
     clear: (),
@@ -1214,7 +1214,7 @@ struct SvgLengthListTemplateAccessorsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::SVGNumberList, enumerable)]
+#[webapi(interface = web_api_interfaces::SVGNumberList, enumerable, receiver)]
 struct SvgNumberListTemplateAccessorsDeclaration {
     #[webapi(accessor_property = "length", getter = svg_number_list_length_getter)]
     length: (),
