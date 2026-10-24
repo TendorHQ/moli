@@ -2208,6 +2208,9 @@ mod import_meta;
 mod indexed_db;
 mod inspector_unwrap;
 mod lazy_storage;
+
+mod svg_matrix_native_receivers;
+
 mod lazy_window_surfaces;
 mod midi_owner_interfaces;
 mod mouse_snapshot;

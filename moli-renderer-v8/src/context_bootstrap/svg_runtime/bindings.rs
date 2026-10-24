@@ -1309,7 +1309,7 @@ struct SvgTransformTemplateAccessorsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::SVGMatrix, enumerable)]
+#[webapi(interface = web_api_interfaces::SVGMatrix, enumerable, receiver)]
 struct SvgMatrixTemplateAccessorsDeclaration {
     #[webapi(
         accessor_property = "a",
