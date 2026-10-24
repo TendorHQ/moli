@@ -2212,6 +2212,9 @@ mod lazy_window_surfaces;
 mod midi_owner_interfaces;
 mod mouse_snapshot;
 mod native_bridge_identity;
+
+mod svg_animated_value_native_receivers;
+
 mod native_exception_stack_capture;
 mod no_cors_header_fill;
 mod node_event_worlds;

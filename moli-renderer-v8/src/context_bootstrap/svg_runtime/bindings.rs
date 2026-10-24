@@ -1108,7 +1108,7 @@ struct SvgNumberTemplateAccessorsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::SVGAnimatedLengthList, enumerable)]
+#[webapi(interface = web_api_interfaces::SVGAnimatedLengthList, enumerable, receiver)]
 struct SvgAnimatedLengthListTemplateAccessorsDeclaration {
     #[webapi(
         accessor_property = "baseVal",
@@ -1164,7 +1164,7 @@ struct SvgAnimatedIntegerTemplateAccessorsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::SVGAnimatedNumberList, enumerable)]
+#[webapi(interface = web_api_interfaces::SVGAnimatedNumberList, enumerable, receiver)]
 struct SvgAnimatedNumberListTemplateAccessorsDeclaration {
     #[webapi(
         accessor_property = "baseVal",
@@ -1253,7 +1253,7 @@ struct SvgStringListTemplateAccessorsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::SVGAnimatedTransformList, enumerable)]
+#[webapi(interface = web_api_interfaces::SVGAnimatedTransformList, enumerable, receiver)]
 struct SvgAnimatedTransformListTemplateAccessorsDeclaration {
     #[webapi(
         accessor_property = "baseVal",
