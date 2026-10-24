@@ -2187,6 +2187,9 @@ mod geometry_point_conversion_order;
 mod headers_list;
 mod http_fixture;
 mod iframe_load_delivery;
+
+mod svg_point_list_native_receivers;
+
 mod media_owner_playback_interfaces;
 mod media_recorder_shell;
 mod media_source_buffer_interface_exposure_interfaces;
