@@ -334,7 +334,7 @@ struct SvgTransformListTemplateMethodsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::SVGTransform, enumerable)]
+#[webapi(interface = web_api_interfaces::SVGTransform, enumerable, receiver)]
 struct SvgTransformTemplateMethodsDeclaration {
     #[webapi(
         constant = "SVG_TRANSFORM_UNKNOWN",
@@ -1284,7 +1284,7 @@ struct SvgTransformListTemplateAccessorsDeclaration {
 }
 
 #[derive(WebApiFunctionTemplate)]
-#[webapi(interface = web_api_interfaces::SVGTransform, enumerable)]
+#[webapi(interface = web_api_interfaces::SVGTransform, enumerable, receiver)]
 struct SvgTransformTemplateAccessorsDeclaration {
     #[webapi(
         accessor_property = "type",
