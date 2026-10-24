@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn cdp_geometry_initializes_layout_and_mouse_reuses_it_until_capture() {
+async fn cdp_mouse_input_flushes_dirty_layout_before_targeting() {
     let mut ctx = TestContext::new();
     with_loaded_document(&mut ctx, r#"<html><body style='margin:0;min-height:100px'>
         <button id='target' style='position:absolute;left:0;top:0;width:100px;height:100px'>go</button>
@@ -36,7 +36,7 @@ async fn cdp_geometry_initializes_layout_and_mouse_reuses_it_until_capture() {
     }
     assert_eq!(
         evaluate_string(&mut ctx, "JSON.stringify(events)").await,
-        r#"[["mousemove","target"],["mousedown","target"],["mouseup","target"],["click","target"]]"#
+        r#"[["mousemove",""],["mousedown",""],["mouseup",""],["click",""]]"#
     );
 
     ctx.process_async(json!({"id":724,"method":"Page.captureScreenshot"}))

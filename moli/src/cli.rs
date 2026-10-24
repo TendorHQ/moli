@@ -436,6 +436,10 @@ pub struct ServeArgs {
     #[arg(long)]
     pub debugger: bool,
 
+    #[cfg(unix)]
+    #[arg(long)]
+    pub remote_debugging_pipe: bool,
+
     #[arg(long, default_value = "127.0.0.1")]
     pub host: String,
 

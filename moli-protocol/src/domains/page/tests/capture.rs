@@ -684,7 +684,7 @@ async fn print_to_pdf_returns_base64_pdf_without_publishing_interactive_geometry
     ctx.process_async(query.clone()).await;
     assert_eq!(
         take_response_by_id(&mut ctx, 1111)["result"]["result"]["value"],
-        60
+        100
     );
     ctx.capture_fixture_layout(Some("SID-PDF-BASE64")).await;
     ctx.process_async(query).await;
@@ -1158,7 +1158,7 @@ fn screenshot_data_url(html: &str) -> String {
     )
 }
 #[tokio::test(flavor = "multi_thread")]
-async fn get_layout_metrics_initializes_layout_and_reuses_content_until_capture() {
+async fn get_layout_metrics_flushes_content_and_viewport_changes() {
     let mut ctx = TestContext::new();
     let session = "SID-COLD-METRICS";
     install_active_screenshot_page(
@@ -1218,8 +1218,6 @@ async fn get_layout_metrics_initializes_layout_and_reuses_content_until_capture(
     let published = take_response_by_id(&mut ctx, 124);
     assert_eq!(published["result"]["contentSize"]["height"], 900.0);
 
-    // The viewport and scroll offset stay live even when the content extent
-    // still belongs to an older published frame.
     ctx.process_async(json!({
         "id":125,"method":"Runtime.evaluate","sessionId":session,
         "params":{"expression":"window.scrollTo(0,100);document.querySelector('main').style.height='1600px'"}
@@ -1233,8 +1231,8 @@ async fn get_layout_metrics_initializes_layout_and_reuses_content_until_capture(
     assert_eq!(live["result"]["layoutViewport"]["clientHeight"], 300);
     assert_eq!(live["result"]["visualViewport"]["pageY"], 100.0);
     assert_eq!(live["result"]["visualViewport"]["scale"], 2.0);
-    assert_eq!(live["result"]["contentSize"]["height"], 900.0);
-    assert_eq!(live["result"]["contentSize"]["width"], 320.0);
+    assert_eq!(live["result"]["contentSize"]["height"], 1600.0);
+    assert_eq!(live["result"]["contentSize"]["width"], 400.0);
     ctx.capture_fixture_layout(Some(session)).await;
     ctx.process_async(json!({"id":128,"method":"Page.getLayoutMetrics","sessionId":session}))
         .await;

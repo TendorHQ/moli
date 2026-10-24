@@ -24,6 +24,15 @@ struct CachedInferredFrameStyleViewport {
     viewport: StyleViewport,
 }
 
+#[derive(Debug, PartialEq)]
+pub(super) struct LayoutInputs {
+    pub(super) dom: u64,
+    pub(super) styles: Vec<(DomHandle, u64, u64)>,
+    pub(super) visual: u64,
+    pub(super) resources: u64,
+    pub(super) viewport: LayoutViewport,
+}
+
 /// Layout-facing state whose lifetime is bounded by exactly one main Document.
 ///
 /// `ScriptVm` outlives `document.open()`, so the main-document owner
@@ -37,6 +46,7 @@ struct CachedInferredFrameStyleViewport {
 /// snapshot instead of becoming separately keyed cache entries.
 #[derive(Default)]
 pub(super) struct DocumentLayoutState {
+    pub(super) published_inputs: Option<LayoutInputs>,
     services: DocumentLayoutServices,
     embedded_document_services: HashMap<DomHandle, DocumentLayoutServices>,
     web_fonts: DocumentWebFontState,

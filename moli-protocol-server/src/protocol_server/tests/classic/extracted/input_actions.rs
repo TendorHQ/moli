@@ -201,18 +201,6 @@ async fn webdriver_classic_click_pointer_focus_and_interactability_controls() {
         classic_capture_layout(app.clone(), session_id).await;
         assert_eq!(navigated, json!({"value":null}), "{name}");
         let element_id = classic_find_css_element_id(app.clone(), session_id, "#target").await;
-        if name == "scroll" {
-            let (status, blocked) = classic_request_status_and_json(
-                app.clone(),
-                Method::POST,
-                &format!("/session/{session_id}/element/{element_id}/click"),
-            )
-            .await;
-            assert_eq!(status, StatusCode::BAD_REQUEST, "{blocked}");
-            assert_eq!(blocked["value"]["error"], "element not interactable");
-            // Click preparation scrolled live state; explicitly publish the new position.
-            classic_capture_layout(app.clone(), session_id).await;
-        }
         let (status, clicked) = classic_request_status_and_json(
             app.clone(),
             Method::POST,

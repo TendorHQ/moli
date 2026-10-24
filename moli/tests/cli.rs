@@ -659,6 +659,8 @@ fn infers_serve_mode_when_called_without_args() {
     assert_eq!(
         cli.command,
         Commands::Serve(Box::new(ServeArgs {
+            #[cfg(unix)]
+            remote_debugging_pipe: false,
             debugger: false,
             host: "127.0.0.1".to_owned(),
             port: 9222,
@@ -686,6 +688,8 @@ fn parses_serve_flags_with_explicit_command() {
     assert_eq!(
         cli.command,
         Commands::Serve(Box::new(ServeArgs {
+            #[cfg(unix)]
+            remote_debugging_pipe: false,
             debugger: false,
             host: "0.0.0.0".to_owned(),
             port: 9333,

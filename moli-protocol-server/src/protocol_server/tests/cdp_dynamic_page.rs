@@ -1519,10 +1519,9 @@ async fn websocket_cdp_mouse_wheel_scrolls_page_and_honors_prevent_default() {
     .await;
     let value = &response_by_id(&scrolled, 3)["result"]["result"]["value"];
     assert_eq!(value["scrollY"], json!(120));
-    // Ordinary geometry reads retain the last published visual world.
     assert_eq!(
         value["markerTop"].as_f64().expect("scrolled marker top"),
-        marker_before
+        marker_before - 120.0
     );
     assert_eq!(value["wheelDeltas"], json!([120]));
 

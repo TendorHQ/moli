@@ -238,7 +238,7 @@ pub async fn run_cli_with_config<W: Write>(
                 return Err(error);
             }
         }
-        Commands::Serve(_) => {
+        Commands::Serve(args) => {
             if config.browser.fetch().obey_robots() {
                 // Protocol clients drive navigation themselves, so the CLI
                 // cannot refuse a page on their behalf. Say so rather than let
@@ -256,6 +256,11 @@ pub async fn run_cli_with_config<W: Write>(
                 storage_partition,
                 NavigationRuntimeConfig::from(&config.browser),
             );
+            #[cfg(unix)]
+            if args.remote_debugging_pipe {
+                server.serve_pipe().await.context("protocol pipe failed")?;
+                return Ok(());
+            }
             server.serve().await.context("protocol server failed")?;
         }
         Commands::Import(args) => {

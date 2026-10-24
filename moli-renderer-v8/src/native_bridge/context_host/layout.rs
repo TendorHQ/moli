@@ -5,7 +5,7 @@ use moli_layout::{
 };
 
 use super::JsContextHost;
-use super::layout_state::InferredFrameStyleViewportCacheKey;
+use super::layout_state::{InferredFrameStyleViewportCacheKey, LayoutInputs};
 use crate::{
     css_resource_urls::{CompletedStylesheetWebFont, StylesheetLoadBlockingResource},
     document_runtime::DomHandle,
@@ -272,11 +272,19 @@ impl JsContextHost {
             .inferred_frame_style_viewport_cache_observability()
     }
 
-    /// Lazily publishes the first screen layout for this main Document.
-    ///
-    /// Every consumer shares the same recursive tree. Missing nodes or newly
-    /// navigated frames in an existing tree must not refresh the whole page.
-    pub(crate) fn ensure_initial_layout(&self) -> Result<(), LayoutError> {
+    fn layout_inputs(&self) -> LayoutInputs {
+        LayoutInputs {
+            dom: self.dom_host().dom_version(),
+            styles: self
+                .style_engine
+                .visual_style_input_generations(self.active_layout_document_handles()),
+            visual: self.visual_state_generation(),
+            resources: self.visual_resource_generation(),
+            viewport: self.layout_viewport_for_document(self.document_handle()),
+        }
+    }
+
+    pub(crate) fn ensure_current_layout(&self) -> Result<(), LayoutError> {
         if !self.layout_policy.uses_real_layout() {
             return Ok(());
         }
@@ -284,12 +292,12 @@ impl JsContextHost {
             return Err(LayoutError::ReentrantLayoutPass);
         }
         let document = self.document_handle();
-        if self
-            .document_layout_state
-            .borrow()
-            .latest_layout(document)
-            .is_some()
-        {
+        let inputs = self.layout_inputs();
+        let state = self.document_layout_state.borrow();
+        let current = state.latest_layout(document).is_some()
+            && state.published_inputs.as_ref() == Some(&inputs);
+        drop(state);
+        if current {
             return Ok(());
         }
         let request = LayoutPassRequest::new(
@@ -430,6 +438,8 @@ impl JsContextHost {
             self.style_viewport_generation
                 .set(self.style_viewport_generation.get().saturating_add(1));
         }
+        let inputs = self.layout_inputs();
+        self.document_layout_state.borrow_mut().published_inputs = Some(inputs);
         self.last_layout_pass_metrics.set(Some(metrics));
         self.layout_snapshot_cache_publishes
             .set(self.layout_snapshot_cache_publishes.get().saturating_add(1));
