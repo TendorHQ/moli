@@ -1548,6 +1548,7 @@ mod postmessage;
 mod stream_clone_failures;
 
 mod canvas_transform_snapshots;
+mod geometry_point_transform;
 
 mod tls;
 
