@@ -346,3 +346,54 @@ child.body.innerHTML='<div id=target style="width:500px;height:400px;max-width:9
     assert_eq!(take_query_counts().source_queries, 1);
     assert_eq!(host.layout_snapshot_cache_observability_for_test(), before);
 }
+
+#[test]
+fn geometry_queries_flush_dom_and_style_mutations_synchronously() {
+    let mut vm = fixture("<div id=target style='width:100px;height:50px;overflow:hidden'></div>");
+    assert_eq!(
+        vm.eval(
+            r#"(() => {
+        const target = document.getElementById('target');
+        const checks = [];
+        checks.push(target.getBoundingClientRect().width === 100);
+        target.style.width = '180px';
+        checks.push(target.getBoundingClientRect().width === 180);
+        target.style.width = '190px';
+        checks.push(target.getClientRects()[0].width === 190);
+        target.style.width = '200px';
+        checks.push(target.offsetWidth === 200);
+        target.style.height = '70px';
+        checks.push(target.offsetHeight === 70);
+        target.style.padding = '5px';
+        checks.push(target.clientWidth === 210 && target.clientHeight === 80);
+        target.style.border = '3px solid';
+        checks.push(target.clientLeft === 3 && target.clientTop === 3);
+        target.innerHTML = '<div style="width:400px;height:300px"></div>';
+        checks.push(target.scrollWidth >= 400 && target.scrollHeight >= 300);
+        target.firstElementChild.remove();
+        checks.push(target.scrollWidth === 210 && target.scrollHeight === 80);
+        const sheet = document.createElement('style');
+        sheet.textContent = '#target{margin-left:30px!important}';
+        document.head.append(sheet);
+        checks.push(target.offsetLeft === 30);
+        sheet.sheet.cssRules[0].style.marginLeft = '40px';
+        checks.push(target.offsetLeft === 40);
+        target.style.display = 'none';
+        checks.push(target.offsetWidth === 0 && target.getClientRects().length === 0);
+        return checks.join('|');
+    })()"#
+        )
+        .unwrap(),
+        ["true"; 12].join("|")
+    );
+}
+
+#[test]
+fn clean_geometry_queries_reuse_the_published_layout() {
+    let mut vm = fixture("<div id=target class=sized></div>");
+    vm.eval("document.getElementById('target').getBoundingClientRect().width")
+        .unwrap();
+    let before = vm.layout_pass_observability_for_test().1;
+    vm.eval("for(let i=0;i<20;i++){const t=document.getElementById('target');t.offsetWidth;t.clientHeight;t.getBoundingClientRect();}").unwrap();
+    assert_eq!(vm.layout_pass_observability_for_test().1, before);
+}

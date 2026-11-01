@@ -375,8 +375,6 @@ impl ScriptVm {
         self.start_stylesheet_subresource_fetches(bound);
     }
 
-    /// Initializes the first layout on demand, then keeps its content extent
-    /// until an explicit refresh. Viewport and scroll remain live browser state.
     pub(crate) fn document_metrics_for_current_document(
         &self,
     ) -> Result<moli_layout::LayoutDocumentMetrics, moli_layout::LayoutError> {
@@ -662,7 +660,7 @@ impl ScriptVm {
         {
             let host = self._context_host.borrow();
             if host.layout_policy().uses_real_layout() {
-                host.ensure_initial_layout()?;
+                host.ensure_current_layout()?;
                 let document = host
                     .layout_document_for_source(handle)
                     .ok_or(moli_layout::LayoutError::NoLayoutSnapshot)?;
