@@ -102,19 +102,14 @@ impl ProtocolServer {
         let endpoint = state.cdp_owner_registry.shared_owner()?;
         let result = run_pipe(input, output, endpoint, control.clone()).await;
         control.request(InstanceCommand::Shutdown);
-        // Like `serve_listener`: stop the CDP owner, then flush storage and
-        // report a failed flush instead of leaving it to `Drop`.
-        let storage_partition = state.storage_partition.clone();
+        // v1.1.20's `serve_listener` has no explicit storage shutdown (upstream
+        // added one later); stop the CDP owner and drain within the same budget.
         let stopped = tokio::time::timeout(SHUTDOWN_BUDGET, async {
             state.cdp_owner_registry.shutdown().await;
             control.drained().await;
-            tokio::task::spawn_blocking(move || storage_partition.shutdown())
-                .await
-                .context("storage shutdown worker stopped")?
         })
         .await
-        .context("protocol pipe shutdown timed out; storage may be incomplete")
-        .and_then(|stopped| stopped);
+        .context("protocol pipe shutdown timed out; checkpoints may be incomplete");
         match (result, stopped) {
             (Err(error), Err(stop)) => {
                 Err(error.context(format!("shutdown also failed: {stop:#}")))
