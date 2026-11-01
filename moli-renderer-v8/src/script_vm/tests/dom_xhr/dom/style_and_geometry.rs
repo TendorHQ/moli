@@ -469,14 +469,13 @@ fn point_queries_follow_explicit_output_when_viewport_expands() {
 }
 
 #[test]
-fn document_point_queries_retain_published_geometry_after_viewport_resize() {
+fn document_point_queries_flush_geometry_after_viewport_resize() {
     let mut vm = new_parsed_test_vm(
         "https://document-point-query-viewport-expansion.test/",
         "<html><body style='margin:0'><div id='target' style='width:50vw;height:100px'></div></body></html>",
     );
     let before = vm.layout_pass_observability_for_test().1;
     let mut completed_passes = before;
-    let mut published = "[false,false,0]".to_owned();
     let query = r#"JSON.stringify([
         document.elementFromPoint(75, 20)?.id === 'target',
         document.elementsFromPoint(75, 20).some(element => element.id === 'target'),
@@ -501,18 +500,6 @@ fn document_point_queries_retain_published_geometry_after_viewport_resize() {
             completed_passes,
             "changing the viewport alone must not trigger layout"
         );
-        if completed_passes == before {
-            assert_eq!(vm.eval(query).unwrap(), expected);
-            completed_passes += 1;
-        } else {
-            assert_eq!(vm.eval(query).unwrap(), published);
-        }
-        assert_eq!(vm.layout_pass_observability_for_test().1, completed_passes);
-        if completed_passes < before + expected_passes {
-            vm.screenshot_layout_snapshot(moli_layout::LayoutViewport::new(width, 200, 1.0))
-                .unwrap()
-                .unwrap();
-        }
         let result = vm
             .eval(query)
             .expect("document point queries after viewport resize");
@@ -520,15 +507,14 @@ fn document_point_queries_retain_published_geometry_after_viewport_resize() {
         assert_eq!(
             vm.layout_pass_observability_for_test().1,
             before + expected_passes,
-            "only explicit output refreshes the viewport-dependent geometry"
+            "a dirty viewport flushes once on the next query"
         );
         completed_passes = before + expected_passes;
-        published = result;
     }
 }
 
 #[test]
-fn geometry_queries_retain_published_screen_and_resolution_environment() {
+fn geometry_queries_flush_screen_and_resolution_environment() {
     // Exercise each entry point without first warming the other layout mode.
     for hit_test in [false, true] {
         let mut vm = new_parsed_test_vm(
@@ -548,23 +534,21 @@ fn geometry_queries_retain_published_screen_and_resolution_environment() {
             ..Default::default()
         };
         let before = vm.layout_pass_observability_for_test().1;
-        let mut published_width = "0".to_owned();
         for (screen_width, screen_height, dpr, expected_width, expected_passes) in [
             (1920, 1080, 1.0, 100, 1),
             (1280, 1080, 1.0, 200, 2),
-            (1280, 1080, 1.0, 200, 2),
-            (1920, 1080, 1.0, 100, 3),
-            (1920, 720, 1.0, 200, 4),
-            (1920, 720, 1.0, 200, 4),
-            (1920, 1080, 1.0, 100, 5),
-            (1920, 1080, 2.0, 200, 6),
-            (1920, 1080, 2.0, 200, 6),
+            (1280, 1080, 1.0, 200, 3),
+            (1920, 1080, 1.0, 100, 4),
+            (1920, 720, 1.0, 200, 5),
+            (1920, 720, 1.0, 200, 6),
             (1920, 1080, 1.0, 100, 7),
+            (1920, 1080, 2.0, 200, 8),
+            (1920, 1080, 2.0, 200, 9),
+            (1920, 1080, 1.0, 100, 10),
         ] {
             surface.screen_width = screen_width;
             surface.screen_height = screen_height;
             surface.device_pixel_ratio = dpr;
-            // Moving the window changes the surface but not the style environment.
             surface.window_x += 1;
             let passes = vm.layout_pass_observability_for_test().1;
             let cache = vm.layout_snapshot_cache_observability_for_test();
@@ -576,23 +560,6 @@ fn geometry_queries_retain_published_screen_and_resolution_environment() {
                 passes,
                 "an environment update alone must not trigger layout"
             );
-            if passes == before {
-                published_width = expected_width.to_string();
-            }
-            assert_eq!(
-                vm.eval("String(target.getBoundingClientRect().width)")
-                    .unwrap(),
-                published_width
-            );
-            let after_read = passes + u64::from(passes == before);
-            assert_eq!(vm.layout_pass_observability_for_test().1, after_read);
-            if after_read < before + expected_passes {
-                vm.screenshot_layout_snapshot(moli_layout::LayoutViewport::new(
-                    800, 600, dpr as f32,
-                ))
-                .unwrap()
-                .unwrap();
-            }
             let result = vm
                 .eval(if hit_test {
                     r#"JSON.stringify([
@@ -604,7 +571,6 @@ fn geometry_queries_retain_published_screen_and_resolution_environment() {
                     "String(document.getElementById('target').getBoundingClientRect().width)"
                 })
                 .expect("geometry query after screen environment update");
-            published_width = expected_width.to_string();
             let hit = expected_width == 200;
             let expected = if hit_test {
                 format!("[{hit},{hit},{expected_width}]")
@@ -618,14 +584,14 @@ fn geometry_queries_retain_published_screen_and_resolution_environment() {
             assert_eq!(
                 vm.layout_pass_observability_for_test().1,
                 before + expected_passes,
-                "screen/resolution changes become visible only after explicit output"
+                "screen/resolution changes flush once on the next query"
             );
         }
     }
 }
 
 #[test]
-fn geometry_queries_retain_published_media_environment() {
+fn geometry_queries_flush_media_environment() {
     use crate::protocol_types::EmulatedMediaOverrides;
 
     for overrides in [
@@ -654,7 +620,6 @@ fn geometry_queries_retain_published_media_environment() {
         );
         let defaults = EmulatedMediaOverrides::default();
         let before = vm.layout_pass_observability_for_test().1;
-        let mut published_width = "0".to_owned();
         for (environment, expected_width, expected_passes) in [
             (&defaults, 100, 1),
             (&overrides, 200, 2),
@@ -664,21 +629,6 @@ fn geometry_queries_retain_published_media_environment() {
             let passes = vm.layout_pass_observability_for_test().1;
             vm.set_emulated_media(environment);
             assert_eq!(vm.layout_pass_observability_for_test().1, passes);
-            if passes == before {
-                published_width = expected_width.to_string();
-            }
-            assert_eq!(
-                vm.eval("String(target.getBoundingClientRect().width)")
-                    .unwrap(),
-                published_width
-            );
-            let after_read = passes + u64::from(passes == before);
-            assert_eq!(vm.layout_pass_observability_for_test().1, after_read);
-            if after_read < before + expected_passes {
-                vm.screenshot_layout_snapshot(moli_layout::LayoutViewport::new(800, 600, 1.0))
-                    .unwrap()
-                    .unwrap();
-            }
             let result = vm
                 .eval(
                     r#"JSON.stringify([
@@ -687,7 +637,6 @@ fn geometry_queries_retain_published_media_environment() {
                     ])"#,
                 )
                 .expect("geometry query after media environment update");
-            published_width = expected_width.to_string();
             assert_eq!(
                 result,
                 format!("[{},{}]", expected_width == 200, expected_width)
@@ -695,7 +644,7 @@ fn geometry_queries_retain_published_media_environment() {
             assert_eq!(
                 vm.layout_pass_observability_for_test().1,
                 before + expected_passes,
-                "media changes become visible only after explicit output"
+                "media changes flush once on the next query"
             );
         }
     }

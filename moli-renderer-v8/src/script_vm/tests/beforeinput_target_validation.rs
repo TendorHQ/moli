@@ -55,7 +55,10 @@ fn beforeinput_target_change(mutation: &str, should_edit: bool) {
             expected,
             "{policy:?}: {mutation}"
         );
-        assert_eq!(vm.layout_pass_observability_for_test().1, builds);
+        assert_eq!(
+            vm.layout_pass_observability_for_test().1,
+            builds + u64::from(should_edit && policy.uses_real_layout())
+        );
     }
 }
 

@@ -689,8 +689,8 @@ for (let index = 0; index < 128; index++) {
     );
     assert_eq!(layout_after_first.1, layout_before.1 + 1);
     assert_eq!(layout_after_repeated.1, layout_after_first.1);
-    assert_eq!(layout_after_second.1, layout_after_first.1);
-    assert_eq!(layout_after_stylesheet_mutation.1, layout_after_first.1);
+    assert_eq!(layout_after_second.1, layout_after_first.1 + 1);
+    assert_eq!(layout_after_stylesheet_mutation.1, layout_after_first.1 + 2);
     assert_eq!(
         update_materializations_after_first.saturating_sub(update_materializations_before),
         1,
@@ -735,7 +735,7 @@ for (let index = 0; index < 128; index++) {
 }
 
 #[test]
-fn inner_text_new_sources_wait_for_a_fresh_paint_layout() {
+fn inner_text_new_sources_flush_layout_synchronously() {
     let mut vm = new_rendered_test_vm(
         "https://inner-text-latest-layout.test/",
         "<!doctype html><html><body><div id=target><span>a</span></div></body></html>",
@@ -755,33 +755,33 @@ fn inner_text_new_sources_wait_for_a_fresh_paint_layout() {
             .expect("the published innerText read should evaluate"),
         "a"
     );
-    assert_eq!(vm.layout_pass_observability_for_test().1, passes_before);
+    assert_eq!(vm.layout_pass_observability_for_test().1, passes_before + 1);
 
     assert_eq!(
         vm.eval(
             "const added = document.createElement('span'); added.textContent = 'b'; target.append(added); target.innerText",
         )
         .expect("the warm innerText read should evaluate"),
-        "a",
-        "a text source absent from the latest frozen layout tree remains unrendered until refresh"
+        "ab",
+        "new text sources must be rendered by the synchronous layout read"
     );
-    assert_eq!(vm.layout_pass_observability_for_test().1, passes_before);
+    assert_eq!(vm.layout_pass_observability_for_test().1, passes_before + 2);
 
     vm.screenshot_layout_snapshot(moli_layout::PaintViewport::new(320, 200, 1.0))
         .expect("fresh paint layout should succeed")
         .expect("the fixture should have a layout root");
-    assert_eq!(vm.layout_pass_observability_for_test().1, passes_before + 1);
+    assert_eq!(vm.layout_pass_observability_for_test().1, passes_before + 3);
     assert_eq!(
         vm.eval("target.innerText")
             .expect("innerText should read the refreshed geometry snapshot"),
         "ab"
     );
-    assert_eq!(vm.layout_pass_observability_for_test().1, passes_before + 1);
+    assert_eq!(vm.layout_pass_observability_for_test().1, passes_before + 3);
 
     let cache_after = vm.layout_snapshot_cache_observability_for_test();
     assert_eq!(cache_after.0, cache_before.0 + 3);
     assert_eq!(cache_after.1, cache_before.1);
-    assert_eq!(cache_after.2, cache_before.2 + 1);
+    assert_eq!(cache_after.2, cache_before.2 + 3);
 }
 
 #[test]
