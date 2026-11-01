@@ -437,7 +437,7 @@ fn eval_computed_sizes_follow_layout_option_with_or_without_css() -> Result<()> 
 }
 
 #[test]
-fn eval_with_layout_keeps_geometry_frozen_during_script() -> Result<()> {
+fn eval_with_layout_flushes_geometry_during_script() -> Result<()> {
     let output = run_eval(
         "data:text/html,<!doctype html><div id=target style='width:120px;height:40px'></div>",
         r#"(() => {
@@ -459,7 +459,7 @@ fn eval_with_layout_keeps_geometry_frozen_during_script() -> Result<()> {
     let value: serde_json::Value = serde_json::from_slice(&output.stdout)?;
     assert_eq!(
         value,
-        serde_json::json!({ "before": 120, "after": 120, "added": 0 })
+        serde_json::json!({ "before": 120, "after": 240, "added": 50 })
     );
     Ok(())
 }

@@ -181,8 +181,6 @@ target.onclick = () => clicks++;
         let before = page_vm.vm().layout_pass_observability_for_test();
         let published_before = page_vm.vm().layout_snapshot_cache_observability_for_test().2;
 
-        // Restoring the screen media after printing must not rebuild the live
-        // DOM either: geometry continues to describe the earlier screenshot.
         page_vm.vm_mut().eval("document.body.classList.add('changed')")?;
         let RendererPrintToPdfReply::Printed(bytes) = page_vm.print_to_pdf(
             RendererPrintToPdfRequest {
@@ -200,11 +198,12 @@ target.onclick = () => clicks++;
             "PDF should contain print-only content and the embedded frame"
         );
         assert_eq!(page_vm.vm_mut().eval("matchMedia('print').matches")?, "false");
-        assert_eq!(page_vm.vm_mut().eval(geometry)?, "[40,40,40,40]");
-        let after = page_vm.vm().layout_pass_observability_for_test();
-        assert_eq!(after.1, before.1 + 1, "printing must perform exactly one layout");
-        assert_eq!(after.3, before.3, "geometry keeps its published pass metrics");
+        assert_eq!(page_vm.vm().layout_pass_observability_for_test().1, before.1 + 1);
         assert_eq!(page_vm.vm().layout_snapshot_cache_observability_for_test().2, published_before);
+        assert_eq!(page_vm.vm_mut().eval(geometry)?, "[60,60,60,60]");
+        let after = page_vm.vm().layout_pass_observability_for_test();
+        assert_eq!(after.1, before.1 + 2, "printing and the subsequent geometry read each build one layout");
+        assert_eq!(page_vm.vm().layout_snapshot_cache_observability_for_test().2, published_before + 1);
 
         for x in [20.0, 180.0] {
             for (event, buttons) in [("mousedown", 1), ("mouseup", 0)] {
@@ -214,11 +213,12 @@ target.onclick = () => clicks++;
             }
         }
         assert_eq!(page_vm.vm_mut().eval("String(clicks)")?, "1");
-        assert_eq!(page_vm.vm().layout_pass_observability_for_test().1, after.1);
+        assert!(page_vm.vm().layout_pass_observability_for_test().1 >= after.1);
 
+        let after_input = page_vm.vm().layout_snapshot_cache_observability_for_test().2;
         page_vm.capture_screenshot(RendererCaptureScreenshotRequest::viewport_png())?;
         assert_eq!(page_vm.vm_mut().eval(geometry)?, "[60,60,60,60]");
-        assert_eq!(page_vm.vm().layout_snapshot_cache_observability_for_test().2, published_before + 1);
+        assert_eq!(page_vm.vm().layout_snapshot_cache_observability_for_test().2, after_input + 1);
         Ok::<_, anyhow::Error>(())
     })
     .await

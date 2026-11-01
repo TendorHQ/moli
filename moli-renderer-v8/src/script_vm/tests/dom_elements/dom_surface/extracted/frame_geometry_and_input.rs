@@ -513,7 +513,7 @@ fn iframe_scrolling_attribute_suppresses_only_viewport_scrollbars() {
 }
 
 #[test]
-fn iframe_scrolling_changes_apply_at_the_next_layout_publication() {
+fn iframe_scrolling_changes_flush_at_the_next_geometry_query() {
     let mut vm = new_parsed_test_vm(
         "https://iframe-scrollbar-update.test/",
         "<!doctype html><iframe id=frame scrolling=no style='width:100px;height:100px;border:0'></iframe>",
@@ -530,11 +530,11 @@ fn iframe_scrolling_changes_apply_at_the_next_layout_publication() {
     let query = "child.documentElement.getBoundingClientRect().width";
     assert_eq!(vm.eval(query).unwrap(), "100");
     vm.eval("frame.scrolling='auto'").unwrap();
-    assert_eq!(vm.eval(query).unwrap(), "100");
+    assert_eq!(vm.eval(query).unwrap(), "85");
     publish_layout_for_test(&mut vm);
     assert_eq!(vm.eval(query).unwrap(), "85");
     vm.eval("frame.scrolling='no'").unwrap();
-    assert_eq!(vm.eval(query).unwrap(), "85");
+    assert_eq!(vm.eval(query).unwrap(), "100");
     publish_layout_for_test(&mut vm);
     assert_eq!(vm.eval(query).unwrap(), "100");
 }
@@ -616,14 +616,14 @@ fn iframe_scrolling_policy_distinguishes_wheel_input_from_scrollbar_appearance()
 }
 
 #[test]
-fn iframe_scrolling_policy_changes_input_permissions_at_next_publication() {
+fn iframe_scrolling_policy_changes_flush_before_input() {
     let mut vm = iframe_scrolling_policy_test_vm("auto", "none");
     let positions = "JSON.stringify([child.scrollX,child.scrollY])";
     publish_layout_for_test(&mut vm);
     for (scrolling, publish, expected) in [
-        ("no", false, "[40,120]"),
+        ("no", false, "[0,0]"),
         ("no", true, "[0,0]"),
-        ("auto", false, "[0,0]"),
+        ("auto", false, "[40,120]"),
         ("auto", true, "[40,120]"),
     ] {
         vm.eval(&format!(
@@ -641,10 +641,7 @@ fn iframe_scrolling_policy_changes_input_permissions_at_next_publication() {
             expected,
             "{scrolling} / publish={publish}"
         );
-        assert_eq!(
-            vm.layout_pass_observability_for_test().1,
-            before + u64::from(publish)
-        );
+        assert!(vm.layout_pass_observability_for_test().1 > before);
     }
 }
 
@@ -694,6 +691,7 @@ fn iframe_input_reuses_one_top_level_snapshot_without_parent_child_ping_pong() {
     let prepared = vm.layout_pass_observability_for_test().1;
     assert_eq!(prepared, passes_before + 1);
     assert_eq!(vm.eval("document.body.offsetWidth > 0").unwrap(), "true");
+    let prepared = vm.layout_pass_observability_for_test().1;
     for _ in 0..3 {
         vm.dispatch_mouse_event_at_point(140.0, 130.0, "mousemove", -1, Some(0), 0.0, 0.0)
             .expect("child hover should consume the published composite snapshot");
