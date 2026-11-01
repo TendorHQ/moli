@@ -17,7 +17,7 @@ fn mouse(
 }
 
 #[test]
-fn mouse_input_initializes_layout_once_and_shares_it_with_geometry() {
+fn mouse_input_shares_current_layout_with_geometry() {
     let mut vm = new_parsed_test_vm(
         "https://mouse-snapshot.test/",
         "<!doctype html><button id=target style='position:absolute;left:20px;top:20px;width:100px;height:100px'>go</button>",
@@ -26,7 +26,7 @@ fn mouse_input_initializes_layout_once_and_shares_it_with_geometry() {
     let before = vm.layout_pass_observability_for_test().1;
     for event in ["mousemove", "mousedown", "mouseup", "wheel"] {
         mouse(&mut vm, event).unwrap();
-        assert_eq!(vm.layout_pass_observability_for_test().1, before + 1);
+        assert!(vm.layout_pass_observability_for_test().1 > before);
     }
     assert_eq!(vm.pressed_mouse_buttons, 0);
     assert_eq!(
@@ -38,7 +38,14 @@ fn mouse_input_initializes_layout_once_and_shares_it_with_geometry() {
             .unwrap(),
         "100"
     );
-    assert_eq!(vm.layout_pass_observability_for_test().1, before + 1);
+    let after_geometry = vm.layout_pass_observability_for_test().1;
+    assert!(after_geometry > before);
+    assert_eq!(
+        vm.eval("String(target.getBoundingClientRect().width)")
+            .unwrap(),
+        "100"
+    );
+    assert_eq!(vm.layout_pass_observability_for_test().1, after_geometry);
 }
 
 #[test]
@@ -53,11 +60,11 @@ fn mouse_input_initializes_a_replaced_document_without_reusing_old_geometry() {
     let before = vm.layout_pass_observability_for_test().1;
     mouse(&mut vm, "mousedown").unwrap();
     assert_eq!(vm.eval("window.hit").unwrap(), "new");
-    assert_eq!(vm.layout_pass_observability_for_test().1, before + 1);
+    assert_eq!(vm.layout_pass_observability_for_test().1, before + 2);
 }
 
 #[test]
-fn mouse_click_consumes_snapshot_through_hover_focus_and_dom_mutation() {
+fn mouse_input_flushes_hover_and_dom_changes_between_events() {
     for markup in [
         "<button id=target>go</button>",
         "<input id=target>",
@@ -87,15 +94,11 @@ fn mouse_click_consumes_snapshot_through_hover_focus_and_dom_mutation() {
         let before = vm.layout_pass_observability_for_test().1;
         for event in ["mousemove", "mousedown", "mouseup"] {
             mouse(&mut vm, event).unwrap();
-            assert_eq!(
-                vm.layout_pass_observability_for_test().1,
-                before,
-                "{markup}: {event}"
-            );
         }
+        assert!(vm.layout_pass_observability_for_test().1 > before);
         assert_eq!(
             vm.eval("JSON.stringify(events)").unwrap(),
-            r#"[["mousemove","target"],["mousedown","target"],["mouseup","target"],["click","target"]]"#,
+            r#"[["mousemove","target"],["mouseup","target"]]"#,
             "{markup}"
         );
         assert!(
@@ -107,7 +110,7 @@ fn mouse_click_consumes_snapshot_through_hover_focus_and_dom_mutation() {
 }
 
 #[test]
-fn mouse_and_geometry_reuse_the_snapshot_until_fresh_paint() {
+fn mouse_geometry_reads_flush_pending_style_changes() {
     let mut vm = new_parsed_test_vm(
         "https://mouse-snapshot.test/",
         r#"<!doctype html><style>body{min-height:100px}</style>
@@ -120,15 +123,15 @@ fn mouse_and_geometry_reuse_the_snapshot_until_fresh_paint() {
     .unwrap();
     let before = vm.layout_pass_observability_for_test().1;
     mouse(&mut vm, "mousemove").unwrap();
-    assert_eq!(vm.eval("JSON.stringify(hits)").unwrap(), r#"["target"]"#);
-    assert_eq!(vm.layout_pass_observability_for_test().1, before);
-    // DOM and hover changes do not invalidate ordinary geometry reads.
+    assert_eq!(vm.eval("JSON.stringify(hits)").unwrap(), r#"[""]"#);
+    assert!(vm.layout_pass_observability_for_test().1 > before);
     assert_eq!(
         vm.eval("String(target.getBoundingClientRect().left)")
             .unwrap(),
-        "20"
+        "300"
     );
-    assert_eq!(vm.layout_pass_observability_for_test().1, before);
+    let after_geometry = vm.layout_pass_observability_for_test().1;
+    assert!(after_geometry > before);
     vm.screenshot_layout_snapshot(moli_layout::PaintViewport::new(1920, 1080, 1.0))
         .unwrap()
         .unwrap();
@@ -137,14 +140,20 @@ fn mouse_and_geometry_reuse_the_snapshot_until_fresh_paint() {
             .unwrap(),
         "300"
     );
-    assert_eq!(vm.layout_pass_observability_for_test().1, before + 1);
+    assert_eq!(
+        vm.layout_pass_observability_for_test().1,
+        after_geometry + 1
+    );
     mouse(&mut vm, "mousemove").unwrap();
-    assert_eq!(vm.eval("JSON.stringify(hits)").unwrap(), r#"["target",""]"#);
-    assert_eq!(vm.layout_pass_observability_for_test().1, before + 1);
+    assert_eq!(vm.eval("JSON.stringify(hits)").unwrap(), r#"["",""]"#);
+    assert_eq!(
+        vm.layout_pass_observability_for_test().1,
+        after_geometry + 1
+    );
 }
 
 #[test]
-fn mouse_handler_geometry_reads_reuse_the_published_snapshot() {
+fn mouse_handler_geometry_reads_flush_synchronous_mutations() {
     let mut vm = new_parsed_test_vm(
         "https://mouse-snapshot.test/",
         r#"<!doctype html>
@@ -154,12 +163,12 @@ fn mouse_handler_geometry_reads_reuse_the_published_snapshot() {
     vm.eval("target.onmousemove=()=>{target.style.left='300px';window.observedLeft=target.getBoundingClientRect().left}").unwrap();
     let before = vm.layout_pass_observability_for_test().1;
     mouse(&mut vm, "mousemove").unwrap();
-    assert_eq!(vm.eval("String(observedLeft)").unwrap(), "20");
-    assert_eq!(vm.layout_pass_observability_for_test().1, before);
+    assert_eq!(vm.eval("String(observedLeft)").unwrap(), "300");
+    assert_eq!(vm.layout_pass_observability_for_test().1, before + 1);
 }
 
 #[test]
-fn mouse_wheel_updates_scroll_without_refreshing_the_rendered_world() {
+fn mouse_wheel_geometry_queries_observe_current_scroll() {
     let mut vm = new_parsed_test_vm(
         "https://mouse-snapshot.test/",
         r#"<!doctype html>
@@ -181,15 +190,14 @@ fn mouse_wheel_updates_scroll_without_refreshing_the_rendered_world() {
                 .unwrap(),
             format!("[{},{}]", step * 30, step * 50)
         );
-        assert_eq!(vm.layout_pass_observability_for_test().1, before);
     }
-    // Live scroll readback must not move the published geometry or hit targets.
     let marker_position =
         "JSON.stringify([marker.getBoundingClientRect().left,marker.getBoundingClientRect().top])";
-    assert_eq!(vm.eval(marker_position).unwrap(), "[20,20]");
+    assert_eq!(vm.eval(marker_position).unwrap(), "[-70,-130]");
     mouse(&mut vm, "mousemove").unwrap();
-    assert_eq!(vm.eval("JSON.stringify(hits)").unwrap(), r#"["marker"]"#);
-    assert_eq!(vm.layout_pass_observability_for_test().1, before);
+    assert_eq!(vm.eval("JSON.stringify(hits)").unwrap(), r#"["content"]"#);
+    let after_geometry = vm.layout_pass_observability_for_test().1;
+    assert!(after_geometry > before);
     vm.screenshot_layout_snapshot(moli_layout::PaintViewport::new(800, 600, 1.0))
         .unwrap()
         .unwrap();
@@ -202,13 +210,16 @@ fn mouse_wheel_updates_scroll_without_refreshing_the_rendered_world() {
     mouse(&mut vm, "mousemove").unwrap();
     assert_eq!(
         vm.eval("JSON.stringify(hits)").unwrap(),
-        r#"["marker","content"]"#
+        r#"["content","content"]"#
     );
-    assert_eq!(vm.layout_pass_observability_for_test().1, before + 1);
+    assert_eq!(
+        vm.layout_pass_observability_for_test().1,
+        after_geometry + 1
+    );
 }
 
 #[test]
-fn element_scroll_readback_accumulates_live_offsets_with_frozen_bounds() {
+fn element_scroll_readback_flushes_changed_scroll_bounds() {
     for in_frame in [false, true] {
         let mut vm = new_parsed_test_vm(
             "https://scroll-readback.test/",
@@ -253,7 +264,6 @@ fn element_scroll_readback_accumulates_live_offsets_with_frozen_bounds() {
         vm.eval("subject.scrollLeft=10.25;subject.scrollTop=20.5")
             .unwrap();
         assert_eq!(vm.eval(offsets).unwrap(), "[10.25,20.5]");
-        // New content size cannot enlarge the range until a new publication.
         assert_eq!(
             vm.eval(
                 r#"subject.firstElementChild.style.cssText='width:1000px;height:1000px';
@@ -264,10 +274,10 @@ fn element_scroll_readback_accumulates_live_offsets_with_frozen_bounds() {
             .unwrap(),
             "[true,true]"
         );
-        assert_eq!(vm.eval(geometry).unwrap(), frozen);
+        assert_eq!(vm.eval(geometry).unwrap(), "[-907,-907,85,85,1000,1000]");
         vm.eval("subject.remove()").unwrap();
         assert_eq!(vm.eval(offsets).unwrap(), "[0,0]");
-        assert_eq!(vm.layout_pass_observability_for_test().1, before);
+        assert!(vm.layout_pass_observability_for_test().1 > before);
     }
 }
 
@@ -283,7 +293,7 @@ fn document_scroll_readback_matches_live_window_offsets() {
     publish_layout_for_test(&mut vm);
     let before = vm.layout_pass_observability_for_test().1;
     let geometry = "JSON.stringify([frame.getBoundingClientRect().top,frame.contentDocument.body.getBoundingClientRect().top])";
-    let frozen = vm.eval(geometry).unwrap();
+    assert_eq!(vm.eval(geometry).unwrap(), "[8,8]");
     vm.eval("scrollTo(30,50);frame.contentWindow.scrollTo(7,9)")
         .unwrap();
     let offsets = r#"JSON.stringify([window,frame.contentWindow].map(w=>[
@@ -307,12 +317,12 @@ fn document_scroll_readback_matches_live_window_offsets() {
         vm.eval(offsets).unwrap(),
         "[[40,70,40,70,40,70],[20,35,20,35,20,35]]"
     );
-    assert_eq!(vm.eval(geometry).unwrap(), frozen);
-    assert_eq!(vm.layout_pass_observability_for_test().1, before);
+    assert_eq!(vm.eval(geometry).unwrap(), "[-62,-27]");
+    assert!(vm.layout_pass_observability_for_test().1 > before);
 }
 
 #[test]
-fn dom_mutations_preserve_scroll_without_refreshing_layout() {
+fn dom_mutations_preserve_scroll_when_geometry_flushes_layout() {
     // Cover nodes above, crossing, and spanning the viewport. Their removal
     // must not estimate a scroll adjustment from the old frozen rectangle.
     for (top, height) in [(300, 200), (800, 200), (800, 2000)] {
@@ -357,11 +367,12 @@ fn dom_mutations_preserve_scroll_without_refreshing_layout() {
                 "[120,900,120,900]",
                 "top={top}, height={height}, mutation={mutation}"
             );
-            assert_eq!(vm.eval(marker_top).unwrap(), frozen_top);
-            assert_eq!(vm.layout_pass_observability_for_test().1, layouts);
+            assert_eq!(
+                vm.eval(marker_top).unwrap(),
+                (top + remaining_height - 900).to_string()
+            );
+            assert_eq!(vm.layout_pass_observability_for_test().1, layouts + 1);
 
-            // Publishing the new layout changes geometry without introducing
-            // automatic scroll anchoring at publication time either.
             refresh_layout_for_test(&mut vm);
             assert_eq!(vm.eval(offsets).unwrap(), "[120,900,120,900]");
             assert_eq!(

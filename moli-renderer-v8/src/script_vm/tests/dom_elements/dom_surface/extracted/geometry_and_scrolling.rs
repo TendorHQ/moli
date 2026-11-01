@@ -453,7 +453,7 @@ fn painted_overlay_wins_over_scrollbar_and_corner_consumes_input() {
     );
 }
 #[test]
-fn cold_geometry_entries_share_one_layout_and_do_not_rebuild_for_missing_boxes() {
+fn cold_geometry_entries_share_layout_and_flush_dom_mutations() {
     for query in [
         "target.clientWidth",
         "target.getBoundingClientRect().width",
@@ -474,20 +474,20 @@ fn cold_geometry_entries_share_one_layout_and_do_not_rebuild_for_missing_boxes()
         assert_eq!(
             vm.eval("JSON.stringify([target.clientWidth,hidden.clientWidth,added.clientWidth])")
                 .unwrap(),
-            "[100,0,0]"
+            "[200,0,50]"
         );
-        assert_eq!(vm.layout_pass_observability_for_test().1, before + 1);
+        assert_eq!(vm.layout_pass_observability_for_test().1, before + 2);
         publish_layout_for_test(&mut vm);
         assert_eq!(
             vm.eval("JSON.stringify([target.clientWidth,hidden.clientWidth,added.clientWidth])")
                 .unwrap(),
             "[200,0,50]"
         );
-        assert_eq!(vm.layout_pass_observability_for_test().1, before + 2);
+        assert_eq!(vm.layout_pass_observability_for_test().1, before + 3);
     }
 }
 #[test]
-fn document_client_size_initializes_layout_once_and_reuses_it_until_capture() {
+fn document_client_size_flushes_viewport_changes() {
     let mut vm = new_parsed_test_vm(
         "https://document-client-viewport.test/",
         "<!doctype html><style>html,body{margin:0}main{width:80px;height:900px}</style><main></main>",
@@ -524,8 +524,11 @@ fn document_client_size_initializes_layout_once_and_reuses_it_until_capture() {
         ..Default::default()
     }))
     .unwrap();
-    assert_eq!(vm.eval(query).unwrap(), published);
-    assert_eq!(vm.layout_pass_observability_for_test().1, published_passes);
+    assert_eq!(vm.eval(query).unwrap(), "[625,480,625,900,625,900,80]");
+    assert_eq!(
+        vm.layout_pass_observability_for_test().1,
+        published_passes + 1
+    );
 
     vm.eval("document.documentElement.style.display = 'none'")
         .unwrap();
