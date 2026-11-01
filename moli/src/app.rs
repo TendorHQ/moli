@@ -242,7 +242,7 @@ pub async fn run_cli_with_config<W: Write>(
             finalize_fetch_browser(browser, args.cookie_jar.as_deref(), stdout, result)
                 .map_err(|error| with_fetch_context(error, &args.url))?;
         }
-        Commands::Serve(_) => {
+        Commands::Serve(args) => {
             let additional_cookies = cookie_header_from_args(&config)?;
             config
                 .browser
@@ -265,6 +265,11 @@ pub async fn run_cli_with_config<W: Write>(
                 storage_partition,
                 NavigationRuntimeConfig::from(&config.browser),
             );
+            #[cfg(unix)]
+            if args.remote_debugging_pipe {
+                server.serve_pipe().await.context("protocol pipe failed")?;
+                return Ok(());
+            }
             server.serve().await.context("protocol server failed")?;
         }
         Commands::Import(args) => {

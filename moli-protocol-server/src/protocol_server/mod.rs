@@ -43,6 +43,8 @@ pub use instance_control::{BrowserInstanceControl, InstanceCommand};
 mod cdp;
 mod cdp_agent_host;
 mod cdp_owner;
+#[cfg(unix)]
+mod cdp_pipe;
 mod cdp_socket;
 mod instance_control;
 mod instance_shutdown;
